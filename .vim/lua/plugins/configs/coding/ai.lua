@@ -2,7 +2,30 @@ return {
   {
     "coder/claudecode.nvim",
     dependencies = { "folke/snacks.nvim" },
-    config = true,
+    config = function()
+      -- snacks.nvimのinputスタイルをカスタマイズ
+      require("snacks").setup({
+        input = {
+          keys = {
+            -- Enterキーで改行を挿入（insertモードのみ）
+            i_cr = { "<cr>", function()
+              local pos = vim.api.nvim_win_get_cursor(0)
+              vim.api.nvim_buf_set_lines(0, pos[1]-1, pos[1]-1, false, {""})
+              vim.api.nvim_win_set_cursor(0, {pos[1]+1, 0})
+            end, mode = "i" },
+            -- Ctrl+Enterで送信
+            i_ctrl_cr = { "<c-cr>", "confirm", mode = "i" },
+            n_ctrl_cr = { "<c-cr>", "confirm", mode = "n" },
+            -- Escapeキーで中断
+            i_esc = { "<esc>", "cancel", mode = "i" },
+            n_esc = { "<esc>", "cancel", mode = "n" },
+          },
+        },
+      })
+      
+      -- claudecode.nvimのセットアップ
+      require("claudecode").setup()
+    end,
     keys = {
       { "<leader>a",  nil,                              desc = "AI/Claude Code" },
       { "<leader>ac", "<cmd>ClaudeCode<cr>",            desc = "Toggle Claude" },

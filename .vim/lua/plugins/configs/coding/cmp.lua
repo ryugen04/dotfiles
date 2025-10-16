@@ -19,6 +19,14 @@ return {
           end,
         },
 
+        -- パフォーマンス最適化
+        performance = {
+          debounce = 150,              -- 入力後の待機時間（デフォルト60ms → 150ms）
+          throttle = 30,               -- 補完候補の更新頻度制限
+          fetching_timeout = 500,      -- 補完取得のタイムアウト
+          max_view_entries = 50,       -- 表示する補完候補の最大数（デフォルト200 → 50）
+        },
+
         window = {
           completion = cmp.config.window.bordered(),
           documentation = cmp.config.window.bordered(),
@@ -35,13 +43,13 @@ return {
         }),
 
         sources = cmp.config.sources({
-          { name = 'nvim_lsp' },
-          { name = 'vsnip' },
-          { name = 'path' },
-          { name = 'calc' },
-          { name = 'emoji' },
+          { name = 'nvim_lsp', priority = 100 },
+          { name = 'vsnip', priority = 90 },
+          { name = 'path', priority = 80 },
         }, {
-          { name = 'buffer', keyword_length = 3 },
+          { name = 'buffer', keyword_length = 3, max_item_count = 5 },  -- バッファ補完の候補数を制限
+          { name = 'calc', keyword_length = 2, max_item_count = 5 },
+          { name = 'emoji', keyword_length = 2, max_item_count = 10 },
         }),
 
         formatting = {

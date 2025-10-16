@@ -305,6 +305,7 @@ return {
   },
   {
     "nvimtools/none-ls.nvim",
+    ft = "java",  -- Java専用に限定
     dependencies = {
       "nvimtools/none-ls-extras.nvim"
     },
@@ -347,7 +348,7 @@ return {
   },
   {
     "mfussenegger/nvim-lint",
-    event = { "BufReadPre", "BufNewFile" },
+    ft = "java",  -- Java専用に限定
     config = function()
       -- require('lint').linters_by_ft = {
       --   java = { 'checkstyle' },
@@ -364,6 +365,7 @@ return {
   },
   {
     "mfussenegger/nvim-dap",
+    ft = "java",  -- Java専用に限定
     config = function()
       -- Simple configuration to attach to remote java debug process
       --

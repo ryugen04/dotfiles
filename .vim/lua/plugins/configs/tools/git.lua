@@ -3,6 +3,10 @@ return {
   {
     'kdheepak/lazygit.nvim',
     cond = not env.is_vscode(),
+    cmd = { "LazyGit", "LazyGitConfig", "LazyGitCurrentFile", "LazyGitFilter", "LazyGitFilterCurrentFile" },
+    keys = {
+      { "<leader>gg", "<cmd>LazyGit<cr>", desc = "LazyGit" },
+    },
     dependencies = { 'nvim-telescope/telescope.nvim' },
     config = function()
       require('telescope').load_extension('lazygit')
@@ -35,11 +39,16 @@ return {
   },
   {
     'sindrets/diffview.nvim',
-
     cond = not env.is_vscode(),
+    cmd = { "DiffviewOpen", "DiffviewClose", "DiffviewToggleFiles", "DiffviewFocusFiles", "DiffviewRefresh" },
   },
   {
     'APZelos/blamer.nvim',
     cond = not env.is_vscode(),
+    event = "VeryLazy",  -- 遅延読み込み
+    config = function()
+      vim.g.blamer_enabled = 0  -- デフォルトでは無効（`:BlamerToggle`で有効化）
+      vim.g.blamer_delay = 500
+    end,
   },
 }

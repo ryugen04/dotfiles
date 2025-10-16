@@ -67,9 +67,9 @@ return {
           colored = false,
           globalstatus = true,
           refresh = {
-            statusline = 1000, -- 1秒ごとに更新
-            tabline = 1000,
-            winbar = 1000
+            statusline = 2000, -- 2秒ごとに更新（パフォーマンス重視）
+            tabline = 2000,
+            winbar = 2000
           },
         },
         sections = {

@@ -41,7 +41,10 @@ local function setup()
     signcolumn = 'yes',
     number = true,
     relativenumber = true,
-    foldmethod = 'marker'
+    foldmethod = 'marker',
+    -- レンダリング最適化
+    lazyredraw = true,  -- マクロ実行中など画面描画を遅延
+    ttyfast = true,     -- 高速ターミナル接続を想定
   }
 
   -- バッファローカルオプション
