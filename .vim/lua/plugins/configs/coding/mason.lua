@@ -30,41 +30,6 @@ return {
       local capabilities = vim.lsp.protocol.make_client_capabilities()
       capabilities.textDocument.completion.completionItem.snippetSupport = true
 
-      -- 公式Kotlin LSPの設定
-      local lspconfig = require('lspconfig')
-      if not lspconfig.configs.kotlin_official_lsp then
-        lspconfig.configs.kotlin_official_lsp = {
-          default_config = {
-            cmd = { 
-              "/home/glaucus03/dev/projects/dotfiles/lib/kotlin-lsp.sh"
-            },
-            filetypes = { "kotlin" },
-            root_dir = require('lspconfig.util').root_pattern(
-              "build.gradle", 
-              "build.gradle.kts", 
-              "settings.gradle",
-              "settings.gradle.kts",
-              ".git"
-            ),
-            settings = {
-              kotlin = {
-                -- 必要に応じて設定を追加
-              }
-            },
-            init_options = {
-              -- storagePathを明示的に設定（セッション管理の問題回避）
-              storagePath = vim.fn.stdpath("cache") .. "/kotlin_official_lsp"
-            }
-          },
-          docs = {
-            description = "Official Kotlin Language Server from JetBrains",
-            default_config = {
-              root_dir = "root_pattern('build.gradle', 'build.gradle.kts', 'settings.gradle', '.git')"
-            }
-          }
-        }
-      end
-
       -- LSPサーバー固有の設定
       --
       local server_settings = {
@@ -98,10 +63,6 @@ return {
           -- already calls Rubocop if it is installed
           enabled = true,
         },
-        -- 公式Kotlin LSPの設定を追加
-        kotlin_official_lsp = {
-          enabled = true,
-        },
       }
 
       -- デフォルトのLSP設定を生成する関数
@@ -114,7 +75,6 @@ return {
       -- 除外するLSPサーバーのリスト
       local excluded_servers = {
         ["jdtls"] = true, -- null-lsから起動するため除外
-        ["kotlin_language_server"] = true, -- 公式LSPを使用するため除外
       }
 
       require('mason-lspconfig').setup_handlers({
@@ -133,19 +93,6 @@ return {
           )
         end
       })
-
-      -- 公式Kotlin LSPのセットアップ（masonの管理外）
-      -- setup()関数が定義されているか確認してから実行
-      local kotlin_lsp = lspconfig.kotlin_official_lsp
-      if kotlin_lsp and type(kotlin_lsp.setup) == "function" then
-        kotlin_lsp.setup(
-          vim.tbl_deep_extend(
-            "force",
-            make_default_config(),
-            server_settings.kotlin_official_lsp or {}
-          )
-        )
-      end
     end,
     dependencies = {
       'williamboman/mason-lspconfig.nvim',

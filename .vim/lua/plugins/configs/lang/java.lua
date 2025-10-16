@@ -237,173 +237,173 @@ local function get_jdtls_config()
 end
 
 return {
-  {
-    'mfussenegger/nvim-jdtls',
-    cond = not env.is_vscode(),
-    dependencies = {
-      'mfussenegger/nvim-dap',
-      'williamboman/mason.nvim',
-    },
-    ft = "java",
-    config = function()
-      -- JDTLSのセットアップ
-      vim.api.nvim_create_autocmd("FileType", {
-        pattern = "java",
-        callback = function()
-          local config = get_jdtls_config()
-          config.on_attach = function(client, bufnr)
-            setup_keymaps(bufnr)
-            require('jdtls').setup_dap({ hotcodereplace = 'auto' })
-            require('jdtls.dap').setup_dap_main_class_configs()
-            require('jdtls.setup').add_commands()
-
-            vim.api.nvim_buf_create_user_command(bufnr, 'JaCoCoShow', function()
-              require('jacoco').show()
-            end, { desc = 'Show JaCoCo coverage' })
-
-            vim.api.nvim_buf_create_user_command(bufnr, 'JaCoCoRun', function()
-              require('jacoco').run()
-            end, { desc = 'Run tests with JaCoCo' })
-
-            -- Spring Boot関連のコマンドを登録
-            vim.api.nvim_buf_create_user_command(bufnr, 'SpringBootRun', function()
-              local is_maven = vim.fn.filereadable(vim.fn.getcwd() .. '/pom.xml') == 1
-              local cmd = is_maven
-                  and 'mvn spring-boot:run -Dspring.profiles.active=local'
-                  or './gradlew bootRun --args="--spring.profiles.active=local"'
-
-              vim.cmd('tabnew | terminal ' .. cmd)
-              vim.cmd('startinsert')
-            end, { desc = 'Run Spring Boot Application' })
-
-            vim.api.nvim_buf_create_user_command(bufnr, 'SpringBootDebug', function()
-              local is_maven = vim.fn.filereadable(vim.fn.getcwd() .. '/pom.xml') == 1
-              local debug_args =
-              '-Dspring-boot.run.jvmArguments="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=5005"'
-              local cmd = is_maven
-                  and 'mvn spring-boot:run ' .. debug_args
-                  or './gradlew bootRun --debug-jvm'
-
-              vim.cmd('tabnew | terminal ' .. cmd)
-              vim.cmd('startinsert')
-
-              vim.defer_fn(function()
-                require('dap').run({
-                  type = 'java',
-                  request = 'attach',
-                  name = 'Attach to Spring Boot',
-                  hostName = 'localhost',
-                  port = 5005,
-                })
-              end, 2000)
-            end, { desc = 'Debug Spring Boot Application' })
-          end
-          require('jdtls').start_or_attach(config)
-        end
-      })
-    end,
-  },
-  {
-    "nvimtools/none-ls.nvim",
-    ft = "java",  -- Java専用に限定
-    dependencies = {
-      "nvimtools/none-ls-extras.nvim"
-    },
-    config = function()
-      local nls = require("null-ls")
-      local fmt = nls.builtins.formatting
-      local dgn = nls.builtins.diagnostics
-      local augroup = vim.api.nvim_create_augroup("LspFormatting", {})
-
-      local mason_registry = require("mason-registry")
-      local jdtls_pkg = mason_registry.get_package("jdtls")
-      local jdtls_path = jdtls_pkg:get_install_path()
-      local checkstyle_path = jdtls_path .. "/google-checks.xml"
-
-      nls.setup({
-        sources = {
-          fmt.google_java_format.with({
-            extra_args = {
-              -- "--aosp" --indent4
-            },
-          }),
-
-        },
-
-        on_attach = function(client, bufnr)
-          if client.supports_method("textDocument/formatting") then
-            vim.api.nvim_clear_autocmds({ group = augroup, buffer = bufnr })
-            vim.api.nvim_create_autocmd("BufWritePre", {
-              group = augroup,
-              buffer = bufnr,
-              callback = function()
-                vim.lsp.buf.format({ bufnr = bufnr })
-              end
-            })
-          end
-        end
-      })
-    end
-
-  },
-  {
-    "mfussenegger/nvim-lint",
-    ft = "java",  -- Java専用に限定
-    config = function()
-      -- require('lint').linters_by_ft = {
-      --   java = { 'checkstyle' },
-      -- }
-      vim.api.nvim_create_autocmd({
-        "BufWritePost"
-      }, {
-        callback = function()
-          require("lint").try_lint()
-          require("lint").try_lint("cspell")
-        end
-      })
-    end
-  },
-  {
-    "mfussenegger/nvim-dap",
-    ft = "java",  -- Java専用に限定
-    config = function()
-      -- Simple configuration to attach to remote java debug process
-      --
-      require("jacoco").setup({
-        -- JaCoCoの設定
-        report_paths = {
-          -- レポートパスの指定（プロジェクトによって異なる場合があります）
-          -- Mavenプロジェクトの場合
-          "target/site/jacoco/jacoco.xml",
-          -- Gradleプロジェクトの場合
-          "build/reports/jacoco/test/jacocoTestReport.xml",
-        },
-        display_method = "inline", -- 行番号の色を変更する方法
-        -- カバレッジデータを表示するための設定
-        signs = {
-          covered = { text = "✓", texthl = "JacocoCovered" },
-          missed = { text = "✘", texthl = "JacocoMissed" },
-          partial = { text = "◑", texthl = "JacocoPartial" },
-        },
-
-        -- カスタムコマンド
-        -- Mavenプロジェクトの場合のコマンド
-        maven_command = "mvn test jacoco:report",
-        -- Gradleプロジェクトの場合のコマンド
-        gradle_command = "./gradlew test jacocoTestReport",
-
-        -- プロジェクトタイプの自動検出（pom.xmlかbuild.gradleのどちらがあるか）
-        auto_detect_project_type = true,
-      })
-
-      vim.api.nvim_set_hl(0, "JacocoCovered", { fg = "#00FF00" }) -- カバー済み: 緑色
-      vim.api.nvim_set_hl(0, "JacocoMissed", { fg = "#FF0000" })  -- 未カバー: 赤色
-      vim.api.nvim_set_hl(0, "JacocoPartial", { fg = "#FFFF00" }) -- 部分カバー: 黄色
-
-      -- カバレッジハイライトの色設定
-      vim.api.nvim_set_hl(0, "JacocoCoveredLine", { fg = "#00FF00", bold = true })
-      vim.api.nvim_set_hl(0, "JacocoMissedLine", { fg = "#FF0000", bold = true })
-      vim.api.nvim_set_hl(0, "JacocoPartialLine", { fg = "#FFFF00", bold = true })
-    end,
-  }
+  -- {
+  --   'mfussenegger/nvim-jdtls',
+  --   cond = not env.is_vscode(),
+  --   dependencies = {
+  --     'mfussenegger/nvim-dap',
+  --     'williamboman/mason.nvim',
+  --   },
+  --   ft = "java",
+  --   config = function()
+  --     -- JDTLSのセットアップ
+  --     vim.api.nvim_create_autocmd("FileType", {
+  --       pattern = "java",
+  --       callback = function()
+  --         local config = get_jdtls_config()
+  --         config.on_attach = function(client, bufnr)
+  --           setup_keymaps(bufnr)
+  --           require('jdtls').setup_dap({ hotcodereplace = 'auto' })
+  --           require('jdtls.dap').setup_dap_main_class_configs()
+  --           require('jdtls.setup').add_commands()
+  --
+  --           vim.api.nvim_buf_create_user_command(bufnr, 'JaCoCoShow', function()
+  --             require('jacoco').show()
+  --           end, { desc = 'Show JaCoCo coverage' })
+  --
+  --           vim.api.nvim_buf_create_user_command(bufnr, 'JaCoCoRun', function()
+  --             require('jacoco').run()
+  --           end, { desc = 'Run tests with JaCoCo' })
+  --
+  --           -- Spring Boot関連のコマンドを登録
+  --           vim.api.nvim_buf_create_user_command(bufnr, 'SpringBootRun', function()
+  --             local is_maven = vim.fn.filereadable(vim.fn.getcwd() .. '/pom.xml') == 1
+  --             local cmd = is_maven
+  --                 and 'mvn spring-boot:run -Dspring.profiles.active=local'
+  --                 or './gradlew bootRun --args="--spring.profiles.active=local"'
+  --
+  --             vim.cmd('tabnew | terminal ' .. cmd)
+  --             vim.cmd('startinsert')
+  --           end, { desc = 'Run Spring Boot Application' })
+  --
+  --           vim.api.nvim_buf_create_user_command(bufnr, 'SpringBootDebug', function()
+  --             local is_maven = vim.fn.filereadable(vim.fn.getcwd() .. '/pom.xml') == 1
+  --             local debug_args =
+  --             '-Dspring-boot.run.jvmArguments="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=5005"'
+  --             local cmd = is_maven
+  --                 and 'mvn spring-boot:run ' .. debug_args
+  --                 or './gradlew bootRun --debug-jvm'
+  --
+  --             vim.cmd('tabnew | terminal ' .. cmd)
+  --             vim.cmd('startinsert')
+  --
+  --             vim.defer_fn(function()
+  --               require('dap').run({
+  --                 type = 'java',
+  --                 request = 'attach',
+  --                 name = 'Attach to Spring Boot',
+  --                 hostName = 'localhost',
+  --                 port = 5005,
+  --               })
+  --             end, 2000)
+  --           end, { desc = 'Debug Spring Boot Application' })
+  --         end
+  --         require('jdtls').start_or_attach(config)
+  --       end
+  --     })
+  --   end,
+  -- },
+  -- {
+  --   "nvimtools/none-ls.nvim",
+  --   ft = "java",  -- Java専用に限定
+  --   dependencies = {
+  --     "nvimtools/none-ls-extras.nvim"
+  --   },
+  --   config = function()
+  --     local nls = require("null-ls")
+  --     local fmt = nls.builtins.formatting
+  --     local dgn = nls.builtins.diagnostics
+  --     local augroup = vim.api.nvim_create_augroup("LspFormatting", {})
+  --
+  --     local mason_registry = require("mason-registry")
+  --     local jdtls_pkg = mason_registry.get_package("jdtls")
+  --     local jdtls_path = jdtls_pkg:get_install_path()
+  --     local checkstyle_path = jdtls_path .. "/google-checks.xml"
+  --
+  --     nls.setup({
+  --       sources = {
+  --         fmt.google_java_format.with({
+  --           extra_args = {
+  --             -- "--aosp" --indent4
+  --           },
+  --         }),
+  --
+  --       },
+  --
+  --       on_attach = function(client, bufnr)
+  --         if client.supports_method("textDocument/formatting") then
+  --           vim.api.nvim_clear_autocmds({ group = augroup, buffer = bufnr })
+  --           vim.api.nvim_create_autocmd("BufWritePre", {
+  --             group = augroup,
+  --             buffer = bufnr,
+  --             callback = function()
+  --               vim.lsp.buf.format({ bufnr = bufnr })
+  --             end
+  --           })
+  --         end
+  --       end
+  --     })
+  --   end
+  --
+  -- },
+  -- {
+  --   "mfussenegger/nvim-lint",
+  --   ft = "java",  -- Java専用に限定
+  --   config = function()
+  --     -- require('lint').linters_by_ft = {
+  --     --   java = { 'checkstyle' },
+  --     -- }
+  --     vim.api.nvim_create_autocmd({
+  --       "BufWritePost"
+  --     }, {
+  --       callback = function()
+  --         require("lint").try_lint()
+  --         require("lint").try_lint("cspell")
+  --       end
+  --     })
+  --   end
+  -- },
+  -- {
+  --   "mfussenegger/nvim-dap",
+  --   ft = "java",  -- Java専用に限定
+  --   config = function()
+  --     -- Simple configuration to attach to remote java debug process
+  --     --
+  --     require("jacoco").setup({
+  --       -- JaCoCoの設定
+  --       report_paths = {
+  --         -- レポートパスの指定（プロジェクトによって異なる場合があります）
+  --         -- Mavenプロジェクトの場合
+  --         "target/site/jacoco/jacoco.xml",
+  --         -- Gradleプロジェクトの場合
+  --         "build/reports/jacoco/test/jacocoTestReport.xml",
+  --       },
+  --       display_method = "inline", -- 行番号の色を変更する方法
+  --       -- カバレッジデータを表示するための設定
+  --       signs = {
+  --         covered = { text = "✓", texthl = "JacocoCovered" },
+  --         missed = { text = "✘", texthl = "JacocoMissed" },
+  --         partial = { text = "◑", texthl = "JacocoPartial" },
+  --       },
+  --
+  --       -- カスタムコマンド
+  --       -- Mavenプロジェクトの場合のコマンド
+  --       maven_command = "mvn test jacoco:report",
+  --       -- Gradleプロジェクトの場合のコマンド
+  --       gradle_command = "./gradlew test jacocoTestReport",
+  --
+  --       -- プロジェクトタイプの自動検出（pom.xmlかbuild.gradleのどちらがあるか）
+  --       auto_detect_project_type = true,
+  --     })
+  --
+  --     vim.api.nvim_set_hl(0, "JacocoCovered", { fg = "#00FF00" }) -- カバー済み: 緑色
+  --     vim.api.nvim_set_hl(0, "JacocoMissed", { fg = "#FF0000" })  -- 未カバー: 赤色
+  --     vim.api.nvim_set_hl(0, "JacocoPartial", { fg = "#FFFF00" }) -- 部分カバー: 黄色
+  --
+  --     -- カバレッジハイライトの色設定
+  --     vim.api.nvim_set_hl(0, "JacocoCoveredLine", { fg = "#00FF00", bold = true })
+  --     vim.api.nvim_set_hl(0, "JacocoMissedLine", { fg = "#FF0000", bold = true })
+  --     vim.api.nvim_set_hl(0, "JacocoPartialLine", { fg = "#FFFF00", bold = true })
+  --   end,
+  -- }
 }
