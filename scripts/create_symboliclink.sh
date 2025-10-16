@@ -8,3 +8,4 @@ ln -sf $(pwd)/.tmux.conf ~/.tmux.conf
 ln -sf $(pwd)/.config/alacritty ~/.config/alacritty
 ln -sf $(pwd)/.pyrightconfig.json ~/.pyrightconfig.json
 ln -sf $(pwd)/.config/yazi ~/.config/yazi
+ln -sf $(pwd)/.config/common ~/.config/common

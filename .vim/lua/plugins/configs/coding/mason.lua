@@ -23,6 +23,7 @@ return {
           "lua_ls",
           "bashls",
           "pyright",
+          "kotlin_language_server",
         },
         automatic_installation = true  -- 必要に応じて自動インストール
       })
@@ -75,6 +76,7 @@ return {
       -- 除外するLSPサーバーのリスト
       local excluded_servers = {
         ["jdtls"] = true, -- null-lsから起動するため除外
+        ["kotlin_language_server"] = true, -- kotlin.luaから起動するため除外
       }
 
       require('mason-lspconfig').setup_handlers({
