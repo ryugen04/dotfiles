@@ -8,6 +8,7 @@ return {
     version = '1.*',
     dependencies = {
       'rafamadriz/friendly-snippets',
+      'L3MON4D3/LuaSnip',
     },
     opts = {
       -- キーマップ設定（nvim-cmpの設定を踏襲しつつカスタマイズ）
@@ -115,7 +116,7 @@ return {
 
       -- スニペット設定
       snippets = {
-        preset = 'default',
+        preset = 'luasnip',
       },
 
       -- シグネチャヘルプ有効化

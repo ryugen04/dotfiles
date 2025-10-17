@@ -30,10 +30,17 @@ local function setup()
     guicursor = vim.o.guicursor .. ',a:blinkon0',
 
     -- ファイル設定
+    encoding = 'utf-8',
     fileencoding = 'utf-8',
     undodir = vim.fn.stdpath('state') .. '/backup',
     breakindent = true,
+    -- タイムアウト設定
+    ttimeout = true,
+    ttimeoutlen = 50,
+    timeout = true,
+    timeoutlen = 1000,
   }
+  
 
   -- ウィンドウローカルオプション
   local window_options = {
@@ -43,8 +50,8 @@ local function setup()
     relativenumber = true,
     foldmethod = 'marker',
     -- レンダリング最適化
-    lazyredraw = true,  -- マクロ実行中など画面描画を遅延
-    ttyfast = true,     -- 高速ターミナル接続を想定
+    lazyredraw = true, -- マクロ実行中など画面描画を遅延
+    ttyfast = true,    -- 高速ターミナル接続を想定
   }
 
   -- バッファローカルオプション
@@ -72,7 +79,7 @@ local function setup()
   end
 
   -- undoディレクトリの作成
-  local undodir = vim.fn.stdpath('state') .. '/backup'  -- 直接パスを使用
+  local undodir = vim.fn.stdpath('state') .. '/backup' -- 直接パスを使用
   if vim.fn.isdirectory(undodir) == 0 then
     vim.fn.mkdir(undodir, "p")
   end

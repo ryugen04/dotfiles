@@ -2,7 +2,7 @@ local ls = require('luasnip')
 local s = ls.snippet
 local t = ls.text_node
 local i = ls.insert_node
-local fmt = require("luasnip.extra.fmt").fmt
+local fmt = require("luasnip.extras.fmt").fmt
 
 return {
   -- 例: 現在の日付を挿入
@@ -16,23 +16,23 @@ return {
     i(1, 'task description')
   }),
 
+  -- Given-When-Thenテストコメント
   s('/*',
     fmt(
       [[
-        /**
-         * given:{}
-         */
+/**
+ * given: {}
+ */
 
-        /**
-         * when:{}
-         */
+/**
+ * when: {}
+ */
 
-        /**
-         * then:{}
-         */
+/**
+ * then: {}
+ */
       ]],
-      { i(1, ""), i(2, "") }
+      { i(1, "前提条件"), i(2, "実行内容"), i(3, "期待結果") }
     )
-  )
-
+  ),
 }
