@@ -1,102 +1,153 @@
+local env = require('core.env')
+
 return {
-  -- 補完
-  -- TODO: add luasnip and c-y mapping
+  -- 補完エンジン
   {
-    'onsails/lspkind.nvim',
-    cond = not is_vscode,
-  },
-  {
-    'hrsh7th/nvim-cmp',
+    'saghen/blink.cmp',
     cond = not env.is_vscode(),
-    config = function()
-      local cmp = require('cmp')
-      local lspkind = require('lspkind')
-
-      cmp.setup({
-        snippet = {
-          expand = function(args)
-            vim.fn["vsnip#anonymous"](args.body)
-          end,
-        },
-
-        -- パフォーマンス最適化
-        performance = {
-          debounce = 150,              -- 入力後の待機時間（デフォルト60ms → 150ms）
-          throttle = 30,               -- 補完候補の更新頻度制限
-          fetching_timeout = 500,      -- 補完取得のタイムアウト
-          max_view_entries = 50,       -- 表示する補完候補の最大数（デフォルト200 → 50）
-        },
-
-        window = {
-          completion = cmp.config.window.bordered(),
-          documentation = cmp.config.window.bordered(),
-        },
-
-        mapping = cmp.mapping.preset.insert({
-          ['<Down>'] = cmp.mapping.select_next_item(),
-          ['<Up>'] = cmp.mapping.select_prev_item(),
-          ['<C-d>'] = cmp.mapping.scroll_docs(-4),
-          ['<C-u>'] = cmp.mapping.scroll_docs(4),
-          ['<C-Tab>'] = cmp.mapping.complete(),
-          ['<Esc>'] = cmp.mapping.abort(),
-          ['<CR>'] = cmp.mapping.confirm({ select = true }),
-        }),
-
-        sources = cmp.config.sources({
-          { name = 'nvim_lsp', priority = 100 },
-          { name = 'vsnip', priority = 90 },
-          { name = 'path', priority = 80 },
-        }, {
-          { name = 'buffer', keyword_length = 3, max_item_count = 5 },  -- バッファ補完の候補数を制限
-          { name = 'calc', keyword_length = 2, max_item_count = 5 },
-          { name = 'emoji', keyword_length = 2, max_item_count = 10 },
-        }),
-
-        formatting = {
-          format = lspkind.cmp_format({
-            mode = 'symbol_text',
-            maxwidth = 50,
-            ellipsis_char = '...',
-            before = function(entry, vim_item)
-              vim_item.menu = ({
-                nvim_lsp = '[LSP]',
-                vsnip = '[Snippet]',
-                buffer = '[Buffer]',
-                path = '[Path]'
-              })[entry.source.name]
-              return vim_item
-            end
-          })
-        }
-      })
-
-      -- コマンドライン用の設定
-      cmp.setup.cmdline(':', {
-        mapping = cmp.mapping.preset.cmdline(),
-        sources = cmp.config.sources({
-          { name = 'path' }
-        }, {
-          { name = 'cmdline' }
-        })
-      })
-
-      -- 検索用の設定
-      cmp.setup.cmdline({ '/', '?' }, {
-        mapping = cmp.mapping.preset.cmdline(),
-        sources = {
-          { name = 'buffer' }
-        }
-      })
-    end,
+    version = '1.*',
     dependencies = {
-      'hrsh7th/cmp-nvim-lsp',
-      'hrsh7th/cmp-buffer',
-      'hrsh7th/cmp-path',
-      'hrsh7th/cmp-vsnip',
-      'hrsh7th/cmp-cmdline',
-      'hrsh7th/cmp-calc',
-      'hrsh7th/cmp-emoji',
+      'rafamadriz/friendly-snippets',
     },
-    doc = "補完エンジン"
+    opts = {
+      -- キーマップ設定（nvim-cmpの設定を踏襲しつつカスタマイズ）
+      keymap = {
+        preset = 'none',
+        ['<Down>'] = { 'select_next', 'fallback' },
+        ['<Up>'] = { 'select_prev', 'fallback' },
+        ['<C-d>'] = { 'scroll_documentation_up', 'fallback' },
+        ['<C-u>'] = { 'scroll_documentation_down', 'fallback' },
+        ['<C-Tab>'] = { 'show', 'fallback' },
+        ['<C-space>'] = { 'show', 'show_documentation', 'hide_documentation' },
+        ['<Esc>'] = { 'hide', 'fallback' },
+        ['<CR>'] = { 'accept', 'fallback' },
+        ['<C-k>'] = { 'show_signature', 'hide_signature', 'fallback' },
+        ['<C-n>'] = { 'select_next', 'fallback' },
+        ['<C-p>'] = { 'select_prev', 'fallback' },
+        ['<C-e>'] = { 'hide', 'fallback' },
+      },
+
+      appearance = {
+        nerd_font_variant = 'mono',
+      },
+
+      completion = {
+        -- ドキュメント表示設定
+        documentation = {
+          auto_show = true,
+          auto_show_delay_ms = 200,
+          window = {
+            border = 'rounded',
+          },
+        },
+
+        -- メニュー設定（nvim-cmpの枠線付きスタイルを踏襲）
+        menu = {
+          auto_show = true,
+          border = 'rounded',
+          draw = {
+            columns = {
+              { 'label', 'label_description', gap = 1 },
+              { 'kind_icon', 'kind', gap = 1 },
+            },
+          },
+        },
+
+        -- ゴーストテキスト有効化
+        ghost_text = {
+          enabled = true,
+        },
+
+        -- 補完候補の選択設定
+        list = {
+          selection = {
+            preselect = true,
+            auto_insert = true,
+          },
+        },
+      },
+
+      -- 補完ソース設定
+      sources = {
+        default = { 'lsp', 'path', 'snippets', 'buffer' },
+
+        -- ソースごとの詳細設定
+        providers = {
+          lsp = {
+            name = 'LSP',
+            score_offset = 100,
+            fallbacks = { 'buffer' },
+          },
+          path = {
+            name = 'Path',
+            score_offset = 80,
+            opts = {
+              trailing_slash = true,
+              label_trailing_slash = true,
+            },
+          },
+          snippets = {
+            name = 'Snippet',
+            score_offset = 90,
+            opts = {
+              friendly_snippets = true,
+              search_paths = { vim.fn.stdpath('config') .. '/snippets' },
+            },
+          },
+          buffer = {
+            name = 'Buffer',
+            score_offset = -3,
+            min_keyword_length = 3,
+            max_items = 5,
+            opts = {
+              -- 表示されているバッファのみから補完
+              get_bufnrs = function()
+                return vim
+                  .iter(vim.api.nvim_list_wins())
+                  :map(function(win) return vim.api.nvim_win_get_buf(win) end)
+                  :filter(function(buf) return vim.bo[buf].buftype ~= 'nofile' end)
+                  :totable()
+              end,
+            },
+          },
+        },
+      },
+
+      -- スニペット設定
+      snippets = {
+        preset = 'default',
+      },
+
+      -- シグネチャヘルプ有効化
+      signature = {
+        enabled = true,
+        window = {
+          border = 'rounded',
+        },
+      },
+
+      -- コマンドライン補完設定
+      cmdline = {
+        enabled = true,
+        keymap = { preset = 'cmdline' },
+        sources = { 'buffer', 'cmdline', 'path' },
+        completion = {
+          list = {
+            selection = {
+              preselect = true,
+              auto_insert = true,
+            },
+          },
+          menu = { auto_show = true },
+          ghost_text = { enabled = true },
+        },
+      },
+
+      -- Rust製fuzzyマッチャーを使用（パフォーマンス最適化）
+      fuzzy = {
+        implementation = 'prefer_rust_with_warning',
+      },
+    },
+    opts_extend = { 'sources.default' },
   },
 }

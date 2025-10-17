@@ -47,15 +47,23 @@ return {
         },
 
         -- 保存時自動フォーマット
-        format_on_save = {
-          timeout_ms = 500,
-          lsp_format = "fallback",  -- conform.nvimのフォーマッターがない場合、LSPを使用
-        },
+        format_on_save = function(buf)
+          -- `:w!`で保存したときはフォーマットをスキップ
+          if vim.v.cmdbang == 1 then
+            return nil
+          end
+          return
+          {
+            timeout_ms = 500,
+            lsp_format = "fallback", -- conform.nvimのフォーマッターがない場合、LSPを使用
+          }
+        end,
+
 
         -- フォーマッター固有の設定
         formatters = {
           shfmt = {
-            prepend_args = { "-i", "2" },  -- インデント2スペース
+            prepend_args = { "-i", "2" }, -- インデント2スペース
           },
         },
       })

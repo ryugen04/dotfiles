@@ -4,7 +4,7 @@ vim.loader.enable()
 -- 基本設定の初期化
 local function init_base()
   vim.opt.fileencoding = 'utf-8'
-  vim.g.mapleader = " "
+  vim.g.mapleader = "\\"
   -- vim.g.maplocalleader = " "
   -- タイムアウト設定を大幅に調整
   vim.opt.timeout = true
@@ -55,7 +55,7 @@ local function load_local_config()
     if vim.fn.filereadable(local_vimrc) == 1 then
       dofile(local_vimrc)
     end
-  end, 0)  -- 次のイベントループで実行
+  end, 0) -- 次のイベントループで実行
 end
 
 -- 初期化の実行
