@@ -67,6 +67,7 @@ require('core.env')
 require('core.options')
 require('core.keys')
 require('core.commands')
+require('core.indent').setup()
 
 -- プラグイン関連の初期化
 require("plugins")

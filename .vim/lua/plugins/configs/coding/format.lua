@@ -44,6 +44,8 @@ return {
           -- HTML/CSS
           html = { "prettier" },
           css = { "prettier" },
+
+          -- Kotlin: detektはGradleプロジェクトで管理
         },
 
         -- 保存時自動フォーマット
@@ -102,6 +104,8 @@ return {
 
         -- Docker
         dockerfile = { 'hadolint' },
+
+        -- Kotlin: detektはGradleプロジェクトで管理
       }
 
       -- 自動実行の設定
