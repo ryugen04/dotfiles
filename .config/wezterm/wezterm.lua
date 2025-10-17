@@ -18,6 +18,10 @@ return {
   default_prog = { "/bin/bash", "-l" },
   font = wezterm.font("Cica"),
   use_ime = true,
+-- キー入力の処理
+  send_composed_key_when_left_alt_is_pressed = false,
+  send_composed_key_when_right_alt_is_pressed = false,
+ime_preedit_rendering = "System",
   xim_im_name = 'fcitx5',
   font_size = 14.0,
   default_cursor_style = 'SteadyBlock',

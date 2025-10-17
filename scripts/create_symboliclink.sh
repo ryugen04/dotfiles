@@ -1,5 +1,5 @@
-ln -sf $(pwd)/.vim ~/.config/nvim
-ln -sf $(pwd)/.vim ~/.vim
+ln -sf $(pwd)/.config/nvim ~/.config/nvim
+ln -sf $(pwd)/.config/nvim ~/.vim
 ln -sf $(pwd)/.config/wezterm ~/.config/wezterm
 ln -sf $(pwd)/.config/kitty ~/.config/kitty
 ln -sf $(pwd)/.config/lazygit ~/.config/lazygit
