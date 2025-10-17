@@ -56,7 +56,7 @@ return {
     -- leader + aで実際のCtrl-a/Cmd-aを送信
     {
       key = 'a',
-      mods = 'LEADER |' .. mod ,
+      mods = 'LEADER |' .. mod,
       action = wezterm.action.SendKey { key = 'a', mods = mod }
     },
     -- 新規タブ作成: leader + t
@@ -109,13 +109,13 @@ return {
     },
     -- 前のタブ: leader + [
     {
-      key = '[',
+      key = '.',
       mods = 'LEADER',
       action = wezterm.action.ActivateTabRelative(-1)
     },
     -- 次のタブ: leader + ]
     {
-      key = ']',
+      key = ',',
       mods = 'LEADER',
       action = wezterm.action.ActivateTabRelative(1)
     },
