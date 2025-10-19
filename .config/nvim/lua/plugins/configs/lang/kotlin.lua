@@ -41,29 +41,29 @@ return {
           buf_map('n', ']d', vim.diagnostic.goto_next, 'Next diagnostic')
           buf_map('n', '<leader>e', vim.diagnostic.open_float, 'Show diagnostic')
 
-          -- 診断を手動で確認するキーマップ
-          buf_map('n', '<leader>dd', function()
-            local diags = vim.diagnostic.get(bufnr)
-            vim.notify("Diagnostics count: " .. #diags, vim.log.levels.INFO)
-            if #diags > 0 then
-              for _, d in ipairs(diags) do
-                print(string.format("[%s] %s", d.severity, d.message))
-              end
-            end
-          end, 'Show all diagnostics')
-
-          -- Detekt実行キーマップ
-          buf_map('n', '<leader>kd', function()
-            vim.cmd('split | terminal ./gradlew detekt')
-          end, 'Run detekt')
-
-          buf_map('n', '<leader>kf', function()
-            vim.cmd('split | terminal ./gradlew detekt --auto-correct')
-            -- 実行後にファイルを再読み込み
-            vim.defer_fn(function()
-              vim.cmd('checktime')
-            end, 2000)
-          end, 'Format with detekt')
+          -- -- 診断を手動で確認するキーマップ
+          -- buf_map('n', '<leader>dd', function()
+          --   local diags = vim.diagnostic.get(bufnr)
+          --   vim.notify("Diagnostics count: " .. #diags, vim.log.levels.INFO)
+          --   if #diags > 0 then
+          --     for _, d in ipairs(diags) do
+          --       print(string.format("[%s] %s", d.severity, d.message))
+          --     end
+          --   end
+          -- end, 'Show all diagnostics')
+          --
+          -- -- Detekt実行キーマップ
+          -- buf_map('n', '<leader>kd', function()
+          --   vim.cmd('split | terminal ./gradlew detekt')
+          -- end, 'Run detekt')
+          --
+          -- buf_map('n', '<leader>kf', function()
+          --   vim.cmd('split | terminal ./gradlew detekt --auto-correct')
+          --   -- 実行後にファイルを再読み込み
+          --   vim.defer_fn(function()
+          --     vim.cmd('checktime')
+          --   end, 2000)
+          -- end, 'Format with detekt')
         end,
         settings = {
           kotlin = {

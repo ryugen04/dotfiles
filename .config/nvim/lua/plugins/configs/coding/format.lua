@@ -71,7 +71,7 @@ return {
       })
 
       -- 手動フォーマット用のキーマップ
-      vim.keymap.set({ "n", "v" }, "<leader>mp", function()
+      vim.keymap.set({ "n", "v" }, "<leader>lf", function()
         require("conform").format({
           lsp_fallback = true,
           timeout_ms = 500,
@@ -114,11 +114,6 @@ return {
           require("lint").try_lint()
         end,
       })
-
-      -- 手動実行用のキーマップ
-      vim.keymap.set("n", "<leader>l", function()
-        require("lint").try_lint()
-      end, { desc = "Trigger linting" })
     end,
   },
 }

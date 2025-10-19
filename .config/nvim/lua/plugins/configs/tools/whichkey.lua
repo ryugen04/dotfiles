@@ -277,8 +277,8 @@ return {
         })
 
         wk.add({
-          { "<leader>m",  group = "Move Commands" },
-          { "<leader>mh", "<cmd>HopWord<CR>",     desc = "HopWord" },
+          { "<leader>j", "<cmd>HopWord<CR>", desc = "HopWord" },
+          { "<leader>k", "<cmd>HopLine<CR>", desc = "HopWord" },
         })
         wk.add({
           { "<leader>w", group = "Window" },

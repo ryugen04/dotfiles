@@ -21,7 +21,7 @@ return {
         ['<C-Tab>'] = { 'show', 'fallback' },
         ['<C-space>'] = { 'show', 'show_documentation', 'hide_documentation' },
         ['<Esc>'] = { 'hide', 'fallback' },
-        ['<CR>'] = { 'accept', 'fallback' },
+        ['<C-y>'] = { 'accept', 'fallback' },
         ['<C-k>'] = { 'show_signature', 'hide_signature', 'fallback' },
         ['<C-n>'] = { 'select_next', 'fallback' },
         ['<C-p>'] = { 'select_prev', 'fallback' },
@@ -48,8 +48,8 @@ return {
           border = 'rounded',
           draw = {
             columns = {
-              { 'label', 'label_description', gap = 1 },
-              { 'kind_icon', 'kind', gap = 1 },
+              { 'label',     'label_description', gap = 1 },
+              { 'kind_icon', 'kind',              gap = 1 },
             },
           },
         },
@@ -104,10 +104,10 @@ return {
               -- 表示されているバッファのみから補完
               get_bufnrs = function()
                 return vim
-                  .iter(vim.api.nvim_list_wins())
-                  :map(function(win) return vim.api.nvim_win_get_buf(win) end)
-                  :filter(function(buf) return vim.bo[buf].buftype ~= 'nofile' end)
-                  :totable()
+                    .iter(vim.api.nvim_list_wins())
+                    :map(function(win) return vim.api.nvim_win_get_buf(win) end)
+                    :filter(function(buf) return vim.bo[buf].buftype ~= 'nofile' end)
+                    :totable()
               end,
             },
           },
