@@ -21,7 +21,7 @@ return {
         ['<C-Tab>'] = { 'show', 'fallback' },
         ['<C-space>'] = { 'show', 'show_documentation', 'hide_documentation' },
         ['<Esc>'] = { 'hide', 'fallback' },
-        ['<C-y>'] = { 'accept', 'fallback' },
+        ['<Tab>'] = { 'accept', 'fallback' },
         ['<C-k>'] = { 'show_signature', 'hide_signature', 'fallback' },
         ['<C-n>'] = { 'select_next', 'fallback' },
         ['<C-p>'] = { 'select_prev', 'fallback' },
