@@ -276,10 +276,7 @@ return {
           },
         })
 
-        wk.add({
-          { "<leader>j", "<cmd>HopWord<CR>", desc = "HopWord" },
-          { "<leader>k", "<cmd>HopLine<CR>", desc = "HopWord" },
-        })
+        -- flash.nvimのキーマップはflash.lua内で定義されています
         wk.add({
           { "<leader>w", group = "Window" },
           {
@@ -289,6 +286,22 @@ return {
               "<cmd>WinResizerStartResize<CR>",
               desc = "window resize"
             },
+          },
+        })
+
+        -- AI アシスタント (avante.nvim)
+        wk.add({
+          { "<leader>ai", group = "AI Assistant" },
+          {
+            mode = { "n", "v" },
+            { "<leader>aia", "<cmd>AvanteAsk<CR>",                                   desc = "Avante Ask (Chat)" },
+            { "<leader>air", "<cmd>AvanteRefresh<CR>",                               desc = "Avante Refresh" },
+            { "<leader>aie", "<cmd>AvanteEdit<CR>",                                  desc = "Avante Edit" },
+            { "<leader>ait", "<cmd>AvanteToggle<CR>",                                desc = "Avante Toggle" },
+            { "<leader>aic", function() require('avante').apply_cursor() end,        desc = "Apply suggestion at cursor" },
+            { "<leader>aiA", function() require('avante').apply_all() end,           desc = "Apply all suggestions" },
+            { "<leader>ain", function() require('avante').next_suggestion() end,     desc = "Next suggestion" },
+            { "<leader>aip", function() require('avante').previous_suggestion() end, desc = "Previous suggestion" },
           },
         })
       else
