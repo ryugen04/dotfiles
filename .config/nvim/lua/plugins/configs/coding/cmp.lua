@@ -9,6 +9,11 @@ return {
     dependencies = {
       'rafamadriz/friendly-snippets',
       'L3MON4D3/LuaSnip',
+      -- Copilot統合のための依存関係
+      {
+        'giuxtaposition/blink-cmp-copilot',
+        dependencies = { 'zbirenbaum/copilot.lua' },
+      },
     },
     opts = {
       -- キーマップ設定（nvim-cmpの設定を踏襲しつつカスタマイズ）
@@ -70,7 +75,7 @@ return {
 
       -- 補完ソース設定
       sources = {
-        default = { 'lsp', 'path', 'snippets', 'buffer' },
+        default = { 'lsp', 'path', 'snippets', 'buffer', 'copilot' },
 
         -- ソースごとの詳細設定
         providers = {
@@ -90,10 +95,6 @@ return {
           snippets = {
             name = 'Snippet',
             score_offset = 90,
-            opts = {
-              friendly_snippets = true,
-              search_paths = { vim.fn.stdpath('config') .. '/snippets' },
-            },
           },
           buffer = {
             name = 'Buffer',
@@ -109,6 +110,16 @@ return {
                     :filter(function(buf) return vim.bo[buf].buftype ~= 'nofile' end)
                     :totable()
               end,
+            },
+          },
+          copilot = {
+            name = 'Copilot',
+            module = 'blink-cmp-copilot',
+            score_offset = 95,
+            async = true,
+            opts = {
+              -- Copilot固有の設定
+              max_items = 3,
             },
           },
         },
