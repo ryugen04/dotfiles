@@ -45,7 +45,8 @@ return {
           html = { "prettier" },
           css = { "prettier" },
 
-          -- Kotlin: detektはGradleプロジェクトで管理
+          -- Kotlin: LSPフォーマットを使用（またはGradleのktlintFormatを使用）
+          -- kotlin = { "ktlint" },
         },
 
         -- 保存時自動フォーマット
@@ -105,13 +106,87 @@ return {
         -- Docker
         dockerfile = { 'hadolint' },
 
-        -- Kotlin: detektはGradleプロジェクトで管理
+        -- Kotlin: detekt（静的解析のみ、ktlintはGradle経由で使用）
+        kotlin = { 'detekt' },
+      }
+
+      -- Detektカスタムリンター
+      -- detekt CLI + カスタムパーサー
+      local lint = require('lint')
+
+      lint.linters.detekt = {
+        cmd = 'detekt',
+        stdin = false,
+        args = {
+          '--input',
+          function() return vim.fn.expand('%:p') end,
+          '--build-upon-default-config',
+        },
+        stream = 'both',
+        ignore_exitcode = true,
+        parser = function(output, bufnr)
+          local diagnostics = {}
+          local current_file = vim.api.nvim_buf_get_name(bufnr)
+
+          -- Detekt出力形式: /path/to/file.kt:10:5: [RuleId] Description
+          -- または: file.kt:10:5: [RuleId] Description
+          for line in output:gmatch('[^\r\n]+') do
+            -- パターン1: フルパス
+            local file, lnum, col, rule_id, message =
+              line:match('^(.+%.kt):(%d+):(%d+):%s*%[([^%]]+)%]%s*(.+)$')
+
+            if file and lnum and col and rule_id and message then
+              -- ファイル名が一致するかチェック
+              local matches = false
+              if file == current_file then
+                matches = true
+              elseif vim.endswith(file, vim.fn.expand('%:t')) then
+                matches = true
+              elseif vim.endswith(current_file, file) then
+                matches = true
+              end
+
+              if matches then
+                -- severityの判定（detektはデフォルトで警告レベル）
+                local severity = vim.diagnostic.severity.WARN
+                if message:match('^error:') or message:match('^CRITICAL') then
+                  severity = vim.diagnostic.severity.ERROR
+                elseif message:match('^info:') then
+                  severity = vim.diagnostic.severity.INFO
+                end
+
+                table.insert(diagnostics, {
+                  lnum = tonumber(lnum) - 1,
+                  col = tonumber(col) - 1,
+                  end_lnum = tonumber(lnum) - 1,
+                  end_col = tonumber(col),
+                  severity = severity,
+                  source = 'detekt',
+                  message = message,
+                  code = rule_id,
+                })
+              end
+            end
+          end
+
+          return diagnostics
+        end,
       }
 
       -- 自動実行の設定
+      -- Detektは重いため、Kotlinファイルでは保存時のみ実行
       vim.api.nvim_create_autocmd({ "BufWritePost", "BufEnter", "InsertLeave" }, {
         callback = function()
-          require("lint").try_lint()
+          local ft = vim.bo.filetype
+          if ft == 'kotlin' then
+            -- Kotlinファイルでは保存時のみDetektを実行
+            if vim.v.event and vim.v.event.trigger == 'BufWritePost' then
+              require("lint").try_lint()
+            end
+            -- InsertLeaveではDetektをスキップ（重いため）
+          else
+            require("lint").try_lint()
+          end
         end,
       })
     end,

@@ -23,7 +23,7 @@ return {
           "lua_ls",
           "bashls",
           "pyright",
-          "kotlin_language_server",
+          -- Kotlin: JetBrains公式kotlin-lspはHomebrewでインストール
         },
         automatic_installation = true  -- 必要に応じて自動インストール
       })
@@ -76,25 +76,35 @@ return {
       -- 除外するLSPサーバーのリスト
       local excluded_servers = {
         ["jdtls"] = true, -- null-lsから起動するため除外
-        ["kotlin_language_server"] = true, -- kotlin.luaから起動するため除外
+        -- kotlin-lspはkotlin.luaから起動（Homebrew経由でインストール）
       }
 
-      require('mason-lspconfig').setup_handlers({
-        function(server_name)
-          if excluded_servers[server_name] then
-            return
+      local ok, mason_lspconfig = pcall(require, 'mason-lspconfig')
+      if ok and mason_lspconfig.setup_handlers then
+        mason_lspconfig.setup_handlers({
+          function(server_name)
+            if excluded_servers[server_name] then
+              return
+            end
+            local config = vim.tbl_deep_extend(
+              "force",
+              make_default_config(),
+              server_settings[server_name] or {}
+            )
+            -- jdtls launch from null-ls
+            -- Use new vim.lsp.config API for nvim 0.11+
+            if vim.lsp.config then
+              vim.lsp.config[server_name] = config
+              vim.lsp.enable(server_name)
+            else
+              -- Fallback for older nvim versions
+              require('lspconfig')[server_name].setup(config)
+            end
           end
-          local config = vim.tbl_deep_extend(
-            "force",
-            make_default_config(),
-            server_settings[server_name] or {}
-          )
-          -- jdtls launch from null-ls
-          require('lspconfig')[server_name].setup(
-            config
-          )
-        end
-      })
+        })
+      elseif not ok then
+        vim.notify('Failed to load mason-lspconfig', vim.log.levels.ERROR)
+      end
     end,
     dependencies = {
       'williamboman/mason-lspconfig.nvim',

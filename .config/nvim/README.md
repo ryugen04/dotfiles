@@ -74,7 +74,7 @@ cat startup.log
 ### エディタ機能
 - [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) - ファジーファインダー
 - [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter) - シンタックスハイライト
-- [hop.nvim](https://github.com/phaazon/hop.nvim) - 高速カーソル移動
+- [flash.nvim](https://github.com/folke/flash.nvim) - 高速カーソル移動（Treesitter統合）
 
 ### Git
 - [lazygit.nvim](https://github.com/kdheepak/lazygit.nvim) - LazyGit統合
@@ -236,11 +236,58 @@ return {
 :Lazy clean
 ```
 
+## セットアップ
+
+### 自動セットアップ
+
+セットアップスクリプトを使用して一括インストール:
+
+```bash
+cd ~/.config/nvim
+./install.sh
+```
+
+このスクリプトは以下を実行します:
+1. Neovimと依存関係のバージョン確認
+2. lazy.nvimプラグインマネージャーのインストール
+3. 全プラグインのインストール
+4. MarkdownPreviewのビルド
+5. Treesitterパーサーのインストール
+
+### 手動セットアップ
+
+1. **lazy.nvimのインストール**
+   ```bash
+   git clone --filter=blob:none https://github.com/folke/lazy.nvim.git --branch=stable \
+     ~/.local/share/nvim/lazy/lazy.nvim
+   ```
+
+2. **プラグインのインストール**
+   ```bash
+   nvim --headless "+Lazy! sync" +qa
+   ```
+
+3. **MarkdownPreviewのビルド**
+   ```bash
+   cd ~/.local/share/nvim/lazy/markdown-preview.nvim/app
+   ./install.sh
+   ```
+
+4. **Treesitterパーサーのインストール**
+   ```vim
+   :TSInstall lua vim vimdoc query markdown
+   ```
+
+5. **LSPサーバーのインストール**
+   ```vim
+   :Mason
+   ```
+
 ## 推奨環境
 
 - Neovim: 0.11.3以降
 - Git: 2.40以降
-- Node.js: 20.x以降（一部のLSPサーバーで必要）
+- Node.js: 20.x以降（MarkdownPreview、一部のLSPサーバーで必要）
 - Python: 3.10以降（一部のツールで必要）
 
 ## 参考資料
@@ -262,6 +309,7 @@ MIT License
 
 ## 更新履歴
 
+- 2025-11-05: hop.nvimからflash.nvimへ移行、MarkdownPreviewセットアップスクリプト追加
 - 2025-10-16: パフォーマンス最適化、ベンチマークスクリプト追加
 - 2025-06: ClaudeCode.nvim統合
 - 2025-03: 初期設定作成

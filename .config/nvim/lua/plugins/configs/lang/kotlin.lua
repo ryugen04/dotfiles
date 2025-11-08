@@ -1,109 +1,284 @@
+-- Kotlin開発環境設定
+-- JetBrains公式kotlin-lspをベースとした環境構築
 return {
-  -- Kotlin Language Server
+  -- LSP設定（JetBrains公式kotlin-lsp）
   {
     'neovim/nvim-lspconfig',
     cond = not env.is_vscode(),
-    event = { "BufReadPre *.kt", "BufNewFile *.kt" },
     ft = 'kotlin',
     config = function()
       local lspconfig = require('lspconfig')
-      local capabilities = vim.lsp.protocol.make_client_capabilities()
-      capabilities.textDocument.completion.completionItem.snippetSupport = true
+      local lspconfig_configs = require('lspconfig.configs')
 
-      lspconfig.kotlin_language_server.setup({
-        capabilities = capabilities,
-        filetypes = { "kotlin" },
-        root_dir = lspconfig.util.root_pattern(
-          "settings.gradle.kts",
-          "settings.gradle",
-          "build.gradle.kts",
-          "build.gradle",
-          ".git"
-        ),
-        single_file_support = true,
-        on_attach = function(client, bufnr)
-          -- 診断を明示的に有効化
-          vim.diagnostic.enable(bufnr)
-
-          -- LSP基本キーマップ
-          local function buf_map(mode, lhs, rhs, desc)
-            vim.keymap.set(mode, lhs, rhs, { buffer = bufnr, desc = desc, silent = true })
-          end
-
-          buf_map('n', 'gD', vim.lsp.buf.declaration, 'Go to declaration')
-          buf_map('n', 'gd', vim.lsp.buf.definition, 'Go to definition')
-          buf_map('n', 'K', vim.lsp.buf.hover, 'Hover documentation')
-          buf_map('n', 'gi', vim.lsp.buf.implementation, 'Go to implementation')
-          buf_map('n', '<leader>rn', vim.lsp.buf.rename, 'Rename')
-          buf_map('n', '<leader>ca', vim.lsp.buf.code_action, 'Code action')
-          buf_map('n', 'gr', vim.lsp.buf.references, 'References')
-          buf_map('n', '[d', vim.diagnostic.goto_prev, 'Previous diagnostic')
-          buf_map('n', ']d', vim.diagnostic.goto_next, 'Next diagnostic')
-          buf_map('n', '<leader>e', vim.diagnostic.open_float, 'Show diagnostic')
-
-          -- -- 診断を手動で確認するキーマップ
-          -- buf_map('n', '<leader>dd', function()
-          --   local diags = vim.diagnostic.get(bufnr)
-          --   vim.notify("Diagnostics count: " .. #diags, vim.log.levels.INFO)
-          --   if #diags > 0 then
-          --     for _, d in ipairs(diags) do
-          --       print(string.format("[%s] %s", d.severity, d.message))
-          --     end
-          --   end
-          -- end, 'Show all diagnostics')
-          --
-          -- -- Detekt実行キーマップ
-          -- buf_map('n', '<leader>kd', function()
-          --   vim.cmd('split | terminal ./gradlew detekt')
-          -- end, 'Run detekt')
-          --
-          -- buf_map('n', '<leader>kf', function()
-          --   vim.cmd('split | terminal ./gradlew detekt --auto-correct')
-          --   -- 実行後にファイルを再読み込み
-          --   vim.defer_fn(function()
-          --     vim.cmd('checktime')
-          --   end, 2000)
-          -- end, 'Format with detekt')
-        end,
-        settings = {
-          kotlin = {
-            compiler = {
-              jvm = {
-                target = "21"
+      -- JetBrains公式kotlin-lspのカスタム設定
+      -- Homebrewでインストール: brew install JetBrains/utils/kotlin-lsp
+      if not lspconfig_configs.kotlin_lsp then
+        lspconfig_configs.kotlin_lsp = {
+          default_config = {
+            cmd = { 'kotlin-lsp', '--stdio' },
+            filetypes = { 'kotlin' },
+            root_dir = lspconfig.util.root_pattern(
+              'settings.gradle.kts',
+              'settings.gradle',
+              'build.gradle.kts',
+              'build.gradle',
+              'pom.xml',
+              '.git'
+            ),
+            settings = {
+              kotlin = {
+                compiler = {
+                  jvm = {
+                    target = '21'
+                  }
+                },
+                -- IntelliJ IDEA準拠の設定
+                codeGeneration = {
+                  useJavaStyleBraces = false,
+                },
+                completion = {
+                  snippets = {
+                    enabled = true
+                  }
+                },
+                formatting = {
+                  -- IntelliJ IDEAのデフォルト設定を使用
+                  -- .editorconfigで詳細設定
+                  enabled = true
+                },
+                diagnostics = {
+                  enabled = true
+                }
               }
-            }
+            },
+            capabilities = vim.lsp.protocol.make_client_capabilities(),
           }
         }
-      })
+      end
 
-      -- Kotlinファイルを開いたときに確実にLSPをアタッチ
-      vim.api.nvim_create_autocmd("FileType", {
-        pattern = "kotlin",
-        callback = function()
-          local bufnr = vim.api.nvim_get_current_buf()
-          -- 既にLSPがアタッチされているか確認
-          local clients = vim.lsp.get_clients({ bufnr = bufnr })
-          local has_kotlin_lsp = false
-          for _, client in ipairs(clients) do
-            if client.name == "kotlin_language_server" then
-              has_kotlin_lsp = true
-              break
-            end
-          end
+      -- kotlin-lspの起動
+      lspconfig.kotlin_lsp.setup({
+        capabilities = vim.lsp.protocol.make_client_capabilities(),
+        on_attach = function(client, bufnr)
+          -- LSP基本キーマップ
+          local opts = { noremap = true, silent = true, buffer = bufnr }
+          vim.keymap.set('n', 'gd', vim.lsp.buf.definition, opts)
+          vim.keymap.set('n', 'gr', vim.lsp.buf.references, opts)
+          vim.keymap.set('n', 'K', vim.lsp.buf.hover, opts)
+          vim.keymap.set('n', '<leader>rn', vim.lsp.buf.rename, opts)
+          vim.keymap.set('n', '<leader>ca', vim.lsp.buf.code_action, opts)
+          vim.keymap.set('n', '<leader>e', vim.diagnostic.open_float, opts)
+          vim.keymap.set('n', '[d', vim.diagnostic.goto_prev, opts)
+          vim.keymap.set('n', ']d', vim.diagnostic.goto_next, opts)
 
-          -- アタッチされていない場合は起動
-          if not has_kotlin_lsp then
-            vim.cmd('LspStart kotlin_language_server')
+          -- フォーマット（IntelliJ IDEA準拠）
+          if client.server_capabilities.documentFormattingProvider then
+            vim.keymap.set('n', '<leader>lf', function()
+              vim.lsp.buf.format({ async = true })
+            end, opts)
           end
         end,
-        desc = "Auto-attach Kotlin LSP"
       })
     end
   },
-  -- Kotlinシンタックスハイライト
+
+  -- シンタックスハイライト
   {
     'udalov/kotlin-vim',
     cond = not env.is_vscode(),
-    ft = { 'kotlin' }
-  }
+    ft = { 'kotlin' },
+    config = function()
+      -- Kotlinファイルタイプの追加設定
+      vim.api.nvim_create_autocmd('BufRead', {
+        pattern = '*.kt',
+        callback = function()
+          vim.bo.filetype = 'kotlin'
+        end,
+      })
+    end
+  },
+
+  -- Kotestテスト実行用キーマップ
+  -- 注: neotest-kotlinアダプタはtest.luaで設定済み
+  {
+    'nvim-neotest/neotest',
+    optional = true,
+    ft = 'kotlin',
+    keys = {
+      {
+        '<leader>tn',
+        function()
+          require('neotest').run.run()
+        end,
+        desc = 'Run nearest Kotlin test',
+      },
+      {
+        '<leader>tf',
+        function()
+          require('neotest').run.run(vim.fn.expand('%'))
+        end,
+        desc = 'Run current Kotlin file tests',
+      },
+      {
+        '<leader>ts',
+        function()
+          require('neotest').summary.toggle()
+        end,
+        desc = 'Toggle Kotlin test summary',
+      },
+      {
+        '<leader>to',
+        function()
+          require('neotest').output.open({ enter = true })
+        end,
+        desc = 'Open Kotlin test output',
+      },
+    }
+  },
+
+  -- デバッグ（DAP）
+  {
+    'mfussenegger/nvim-dap',
+    optional = true,
+    dependencies = {
+      'Mgenuit/nvim-dap-kotlin',
+    },
+    ft = 'kotlin',
+    config = function()
+      -- nvim-dap-kotlinが自動的にkotlin-debug-adapterを設定
+      -- 手動設定が必要な場合は以下を使用
+      local dap = require('dap')
+
+      if not dap.adapters.kotlin then
+        dap.adapters.kotlin = {
+          type = 'executable',
+          command = 'kotlin-debug-adapter',
+          options = {
+            auto_continue_if_many_stopped = false,
+          }
+        }
+      end
+
+      if not dap.configurations.kotlin then
+        dap.configurations.kotlin = {
+          {
+            type = 'kotlin',
+            request = 'launch',
+            name = 'Launch Kotlin Program',
+            projectRoot = vim.fn.getcwd(),
+            mainClass = function()
+              return vim.fn.input('Main class (e.g., com.example.MainKt): ')
+            end,
+          },
+          {
+            type = 'kotlin',
+            request = 'attach',
+            name = 'Attach to Kotlin Process',
+            hostName = 'localhost',
+            port = 5005,
+            timeout = 2000,
+          },
+          {
+            type = 'kotlin',
+            request = 'launch',
+            name = 'Debug Kotest',
+            projectRoot = vim.fn.getcwd(),
+            mainClass = 'io.kotest.runner.console.KotestConsoleRunner',
+            args = function()
+              local test_class = vim.fn.expand('%:t:r')
+              return { '--spec=' .. test_class }
+            end,
+          }
+        }
+      end
+
+    end
+  },
+
+  -- Kotlin専用デバッグキーマップ
+  {
+    'mfussenegger/nvim-dap',
+    optional = true,
+    ft = 'kotlin',
+    keys = {
+      {
+        '<leader>db',
+        function()
+          require('dap').toggle_breakpoint()
+        end,
+        desc = 'Toggle Kotlin breakpoint',
+      },
+      {
+        '<leader>dc',
+        function()
+          require('dap').continue()
+        end,
+        desc = 'Continue Kotlin debugging',
+      },
+      {
+        '<leader>ds',
+        function()
+          require('dap').step_over()
+        end,
+        desc = 'Step over in Kotlin debug',
+      },
+      {
+        '<leader>di',
+        function()
+          require('dap').step_into()
+        end,
+        desc = 'Step into in Kotlin debug',
+      },
+    }
+  },
+
+  -- Gradle統合ユーティリティ
+  {
+    'nvim-lua/plenary.nvim',
+    optional = true,
+    keys = {
+      {
+        '<leader>kg',
+        function()
+          local gradle_tasks = {
+            'build',
+            'clean',
+            'test',
+            'detekt',
+            'ktlintFormat',
+            'ktlintCheck',
+          }
+
+          vim.ui.select(gradle_tasks, {
+            prompt = 'Select Gradle task:',
+          }, function(choice)
+            if choice then
+              vim.cmd('split | terminal ./gradlew ' .. choice)
+            end
+          end)
+        end,
+        desc = 'Run Gradle task',
+        ft = 'kotlin',
+      },
+      {
+        '<leader>kd',
+        function()
+          vim.cmd('split | terminal ./gradlew detekt')
+        end,
+        desc = 'Run Detekt analysis',
+        ft = 'kotlin',
+      },
+      {
+        '<leader>kf',
+        function()
+          vim.cmd('split | terminal ./gradlew ktlintFormat')
+          vim.defer_fn(function()
+            vim.cmd('checktime')
+          end, 2000)
+        end,
+        desc = 'Format with ktlint (Gradle)',
+        ft = 'kotlin',
+      },
+    }
+  },
 }

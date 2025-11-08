@@ -7,7 +7,8 @@ return {
         "nvim-lua/plenary.nvim",
         "antoinemadec/FixCursorHold.nvim",
         "nvim-treesitter/nvim-treesitter",
-        "rcasia/neotest-java"
+        "rcasia/neotest-java",
+        "codymikol/neotest-kotlin"
       },
       config = function()
         -- neotest設定
@@ -41,7 +42,9 @@ return {
                   testScope = "method"
                 }
               }
-            })
+            }),
+            -- Kotlin/Kotest用アダプタ
+            require("neotest-kotlin")
           },
           -- UIレイアウトの設定
           summary = {

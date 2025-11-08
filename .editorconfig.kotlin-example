@@ -1,0 +1,86 @@
+# EditorConfig for Kotlin Projects
+# IntelliJ IDEA準拠の設定 + Detekt/ktlint互換設定
+#
+# 使い方:
+# 1. このファイルをKotlinプロジェクトのルートディレクトリにコピー
+# 2. ファイル名を .editorconfig にリネーム
+# 3. プロジェクトの要件に応じて設定を調整
+
+root = true
+
+# 全ファイル共通設定
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Kotlinファイル設定
+[*.{kt,kts}]
+# インデント: 4スペース（Kotlin標準）
+indent_size = 4
+indent_style = space
+
+# 行の最大長: 120文字（IntelliJ IDEAデフォルト）
+max_line_length = 120
+
+# ktlint設定（IntelliJ IDEAコードスタイル準拠）
+# See: https://pinterest.github.io/ktlint/latest/rules/configuration-ktlint/
+
+# インポート設定
+ij_kotlin_imports_layout = *
+ij_kotlin_packages_to_use_import_on_demand = unset
+
+# トレーリングカンマ（Kotlin 1.4+推奨）
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
+
+# クラス/関数設定
+ij_kotlin_name_count_to_use_star_import = 999
+ij_kotlin_name_count_to_use_star_import_for_members = 999
+
+# コードブロック設定
+ij_kotlin_code_style_defaults = KOTLIN_OFFICIAL
+
+# 改行設定
+ij_kotlin_continuation_indent_size = 4
+ij_kotlin_line_comment_at_first_column = false
+ij_kotlin_line_comment_add_space = true
+
+# 空白設定
+ij_kotlin_space_after_comma = true
+ij_kotlin_space_after_extend_colon = true
+ij_kotlin_space_after_type_colon = true
+ij_kotlin_space_before_comma = false
+ij_kotlin_space_before_extend_colon = true
+ij_kotlin_space_before_type_colon = false
+
+# チェーン呼び出し設定
+ij_kotlin_method_call_chain_wrap = normal
+
+# Detekt互換設定
+# Detektの設定ファイル（detekt.yml）と整合性を保つ
+# 主要なスタイルルール:
+# - MaxLineLength: 120
+# - IndentationSize: 4
+# - TrailingComma: enabled
+
+# Gradleビルドファイル
+[*.gradle.kts]
+indent_size = 4
+indent_style = space
+
+# YAML設定ファイル
+[*.{yml,yaml}]
+indent_size = 2
+indent_style = space
+
+# JSON設定ファイル
+[*.json]
+indent_size = 2
+indent_style = space
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
