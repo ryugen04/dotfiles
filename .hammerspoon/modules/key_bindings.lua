@@ -5,48 +5,72 @@ local console_apps = {
   ["Terminal"] = false,
   ["iTerm2"] = true,
   ["WezTerm"] = true,
+  ["kitty"] = true,
 }
 
-local special_combos = {
-  c = false,
-  v = false,
-  space = true,
-}
-
--- コンソールアプリ以外でCtrl,Cmdキーの入れ替えを行う
+-- Ctrl/Cmdキーの入れ替えを行う
+-- コンソールアプリ：c, v のみ入れ替え
+-- 他のアプリ：全てのキーで入れ替え
 local function swapCmdCtrl(event)
   local flags = event:getFlags()
   local key_code = event:getKeyCode()
   local key_char = hs.keycodes.map[key_code]
-  
+
   local front_app = hs.application.frontmostApplication()
+  local is_console_app = console_apps[front_app:name()]
 
-  if console_apps[front_app:name()] and flags["cmd"] then
-    if special_combos[key_char] then
-      return false
+  -- コンソールアプリの場合：c, v のみ入れ替え対象
+  if is_console_app then
+    if key_char ~= "c" and key_char ~= "v" then
+      return false  -- c, v 以外はそのまま通す
     end
-    
-    local modifier_keys = {"ctrl"}
-
-    if flags["shift"] then
-      modifier_keys[#modifier_keys + 1] = "shift"
-    end
-    if flags["alt"] then
-      modifier_keys[#modifier_keys + 1] = "alt"
-    end
-    hs.eventtap.event.newKeyEvent(modifier_keys, key_char, true):post()
-    hs.eventtap.event.newKeyEvent(modifier_keys, key_char, false):post()
-    return true
   end
 
-  return false
+  -- Ctrl+キー → Cmd+キー に変換
+  if flags["ctrl"] and not flags["cmd"] then
+    local modifier_keys = { "cmd" }
+
+    if flags["shift"] then
+      table.insert(modifier_keys, "shift")
+    end
+    if flags["alt"] then
+      table.insert(modifier_keys, "alt")
+    end
+
+    -- eventtapを一時停止してからキーストロークを発行
+    key_bindings.eventtap:stop()
+    hs.eventtap.keyStroke(modifier_keys, key_char, 0)
+    key_bindings.eventtap:start()
+
+    return true  -- 元のイベントをブロック
+  end
+
+  -- Cmd+キー → Ctrl+キー に変換
+  if flags["cmd"] and not flags["ctrl"] then
+    local modifier_keys = { "ctrl" }
+
+    if flags["shift"] then
+      table.insert(modifier_keys, "shift")
+    end
+    if flags["alt"] then
+      table.insert(modifier_keys, "alt")
+    end
+
+    -- eventtapを一時停止してからキーストロークを発行
+    key_bindings.eventtap:stop()
+    hs.eventtap.keyStroke(modifier_keys, key_char, 0)
+    key_bindings.eventtap:start()
+
+    return true  -- 元のイベントをブロック
+  end
+
+  return false  -- それ以外は元のイベントをそのまま通す
 end
 
 function key_bindings.start()
-  key_bindings.eventtap = hs.eventtap.new({hs.eventtap.event.types.keyDown}, swapCmdCtrl)
+  key_bindings.eventtap = hs.eventtap.new({ hs.eventtap.event.types.keyDown }, swapCmdCtrl)
   key_bindings.eventtap:start()
 end
-
 
 function key_bindings.stop()
   if key_bindings.eventtap then
@@ -56,4 +80,3 @@ function key_bindings.stop()
 end
 
 return key_bindings
-
