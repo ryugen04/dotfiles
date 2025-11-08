@@ -1,14 +1,15 @@
+-- hop.nvimはflash.nvimに置き換えられました
+-- flash.luaを参照してください
 return {
-  -- ナビゲーション
-  {
-    'hadronized/hop.nvim',
-    config = function()
-    
-  local hop = require("hop")
-  hop.setup {
-    multi_windows = true,
-  }
-    end,
-    doc = "クイックジャンプ"
-  },
+  -- {
+  --   'hadronized/hop.nvim',
+  --   config = function()
+  --
+  --   local hop = require("hop")
+  --   hop.setup {
+  --     multi_windows = true,
+  --   }
+  --     end,
+  --     doc = "クイックジャンプ"
+  --   },
 }
