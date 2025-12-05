@@ -8,9 +8,10 @@ os:
   editPreset: "nvim"
 
 customCommands:
-  - key: "{{MOD_KEY}}-c"
-    context: "files"
-    description: 'commit files with format'
+  # Commit (Ctrl+S)
+  - key: "<c-s>"
+    context: "global"
+    description: "Conventional commit"
     prompts:
       - type: "menu"
         title: "What kind of commit type is it?"
@@ -37,6 +38,12 @@ customCommands:
           - name: "perf"
             description: "パフォーマンスの改善"
             value: "perf"
+          - name: "build"
+            description: "ビルドシステムや外部依存関係の変更"
+            value: "build"
+          - name: "ci"
+            description: "CI設定ファイルやスクリプトの変更"
+            value: "ci"
           - name: "chore"
             description: "ビルドプロセスの変更や改善"
             value: "chore"
@@ -48,68 +55,184 @@ customCommands:
         key: "Message"
         initialValue: ""
       - type: "menu"
-        title: "Choise the emoji"
+        title: "Choose the emoji"
         key: "Emoji"
         options:
+          # 空
           - name: '(empty)'
-            description: ''
+            description: '絵文字なし'
             value: ''
-          - name: ':ambulance:'
-            description: '(fix)🚑致命的なバグ修正'
-            value: ':ambulance:'
-          - name: ':bug:'
-            description: '(fix)🐛バグ修正'
-            value: ':bug:'
-          - name: ':+1:'
-            description: '(fix)👍機能改善や機能修正'
-            value: ':+1:'
-          - name: ':cop:'
-            description: '(fix)👮セキュリティ関連の修正'
-            value: ':cop:'
-          - name: ':tada'
-            description: '(feat)🎉大きな機能追加'
-            value: ':tada:'
+          # feat
           - name: ':sparkles:'
-            description: '(feat)✨部分的な機能追加'
+            description: '(feat) ✨ 新機能の追加'
             value: ':sparkles:'
-          - name: ':up:'
-            description: '(feat)🆙依存パッケージ等のアップデート'
-            value: ':up:'
+          - name: ':tada:'
+            description: '(feat) 🎉 初回コミット/大きな機能'
+            value: ':tada:'
+          - name: ':children_crossing:'
+            description: '(feat) 🚸 UX/ユーザビリティの改善'
+            value: ':children_crossing:'
+          # fix
+          - name: ':bug:'
+            description: '(fix) 🐛 バグ修正'
+            value: ':bug:'
+          - name: ':ambulance:'
+            description: '(fix) 🚑 致命的なバグの緊急修正'
+            value: ':ambulance:'
+          - name: ':lock:'
+            description: '(fix) 🔒 セキュリティ問題の修正'
+            value: ':lock:'
+          - name: ':adhesive_bandage:'
+            description: '(fix) 🩹 軽微な修正'
+            value: ':adhesive_bandage:'
+          # docs
           - name: ':memo:'
-            description: '(docs)📝ドキュメントの追加や修正'
+            description: '(docs) 📝 ドキュメントの追加・更新'
             value: ':memo:'
-          - name: ':bulb'
-            description: '(docs)💡ソースコードへのコメント追加や修正'
+          - name: ':bulb:'
+            description: '(docs) 💡 ソースコードにコメント追加'
             value: ':bulb:'
+          # style
           - name: ':art:'
-            description: '(style)🎨レイアウト関連の修正'
+            description: '(style) 🎨 コード構造/フォーマットの改善'
             value: ':art:'
           - name: ':lipstick:'
-            description: '(style)💄Lintエラーの修正やコードスタイルの修正'
+            description: '(style) 💄 UI/スタイルファイルの更新'
             value: ':lipstick:'
+          # refactor
           - name: ':recycle:'
-            description: '(refactor)♻️ リファクタリング'
+            description: '(refactor) ♻️ コードのリファクタリング'
             value: ':recycle:'
           - name: ':fire:'
-            description: '(refactor)🔥コードやファイルの削除'
+            description: '(refactor) 🔥 コードやファイルの削除'
             value: ':fire:'
+          - name: ':coffin:'
+            description: '(refactor) ⚰️ デッドコードの削除'
+            value: ':coffin:'
+          - name: ':truck:'
+            description: '(refactor) 🚚 ファイルの移動/リネーム'
+            value: ':truck:'
+          # test
+          - name: ':white_check_mark:'
+            description: '(test) ✅ テストの追加・更新'
+            value: ':white_check_mark:'
+          - name: ':test_tube:'
+            description: '(test) 🧪 失敗するテストの追加'
+            value: ':test_tube:'
+          # perf
+          - name: ':zap:'
+            description: '(perf) ⚡ パフォーマンスの改善'
+            value: ':zap:'
+          # build
+          - name: ':package:'
+            description: '(build) 📦 パッケージ/依存関係の追加・更新'
+            value: ':package:'
+          - name: ':heavy_plus_sign:'
+            description: '(build) ➕ 依存関係の追加'
+            value: ':heavy_plus_sign:'
+          - name: ':heavy_minus_sign:'
+            description: '(build) ➖ 依存関係の削除'
+            value: ':heavy_minus_sign:'
+          - name: ':arrow_up:'
+            description: '(build) ⬆️ 依存関係のアップグレード'
+            value: ':arrow_up:'
+          - name: ':arrow_down:'
+            description: '(build) ⬇️ 依存関係のダウングレード'
+            value: ':arrow_down:'
+          # ci
+          - name: ':construction_worker:'
+            description: '(ci) 👷 CI関連の追加・更新'
+            value: ':construction_worker:'
           - name: ':green_heart:'
-            description: '(test)💚テストやCIの修正'
+            description: '(ci) 💚 CIビルドの修正'
             value: ':green_heart:'
-          - name: ':rocket:'
-            description: '(perf)🚀パフォーマンス改善'
-            value: ':rocket:'
+          # chore
           - name: ':wrench:'
-            description: '(chore)🔧設定ファイルの修正'
+            description: '(chore) 🔧 設定ファイルの追加・更新'
             value: ':wrench:'
           - name: ':building_construction:'
-            description: '(chore)🏗️アーキテクチャの修正'
+            description: '(chore) 🏗️ アーキテクチャの変更'
             value: ':building_construction:'
+          - name: ':see_no_evil:'
+            description: '(chore) 🙈 .gitignoreの追加・更新'
+            value: ':see_no_evil:'
+          # wip
           - name: ':construction:'
-            description: '(wip)🚧作業中'
+            description: '(wip) 🚧 作業中'
             value: ':construction:'
       - type: "confirm"
         title: "Commit"
         body: "Commit with the message '{{.Form.Type}}: {{.Form.Message}}{{.Form.Emoji}}'. Is this okay?"
     command: "bash -c 'type=\"{{.Form.Type}}\"; message=\"{{.Form.Message}}\"; emoji=\"{{.Form.Emoji}}\"; commit_message=\"$type: $message $emoji\"; git commit -m \"$commit_message\"'"
     loadingText: "Commiting..."
+
+  # Pull --rebase (Ctrl+R)
+  - key: "<c-r>"
+    context: "global"
+    description: "Pull --rebase from remote"
+    prompts:
+      - type: "menu"
+        title: "ベースブランチを選択"
+        key: "Branch"
+        options:
+          - name: "develop"
+            description: "developブランチからrebase pull"
+            value: "develop"
+          - name: "main"
+            description: "mainブランチからrebase pull"
+            value: "main"
+          - name: "master"
+            description: "masterブランチからrebase pull"
+            value: "master"
+    command: "git pull --rebase origin {{.Form.Branch}}"
+    loadingText: "Pull中..."
+
+  # Force push (Ctrl+F)
+  - key: "<c-f>"
+    context: "global"
+    description: "Force push (--force-with-lease)"
+    prompts:
+      - type: "confirm"
+        title: "Force Push"
+        body: "本当に force push しますか？"
+    command: "git push origin HEAD --force-with-lease"
+    loadingText: "Push中..."
+
+  # Delete merged branches (Ctrl+D)
+  - key: "<c-d>"
+    context: "global"
+    description: "Delete merged branches"
+    command: >-
+      bash -c '
+      branches=$(git branch --merged | grep -v "\*\|main\|master\|develop")
+      if [ -z "$branches" ]; then
+        echo "削除対象のマージ済みブランチはありません"
+      else
+        selected=$(echo "$branches" | fzf --multi --header="削除するブランチを選択 (Tab: 複数選択, Enter: 確定)")
+        if [ -n "$selected" ]; then
+          echo "$selected" | xargs -r git branch -d
+        fi
+      fi
+      '
+    loadingText: "実行中..."
+
+  # PR作成 (Ctrl+P)
+  - key: "<c-p>"
+    context: "global"
+    description: "Pull Request作成"
+    prompts:
+      - type: "menu"
+        title: "ベースブランチを選択"
+        key: "Base"
+        options:
+          - name: "develop"
+            description: "developブランチにマージ"
+            value: "develop"
+          - name: "main"
+            description: "mainブランチにマージ"
+            value: "main"
+          - name: "master"
+            description: "masterブランチにマージ"
+            value: "master"
+    command: "gh pr create --base {{.Form.Base}} --editor"
+    loadingText: "PR作成中..."
