@@ -228,3 +228,11 @@ customCommands:
         initialValue: ""
     command: "git push -u origin HEAD && head_branch=\"$(gh api user --jq .login):$(git branch --show-current)\" && tmpfile=$(mktemp /tmp/pr_body.XXXXXX.md); template=.github/PULL_REQUEST_TEMPLATE.md; [ -f $template ] && cp $template $tmpfile; nvim $tmpfile; if [ -s $tmpfile ]; then pr_url=$(gh pr create --head \"$head_branch\" --title '{{.Form.Title}}' --body-file $tmpfile --draft --assignee @me); else pr_url=$(gh pr create --head \"$head_branch\" --title '{{.Form.Title}}' --body '' --draft --assignee @me); fi; rm -f $tmpfile; [ -n \"$pr_url\" ] && xdg-open \"$pr_url\""
     loadingText: "PR作成中..."
+
+  # PRコメント表示 (Ctrl+V)
+  - key: "<c-v>"
+    context: "global"
+    description: "PRコメントを表示"
+    subprocess: true
+    command: "gh pr view --comments"
+    loadingText: "PR取得中..."
