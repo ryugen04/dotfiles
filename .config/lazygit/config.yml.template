@@ -234,5 +234,5 @@ customCommands:
           - name: "master"
             description: "masterブランチにマージ"
             value: "master"
-    command: "gh pr create --base {{.Form.Base}}"
+    command: "gh pr create --base {{.Form.Base}} --editor"
     loadingText: "PR作成中..."
