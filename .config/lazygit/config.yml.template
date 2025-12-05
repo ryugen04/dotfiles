@@ -220,6 +220,7 @@ customCommands:
   - key: "<c-p>"
     context: "global"
     description: "Pull Request作成"
+    subprocess: true
     prompts:
       - type: "menu"
         title: "ベースブランチを選択"
@@ -234,5 +235,9 @@ customCommands:
           - name: "master"
             description: "masterブランチにマージ"
             value: "master"
-    command: "gh pr create --base {{.Form.Base}} --editor"
+      - type: "input"
+        title: "PRタイトル"
+        key: "Title"
+        initialValue: ""
+    command: "tmpfile=$(mktemp /tmp/pr_body.XXXXXX.md); template=.github/PULL_REQUEST_TEMPLATE.md; [ -f $template ] && cp $template $tmpfile; nvim $tmpfile; [ -s $tmpfile ] && gh pr create --base {{.Form.Base}} --title '{{.Form.Title}}' --body-file $tmpfile --web || gh pr create --base {{.Form.Base}} --title '{{.Form.Title}}' --body '' --web; rm -f $tmpfile"
     loadingText: "PR作成中..."
