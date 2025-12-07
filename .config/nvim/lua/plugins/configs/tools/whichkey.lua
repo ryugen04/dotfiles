@@ -244,21 +244,35 @@ return {
             { "<leader>gb",  "<cmd>BlamerToggle<CR>",                                  desc = "show git blame" },
             { "<leader>gvo", "<cmd>DiffviewOpen<CR>",                                  desc = "show git diff" },
             { "<leader>gvc", "<cmd>DiffviewClose<CR>",                                 desc = "close git diff" },
-            -- octo.nvim (GitHub PR/Issue操作)
-            { "<leader>go",  group = "Octo (GitHub)" },
-            { "<leader>gop", "<cmd>Octo pr list<CR>",                                  desc = "PR一覧" },
-            { "<leader>goP", "<cmd>Octo pr create<CR>",                                desc = "PR作成" },
-            { "<leader>goc", "<cmd>Octo pr<CR>",                                       desc = "現在のPRを開く" },
-            { "<leader>goi", "<cmd>Octo issue list<CR>",                               desc = "Issue一覧" },
-            { "<leader>goI", "<cmd>Octo issue create<CR>",                             desc = "Issue作成" },
-            { "<leader>gos", "<cmd>Octo search<CR>",                                   desc = "GitHub検索" },
-            -- レビュー操作
-            { "<leader>gov", group = "Review (レビュー)" },
-            { "<leader>govs", "<cmd>Octo review start<CR>",                            desc = "レビュー開始" },
-            { "<leader>govr", "<cmd>Octo review resume<CR>",                           desc = "レビュー再開" },
-            { "<leader>govb", "<cmd>Octo review submit<CR>",                           desc = "レビュー提出" },
-            { "<leader>govd", "<cmd>Octo review discard<CR>",                          desc = "レビュー破棄" },
-            { "<leader>govc", "<cmd>Octo review comments<CR>",                         desc = "レビューコメント一覧" },
+            -- octo.nvim
+            { "<leader>go",  group = "Octo" },
+            { "<leader>goc", "<cmd>Octo pr<CR>",                                       desc = "現在のPR" },
+            { "<leader>gon", "<cmd>Octo pr create<CR>",                                desc = "PR作成" },
+            { "<leader>gof", "gf",                                                     desc = "ファイルを開く" },
+            -- レビュー
+            { "<leader>gor", group = "Review" },
+            { "<leader>gors", "<cmd>Octo review start<CR>",                            desc = "開始" },
+            { "<leader>gorr", "<cmd>Octo review resume<CR>",                           desc = "再開" },
+            { "<leader>gorb", "<cmd>Octo review submit<CR>",                           desc = "提出" },
+            { "<leader>gord", "<cmd>Octo review discard<CR>",                          desc = "破棄" },
+            -- コメント
+            { "<leader>gom", group = "Comment" },
+            { "<leader>goma", "<cmd>Octo comment add<CR>",                             desc = "追加" },
+            { "<leader>goms", "<cmd>Octo suggestion<CR>",                              desc = "提案" },
+            { "<leader>gomd", "<cmd>Octo comment delete<CR>",                          desc = "削除" },
+            { "<leader>gomr", "<cmd>Octo thread resolve<CR>",                          desc = "解決" },
+            -- リアクション
+            { "<leader>goa", group = "Reaction" },
+            { "<leader>goa+", "<cmd>Octo reaction thumbs_up<CR>",                      desc = "👍" },
+            { "<leader>goa-", "<cmd>Octo reaction thumbs_down<CR>",                    desc = "👎" },
+            { "<leader>goah", "<cmd>Octo reaction heart<CR>",                          desc = "❤️" },
+            { "<leader>goae", "<cmd>Octo reaction eyes<CR>",                           desc = "👀" },
+            { "<leader>goar", "<cmd>Octo reaction rocket<CR>",                         desc = "🚀" },
+            { "<leader>goap", "<cmd>Octo reaction hooray<CR>",                         desc = "🎉" },
+            -- コピー
+            { "<leader>goy", group = "Copy URL" },
+            { "<leader>goyu", "<cmd>Octo pr url<CR>",                                  desc = "PR URL" },
+            { "<leader>goyc", "<cmd>Octo comment url<CR>",                             desc = "コメントURL" },
           }
         )
 
