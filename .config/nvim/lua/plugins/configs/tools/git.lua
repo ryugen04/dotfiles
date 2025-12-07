@@ -63,7 +63,7 @@ return {
     },
     config = function()
       require("octo").setup({
-        use_local_fs = false,
+        use_local_fs = true,
         enable_builtin = true,
         default_remote = { "upstream", "origin" },
         ssh_aliases = {},
@@ -88,7 +88,7 @@ return {
         left_bubble_delimiter = "",
         snippet_context_lines = 4,
         gh_env = {},
-        timeout = 5000,
+        timeout = 10000,
         default_to_projects_v2 = false,
         suppress_missing_scope = {
           projects_v2 = true,
