@@ -243,7 +243,22 @@ return {
             { "<leader>gs",  "<cmd>lua require('telescope.builtin').git_status()<CR>", desc = "git status files" },
             { "<leader>gb",  "<cmd>BlamerToggle<CR>",                                  desc = "show git blame" },
             { "<leader>gvo", "<cmd>DiffviewOpen<CR>",                                  desc = "show git diff" },
-            { "<leader>gvo", "<cmd>DiffviewClose<CR>",                                 desc = "close git diff" },
+            { "<leader>gvc", "<cmd>DiffviewClose<CR>",                                 desc = "close git diff" },
+            -- octo.nvim (GitHub PR/Issue操作)
+            { "<leader>go",  group = "Octo (GitHub)" },
+            { "<leader>gop", "<cmd>Octo pr list<CR>",                                  desc = "PR一覧" },
+            { "<leader>goP", "<cmd>Octo pr create<CR>",                                desc = "PR作成" },
+            { "<leader>goc", "<cmd>Octo pr<CR>",                                       desc = "現在のPRを開く" },
+            { "<leader>goi", "<cmd>Octo issue list<CR>",                               desc = "Issue一覧" },
+            { "<leader>goI", "<cmd>Octo issue create<CR>",                             desc = "Issue作成" },
+            { "<leader>gos", "<cmd>Octo search<CR>",                                   desc = "GitHub検索" },
+            -- レビュー操作
+            { "<leader>gov", group = "Review (レビュー)" },
+            { "<leader>govs", "<cmd>Octo review start<CR>",                            desc = "レビュー開始" },
+            { "<leader>govr", "<cmd>Octo review resume<CR>",                           desc = "レビュー再開" },
+            { "<leader>govb", "<cmd>Octo review submit<CR>",                           desc = "レビュー提出" },
+            { "<leader>govd", "<cmd>Octo review discard<CR>",                          desc = "レビュー破棄" },
+            { "<leader>govc", "<cmd>Octo review comments<CR>",                         desc = "レビューコメント一覧" },
           }
         )
 
