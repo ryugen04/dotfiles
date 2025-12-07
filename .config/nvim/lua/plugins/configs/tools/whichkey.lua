@@ -243,7 +243,130 @@ return {
             { "<leader>gs",  "<cmd>lua require('telescope.builtin').git_status()<CR>", desc = "git status files" },
             { "<leader>gb",  "<cmd>BlamerToggle<CR>",                                  desc = "show git blame" },
             { "<leader>gvo", "<cmd>DiffviewOpen<CR>",                                  desc = "show git diff" },
-            { "<leader>gvo", "<cmd>DiffviewClose<CR>",                                 desc = "close git diff" },
+            { "<leader>gvc", "<cmd>DiffviewClose<CR>",                                 desc = "close git diff" },
+            -- octo.nvim
+            { "<leader>go",   group = "Octo" },
+            -- 基本 (3キー)
+            { "<leader>gop",  "<cmd>Octo pr<CR>",                      desc = "現在のPR" },
+            { "<leader>gon",  "<cmd>Octo pr create<CR>",               desc = "PR作成" },
+            { "<leader>gof",  "gf",                                    desc = "ファイルを開く" },
+            -- レビュー (3キー)
+            { "<leader>gos",  "<cmd>Octo review start<CR>",            desc = "レビュー開始" },
+            { "<leader>gor",  "<cmd>Octo review resume<CR>",           desc = "レビュー再開" },
+            { "<leader>gob",  "<cmd>Octo review submit<CR>",           desc = "レビュー提出" },
+            { "<leader>god",  "<cmd>Octo review discard<CR>",          desc = "レビュー破棄" },
+            -- コメント (4キー)
+            { "<leader>gom",  group = "Octo Comment" },
+            { "<leader>goma", "<cmd>Octo comment add<CR>",             desc = "追加" },
+            { "<leader>goms", "<cmd>Octo suggestion<CR>",              desc = "提案" },
+            { "<leader>gomd", "<cmd>Octo comment delete<CR>",          desc = "削除" },
+            { "<leader>gomr", "<cmd>Octo thread resolve<CR>",          desc = "解決" },
+            -- リアクション (4キー)
+            { "<leader>goa",  group = "Octo Reaction" },
+            { "<leader>goa+", "<cmd>Octo reaction thumbs_up<CR>",      desc = "👍" },
+            { "<leader>goa-", "<cmd>Octo reaction thumbs_down<CR>",    desc = "👎" },
+            { "<leader>goah", "<cmd>Octo reaction heart<CR>",          desc = "❤️" },
+            { "<leader>goae", "<cmd>Octo reaction eyes<CR>",           desc = "👀" },
+            { "<leader>goar", "<cmd>Octo reaction rocket<CR>",         desc = "🚀" },
+            { "<leader>goap", "<cmd>Octo reaction hooray<CR>",         desc = "🎉" },
+          }
+        )
+
+        -- GitHub リンク・パスコピー関連のヘルパー関数
+        local function get_repo_root()
+          local root = vim.fn.system('git rev-parse --show-toplevel 2>/dev/null'):gsub('\n', '')
+          if vim.v.shell_error ~= 0 then
+            return nil
+          end
+          return root
+        end
+
+        local function get_relative_path()
+          local file = vim.fn.expand('%:p')
+          local root = get_repo_root()
+          if not root then
+            vim.notify('Gitリポジトリ内ではありません', vim.log.levels.ERROR)
+            return nil
+          end
+          return file:sub(#root + 2)
+        end
+
+        local function get_github_base_url()
+          local remote = vim.fn.system('git remote get-url origin 2>/dev/null'):gsub('\n', '')
+          if vim.v.shell_error ~= 0 then
+            return nil
+          end
+          -- SSH形式をHTTPS形式に変換
+          remote = remote:gsub('git@github%.com:', 'https://github.com/')
+          remote = remote:gsub('%.git$', '')
+          return remote
+        end
+
+        local function get_line_range()
+          local mode = vim.fn.mode()
+          if mode == 'v' or mode == 'V' or mode == '\22' then
+            local start_line = vim.fn.line('v')
+            local end_line = vim.fn.line('.')
+            if start_line > end_line then
+              start_line, end_line = end_line, start_line
+            end
+            if start_line == end_line then
+              return string.format('#L%d', start_line)
+            else
+              return string.format('#L%d-L%d', start_line, end_line)
+            end
+          else
+            return string.format('#L%d', vim.fn.line('.'))
+          end
+        end
+
+        local function copy_relative_path()
+          local path = get_relative_path()
+          if path then
+            vim.fn.setreg('+', path)
+            vim.notify('コピー: ' .. path)
+          end
+        end
+
+        local function copy_github_link()
+          local base_url = get_github_base_url()
+          local path = get_relative_path()
+          if not base_url or not path then
+            vim.notify('GitHub URLを取得できません', vim.log.levels.ERROR)
+            return
+          end
+          local branch = vim.fn.system('git branch --show-current 2>/dev/null'):gsub('\n', '')
+          local line_ref = get_line_range()
+          local url = string.format('%s/blob/%s/%s%s', base_url, branch, path, line_ref)
+          vim.fn.setreg('+', url)
+          vim.notify('コピー: ' .. url)
+        end
+
+        local function copy_github_permalink()
+          local base_url = get_github_base_url()
+          local path = get_relative_path()
+          if not base_url or not path then
+            vim.notify('GitHub URLを取得できません', vim.log.levels.ERROR)
+            return
+          end
+          local commit = vim.fn.system('git rev-parse HEAD 2>/dev/null'):gsub('\n', '')
+          local line_ref = get_line_range()
+          local url = string.format('%s/blob/%s/%s%s', base_url, commit, path, line_ref)
+          vim.fn.setreg('+', url)
+          vim.notify('コピー: ' .. url)
+        end
+
+        wk.add(
+          {
+            { "<leader>gy",  group = "Copy Link/Path" },
+            {
+              mode = { "n", "v" },
+              { "<leader>gyp", copy_relative_path,              desc = "相対パス" },
+              { "<leader>gyl", copy_github_link,                desc = "GitHub リンク" },
+              { "<leader>gyL", copy_github_permalink,           desc = "Permalink" },
+              { "<leader>gyu", "<cmd>Octo pr url<CR>",          desc = "PR URL" },
+              { "<leader>gyc", "<cmd>Octo comment url<CR>",     desc = "コメントURL" },
+            },
           }
         )
 
