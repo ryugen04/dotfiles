@@ -251,9 +251,9 @@ return {
             { "<leader>gon",  "<cmd>Octo pr create<CR>",               desc = "PR作成" },
             { "<leader>gof",  "gf",                                    desc = "ファイルを開く" },
             -- レビュー (3キー)
-            { "<leader>gos",  "<cmd>Octo review start<CR>",            desc = "レビュー開始" },
+            { "<leader>goS",  "<cmd>Octo review start<CR>",            desc = "レビュー開始" },
             { "<leader>gor",  "<cmd>Octo review resume<CR>",           desc = "レビュー再開" },
-            { "<leader>gob",  "<cmd>Octo review submit<CR>",           desc = "レビュー提出" },
+            { "<leader>gos",  "<cmd>Octo review submit<CR>",           desc = "レビュー提出" },
             { "<leader>god",  "<cmd>Octo review discard<CR>",          desc = "レビュー破棄" },
             -- コメント (4キー)
             { "<leader>gom",  group = "Octo Comment" },
@@ -261,6 +261,10 @@ return {
             { "<leader>goms", "<cmd>Octo suggestion<CR>",              desc = "提案" },
             { "<leader>gomd", "<cmd>Octo comment delete<CR>",          desc = "削除" },
             { "<leader>gomr", "<cmd>Octo thread resolve<CR>",          desc = "解決" },
+            -- ブラウザ (4キー)
+            { "<leader>gob",  group = "Octo Browser" },
+            { "<leader>gobb", "<cmd>Octo pr browser<CR>",              desc = "ブラウザで開く" },
+            { "<leader>gobr", "<cmd>Octo pr reload<CR>",               desc = "リロード" },
             -- リアクション (4キー)
             { "<leader>goa",  group = "Octo Reaction" },
             { "<leader>goa+", "<cmd>Octo reaction thumbs_up<CR>",      desc = "👍" },
