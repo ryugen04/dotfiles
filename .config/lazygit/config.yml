@@ -237,7 +237,15 @@ customCommands:
     context: "localBranches"
     description: "このブランチのPRをOctoで開く"
     subprocess: true
-    command: "nvim -c 'Octo pr edit {{.SelectedLocalBranch.Name}}'"
+    command: >-
+      bash -c '
+      git checkout {{.SelectedLocalBranch.Name}} &&
+      if gh pr view --json number -q .number >/dev/null 2>&1; then
+        nvim -c "Octo pr"
+      else
+        echo "このブランチにPRがありません"; read -p "Enterで戻る"
+      fi
+      '
     loadingText: "octo.nvim起動中..."
 
   # 現在のブランチのPRをOctoで開く (Ctrl+O) - global
@@ -245,5 +253,12 @@ customCommands:
     context: "global"
     description: "現在のブランチのPRをOctoで開く"
     subprocess: true
-    command: "nvim -c 'Octo pr'"
+    command: >-
+      bash -c '
+      if gh pr view --json number -q .number >/dev/null 2>&1; then
+        nvim -c "Octo pr"
+      else
+        echo "このブランチにPRがありません"; read -p "Enterで戻る"
+      fi
+      '
     loadingText: "octo.nvim起動中..."

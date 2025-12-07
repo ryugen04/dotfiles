@@ -60,19 +60,15 @@ defaults:
     refetchIntervalMinutes: 30
 keybindings:
     prs:
-        # OctoでPRを開く
         - key: o
-          command: nvim -c 'Octo pr edit {{.RepoName}}#{{.PrNumber}}'
-        # diffを表示
+          command: bash -c 'url=$(gh pr view {{.PrNumber}} --repo {{.RepoName}} --json url -q .url) && nvim -c "Octo $url"'
         - key: d
           command: gh pr diff {{.PrNumber}} --repo {{.RepoName}} | delta
-        # PRをチェックアウト
         - key: c
           command: gh pr checkout {{.PrNumber}} --repo {{.RepoName}}
     issues:
-        # Octoでissueを開く
         - key: o
-          command: nvim -c 'Octo issue edit {{.RepoName}}#{{.IssueNumber}}'
+          command: bash -c 'url=$(gh issue view {{.IssueNumber}} --repo {{.RepoName}} --json url -q .url) && nvim -c "Octo $url"'
 repoPaths: {}
 theme:
     ui:
