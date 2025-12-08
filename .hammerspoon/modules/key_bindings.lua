@@ -8,6 +8,17 @@ local console_apps = {
   ["kitty"] = true,
 }
 
+-- Slackで除外するキー（slack_bindings.luaで処理）
+local slack_excluded_keys = {
+  ["j"] = true,
+  ["k"] = true,
+  ["h"] = true,
+  ["l"] = true,
+  ["f"] = true,
+  ["s"] = true,
+  ["t"] = true, -- Cmd+Shift+T用
+}
+
 -- Ctrl/Cmdキーの入れ替えを行う
 -- コンソールアプリ：c, v のみ入れ替え
 -- 他のアプリ：全てのキーで入れ替え
@@ -17,7 +28,14 @@ local function swapCmdCtrl(event)
   local key_char = hs.keycodes.map[key_code]
 
   local front_app = hs.application.frontmostApplication()
-  local is_console_app = console_apps[front_app:name()]
+  local app_name = front_app:name()
+  local is_console_app = console_apps[app_name]
+
+  -- Slackの場合：除外キーはslack_bindings.luaで処理するのでスキップ
+  -- Ctrl→Cmd変換もCmd→Ctrl変換も両方スキップ
+  if app_name == "Slack" and slack_excluded_keys[key_char] then
+    return false
+  end
 
   -- コンソールアプリの場合：c, v のみ入れ替え対象
   if is_console_app then

@@ -1,4 +1,5 @@
 local key_bindings = require "modules.key_bindings"
+local slack_bindings = require "modules.slack_bindings"
 local window_management = require "modules.window_manager"
 
 -- Caps LockをHyper Key (ctrl + shift + cmd + option)にマッピング
@@ -54,10 +55,14 @@ local caps_to_hyper = hs.eventtap.new(
 
 caps_to_hyper:start()
 
--- keyBindigsを有効化する
+-- Slack専用キーバインディングを有効化する（key_bindingsより先に処理）
+slack_bindings.start()
+
+-- keyBindingsを有効化する
 key_bindings.start()
 
 hs.reload = function()
+  slack_bindings.stop()
   key_bindings.stop()
   hs.reload()
 end
