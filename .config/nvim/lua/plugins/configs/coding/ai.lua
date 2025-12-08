@@ -6,7 +6,19 @@ return {
     "coder/claudecode.nvim",
     cond = not env.is_vscode(),
     dependencies = { "folke/snacks.nvim" },
-    config = true,
+    config = function()
+      require("claudecode").setup({
+        terminal = {
+          provider = "snacks",
+          -- フローティングウィンドウで開く（octo.nvimのレイアウトと干渉しない）
+          snacks_win_opts = {
+            position = "float",
+            width = 0.85,
+            height = 0.85,
+          },
+        },
+      })
+    end,
     keys = {
       { "<leader>a", nil, desc = "AI/Claude Code" },
       { "<leader>ac", "<cmd>ClaudeCode<cr>", desc = "Toggle Claude" },
