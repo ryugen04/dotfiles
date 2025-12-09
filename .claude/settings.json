@@ -4,5 +4,42 @@
   "statusLine": {
     "type": "command",
     "command": "bash ~/.claude/scripts/statusline-lualine.sh"
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/log_posttool.sh\"",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/reflect_stop.sh\"",
+            "timeout": 20000
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "manual",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/compact_log.sh\"",
+            "timeout": 15000
+          }
+        ]
+      }
+    ]
   }
 }
