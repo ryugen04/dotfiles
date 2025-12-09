@@ -28,10 +28,10 @@ fi
 
 # 新しいスニペットを追加
 if command -v yq &> /dev/null; then
-  yq -i ".session_snippets += [{\"timestamp\": \"$(date --iso-8601=seconds)\", \"note\": \"compact 前のセッション記録\"}]" "$LOG_FILE"
+  yq -i ".session_snippets += [{\"timestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S%z")\", \"note\": \"compact 前のセッション記録\"}]" "$LOG_FILE"
 else
   cat >> "$LOG_FILE" <<EOF
-  - timestamp: "$(date --iso-8601=seconds)"
+  - timestamp: "$(date -u +"%Y-%m-%dT%H:%M:%S%z")"
     note: "compact 前のセッション記録"
 EOF
 fi

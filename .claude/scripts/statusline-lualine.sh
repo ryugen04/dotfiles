@@ -24,12 +24,12 @@ FG_WHITE=$'\x1b[38;2;227;229;229m'
 # #a0a9cb = RGB(160, 169, 203) - モデル部分用（starshipの時刻色）
 FG_MODEL_TEXT=$'\x1b[38;2;160;169;203m'
 
-# Powerlineセパレーター
-SEP_RIGHT=$'\uE0B0'
+# Powerlineセパレーター（python3経由でUnicode生成 - macOS bash 3.2対応）
+SEP_RIGHT=$(python3 -c "print('\ue0b0', end='')")
 
-# Nerd Fontアイコン
-ICON_FOLDER=$'\uF07B'   #
-ICON_BRANCH=$'\uE0A0'   #
+# Nerd Fontアイコン（python3経由でUnicode生成）
+ICON_FOLDER=$(python3 -c "print('\uf07b', end='')")
+ICON_BRANCH=$(python3 -c "print('\ue0a0', end='')")
 
 # JSONデータを読み込む
 INPUT=$(cat)

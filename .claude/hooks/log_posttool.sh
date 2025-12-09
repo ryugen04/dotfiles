@@ -23,11 +23,11 @@ fi
 
 # 新しいエントリを追加（yq を使用）
 if command -v yq &> /dev/null; then
-  yq -i ".entries += [{\"timestamp\": \"$(date --iso-8601=seconds)\", \"tool\": \"$TOOL\", \"file\": \"$FILE\", \"summary\": \"ClaudeCode による自動編集\"}]" "$LOG_FILE"
+  yq -i ".entries += [{\"timestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S%z")\", \"tool\": \"$TOOL\", \"file\": \"$FILE\", \"summary\": \"ClaudeCode による自動編集\"}]" "$LOG_FILE"
 else
   # yq がない場合は簡易的に追記
   cat >> "$LOG_FILE" <<EOF
-  - timestamp: "$(date --iso-8601=seconds)"
+  - timestamp: "$(date -u +"%Y-%m-%dT%H:%M:%S%z")"
     tool: "$TOOL"
     file: "$FILE"
     summary: "ClaudeCode による自動編集"
