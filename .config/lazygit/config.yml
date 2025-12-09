@@ -1,12 +1,9 @@
 git:
   parseEmoji: true
-
 gui:
   showIcons: true
-
 os:
   editPreset: "nvim"
-
 customCommands:
   # Commit (Ctrl+S)
   - key: "<c-s>"
@@ -67,57 +64,57 @@ customCommands:
             description: '(feat) ✨ 新機能の追加'
             value: ':sparkles:'
           - name: ':tada:'
-            description: '(feat) 🎉 初回コミット/大きな機能'
+            description: "(feat) \U0001F389 初回コミット/大きな機能"
             value: ':tada:'
           - name: ':children_crossing:'
-            description: '(feat) 🚸 UX/ユーザビリティの改善'
+            description: "(feat) \U0001F6B8 UX/ユーザビリティの改善"
             value: ':children_crossing:'
           # fix
           - name: ':bug:'
-            description: '(fix) 🐛 バグ修正'
+            description: "(fix) \U0001F41B バグ修正"
             value: ':bug:'
           - name: ':ambulance:'
-            description: '(fix) 🚑 致命的なバグの緊急修正'
+            description: "(fix) \U0001F691 致命的なバグの緊急修正"
             value: ':ambulance:'
           - name: ':lock:'
-            description: '(fix) 🔒 セキュリティ問題の修正'
+            description: "(fix) \U0001F512 セキュリティ問題の修正"
             value: ':lock:'
           - name: ':adhesive_bandage:'
-            description: '(fix) 🩹 軽微な修正'
+            description: "(fix) \U0001FA79 軽微な修正"
             value: ':adhesive_bandage:'
           # docs
           - name: ':memo:'
-            description: '(docs) 📝 ドキュメントの追加・更新'
+            description: "(docs) \U0001F4DD ドキュメントの追加・更新"
             value: ':memo:'
           - name: ':bulb:'
-            description: '(docs) 💡 ソースコードにコメント追加'
+            description: "(docs) \U0001F4A1 ソースコードにコメント追加"
             value: ':bulb:'
           # style
           - name: ':art:'
-            description: '(style) 🎨 コード構造/フォーマットの改善'
+            description: "(style) \U0001F3A8 コード構造/フォーマットの改善"
             value: ':art:'
           - name: ':lipstick:'
-            description: '(style) 💄 UI/スタイルファイルの更新'
+            description: "(style) \U0001F484 UI/スタイルファイルの更新"
             value: ':lipstick:'
           # refactor
           - name: ':recycle:'
             description: '(refactor) ♻️ コードのリファクタリング'
             value: ':recycle:'
           - name: ':fire:'
-            description: '(refactor) 🔥 コードやファイルの削除'
+            description: "(refactor) \U0001F525 コードやファイルの削除"
             value: ':fire:'
           - name: ':coffin:'
             description: '(refactor) ⚰️ デッドコードの削除'
             value: ':coffin:'
           - name: ':truck:'
-            description: '(refactor) 🚚 ファイルの移動/リネーム'
+            description: "(refactor) \U0001F69A ファイルの移動/リネーム"
             value: ':truck:'
           # test
           - name: ':white_check_mark:'
             description: '(test) ✅ テストの追加・更新'
             value: ':white_check_mark:'
           - name: ':test_tube:'
-            description: '(test) 🧪 失敗するテストの追加'
+            description: "(test) \U0001F9EA 失敗するテストの追加"
             value: ':test_tube:'
           # perf
           - name: ':zap:'
@@ -125,7 +122,7 @@ customCommands:
             value: ':zap:'
           # build
           - name: ':package:'
-            description: '(build) 📦 パッケージ/依存関係の追加・更新'
+            description: "(build) \U0001F4E6 パッケージ/依存関係の追加・更新"
             value: ':package:'
           - name: ':heavy_plus_sign:'
             description: '(build) ➕ 依存関係の追加'
@@ -141,31 +138,30 @@ customCommands:
             value: ':arrow_down:'
           # ci
           - name: ':construction_worker:'
-            description: '(ci) 👷 CI関連の追加・更新'
+            description: "(ci) \U0001F477 CI関連の追加・更新"
             value: ':construction_worker:'
           - name: ':green_heart:'
-            description: '(ci) 💚 CIビルドの修正'
+            description: "(ci) \U0001F49A CIビルドの修正"
             value: ':green_heart:'
           # chore
           - name: ':wrench:'
-            description: '(chore) 🔧 設定ファイルの追加・更新'
+            description: "(chore) \U0001F527 設定ファイルの追加・更新"
             value: ':wrench:'
           - name: ':building_construction:'
-            description: '(chore) 🏗️ アーキテクチャの変更'
+            description: "(chore) \U0001F3D7️ アーキテクチャの変更"
             value: ':building_construction:'
           - name: ':see_no_evil:'
-            description: '(chore) 🙈 .gitignoreの追加・更新'
+            description: "(chore) \U0001F648 .gitignoreの追加・更新"
             value: ':see_no_evil:'
           # wip
           - name: ':construction:'
-            description: '(wip) 🚧 作業中'
+            description: "(wip) \U0001F6A7 作業中"
             value: ':construction:'
       - type: "confirm"
         title: "Commit"
         body: "Commit with the message '{{.Form.Type}}: {{.Form.Message}}{{.Form.Emoji}}'. Is this okay?"
     command: "bash -c 'type=\"{{.Form.Type}}\"; message=\"{{.Form.Message}}\"; emoji=\"{{.Form.Emoji}}\"; commit_message=\"$type: $message $emoji\"; git commit -m \"$commit_message\"'"
     loadingText: "Commiting..."
-
   # Pull --rebase (Ctrl+R)
   - key: "<c-r>"
     context: "global"
@@ -186,7 +182,6 @@ customCommands:
             value: "master"
     command: "git pull --rebase origin {{.Form.Branch}}"
     loadingText: "Pull中..."
-
   # Force push (Ctrl+F)
   - key: "<c-f>"
     context: "global"
@@ -197,68 +192,61 @@ customCommands:
         body: "本当に force push しますか？"
     command: "git push origin HEAD --force-with-lease"
     loadingText: "Push中..."
-
   # Delete merged branches (Ctrl+D)
   - key: "<c-d>"
     context: "global"
     description: "Delete merged branches"
     command: >-
-      bash -c '
-      branches=$(git branch --merged | grep -v "\*\|main\|master\|develop")
-      if [ -z "$branches" ]; then
+      bash -c ' branches=$(git branch --merged | grep -v "\*\|main\|master\|develop") if [ -z "$branches" ]; then
+
         echo "削除対象のマージ済みブランチはありません"
       else
+
         selected=$(echo "$branches" | fzf --multi --header="削除するブランチを選択 (Tab: 複数選択, Enter: 確定)")
         if [ -n "$selected" ]; then
           echo "$selected" | xargs -r git branch -d
         fi
-      fi
-      '
+      fi '
     loadingText: "実行中..."
-
   # PR作成 (Ctrl+P) - octo.nvim
   - key: "<c-p>"
     context: "global"
     description: "Pull Request作成 (octo.nvim)"
-    subprocess: true
     command: "git push -u origin HEAD && nvim -c 'Octo pr create'"
     loadingText: "octo.nvim起動中..."
-
+    output: terminal
   # gh-dash起動 (Ctrl+G)
   - key: "<c-g>"
     context: "global"
     description: "gh-dash (GitHub Dashboard)"
-    subprocess: true
     command: "gh dash"
     loadingText: "gh-dash起動中..."
-
+    output: terminal
   # ブランチのPRをOctoで開く (Ctrl+O) - localBranches
   - key: "<c-o>"
     context: "localBranches"
     description: "このブランチのPRをOctoで開く"
-    subprocess: true
     command: >-
-      bash -c '
-      git checkout {{.SelectedLocalBranch.Name}} &&
-      if gh pr view --json number -q .number >/dev/null 2>&1; then
+      bash -c ' git checkout {{.SelectedLocalBranch.Name}} && if gh pr view --json number -q .number >/dev/null 2>&1; then
+
         nvim -c "Octo pr"
       else
-        echo "このブランチにPRがありません"; read -p "Enterで戻る"
-      fi
-      '
-    loadingText: "octo.nvim起動中..."
 
+        echo "このブランチにPRがありません"; read -p "Enterで戻る"
+      fi '
+    loadingText: "octo.nvim起動中..."
+    output: terminal
   # 現在のブランチのPRをOctoで開く (Ctrl+O) - global
   - key: "<c-o>"
     context: "global"
     description: "現在のブランチのPRをOctoで開く"
-    subprocess: true
     command: >-
-      bash -c '
-      if gh pr view --json number -q .number >/dev/null 2>&1; then
+      bash -c ' if gh pr view --json number -q .number >/dev/null 2>&1; then
+
         nvim -c "Octo pr"
       else
+
         echo "このブランチにPRがありません"; read -p "Enterで戻る"
-      fi
-      '
+      fi '
     loadingText: "octo.nvim起動中..."
+    output: terminal
