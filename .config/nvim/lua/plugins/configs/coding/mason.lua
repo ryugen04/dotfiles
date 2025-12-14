@@ -1,3 +1,5 @@
+local env = require('core.env')
+
 return {
   -- LSP
   {
@@ -118,5 +120,42 @@ return {
     cond = not env.is_vscode(),
     cmd = "LspSettings",
     lazy = true
+  },
+
+  -- フォーマッター・リンターの自動インストール
+  {
+    'WhoIsSethDaniel/mason-tool-installer.nvim',
+    cond = not env.is_vscode(),
+    dependencies = { 'williamboman/mason.nvim' },
+    config = function()
+      require('mason-tool-installer').setup({
+        ensure_installed = {
+          -- フォーマッター
+          'stylua',           -- Lua
+          'isort',            -- Python import
+          'black',            -- Python
+          'prettierd',        -- JS/TS/HTML/CSS/Markdown
+          'shfmt',            -- Shell
+          'yamlfmt',          -- YAML
+
+          -- リンター
+          'pylint',           -- Python
+          'mypy',             -- Python type
+          'eslint_d',         -- JS/TS
+          'markdownlint-cli2', -- Markdown
+          'shellcheck',       -- Shell
+          'hadolint',         -- Dockerfile
+        },
+
+        -- 自動更新（週1回チェック）
+        auto_update = false,
+
+        -- インストール完了時にneovimを再起動しない
+        run_on_start = true,
+
+        -- インストール開始遅延（起動を妨げない）
+        start_delay = 3000,
+      })
+    end,
   },
 }

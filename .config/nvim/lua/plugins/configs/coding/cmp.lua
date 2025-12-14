@@ -155,9 +155,10 @@ return {
         },
       },
 
-      -- Rust製fuzzyマッチャーを使用（パフォーマンス最適化）
+      -- Lua実装を使用（frizbee 0.5.0 のバグ回避）
+      -- TODO: frizbee のバグ修正後に 'prefer_rust_with_warning' に戻す
       fuzzy = {
-        implementation = 'prefer_rust_with_warning',
+        implementation = 'lua',
       },
     },
     opts_extend = { 'sources.default' },

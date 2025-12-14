@@ -97,7 +97,7 @@ return {
         typescriptreact = { 'eslint_d' },
 
         -- Markdown
-        markdown = { 'markdownlint' },
+        markdown = { 'markdownlint-cli2' },
 
         -- Bash
         bash = { 'shellcheck' },
