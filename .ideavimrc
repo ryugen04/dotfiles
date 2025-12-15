@@ -1,0 +1,275 @@
+" ============================================================
+" .ideavimrc - Neovim統一キーバインディング設定
+" ============================================================
+" Neovimの設定と可能な限り統一し、エディタ間の切り替えコストを最小化する
+
+" --- 1. 基本設定 ---
+let mapleader = "\\"
+
+" 基本オプション（Neovimのcore/options.luaと対応）
+set scrolloff=5
+set incsearch
+set hlsearch
+set ignorecase
+set smartcase
+set number
+set relativenumber
+set clipboard=unnamedplus
+set showmode
+set showcmd
+set visualbell
+
+" タイムアウト設定
+set timeoutlen=500
+set notimeout
+
+" カーソル移動（行末を超える）
+set whichwrap=b,s,h,l,<,>,[,]
+
+" IDE機能との連携
+set ideajoin
+set idearefactormode=keep
+
+" --- 2. プラグイン有効化 ---
+set surround                    " vim-surround (cs"' ds" ysiw) 等)
+set commentary                  " gc系コメント（Comment.nvimと統一）
+set easymotion                  " flash.nvimの代替
+set highlightedyank             " ヤンクハイライト
+set NERDTree                    " ファイルツリー
+set which-key                   " キーバインド表示
+set argtextobj                  " 引数テキストオブジェクト (aa, ia)
+set textobj-entire              " ファイル全体選択 (ae, ie)
+set ReplaceWithRegister         " レジスタ置換 (gr)
+set multiple-cursors            " マルチカーソル
+set matchit                     " 括弧マッチング拡張
+
+" --- 3. 基本キーマッピング（core/keys.luaと統一）---
+
+" ESCマッピング
+imap jj <Esc>
+imap っj <Esc>
+
+" コマンドライン（;で:を入力）
+nmap ; :
+
+" 検索ハイライト解除
+nmap <Esc> :nohlsearch<CR>
+
+" 検索時の中央表示
+nmap n nzzzv
+nmap N Nzzzv
+
+" 行連結時のカーソル位置維持
+nmap J mzJ`z
+
+" インデント時の選択維持
+vmap < <gv
+vmap > >gv
+
+" 行移動（Visual mode）
+vmap J :m '>+1<CR>gv=gv
+vmap K :m '<-2<CR>gv=gv
+
+" 無効化
+nmap Q <Nop>
+nmap <Space> <Nop>
+
+" ジャンプリスト移動（Ctrl+O / Ctrl+I）
+nmap <C-o> <Action>(Back)
+nmap <C-i> <Action>(Forward)
+
+" --- 4. ウィンドウ・タブ操作 ---
+
+" ウィンドウ移動（Neovimと統一）
+nmap <C-h> <C-w>h
+nmap <C-j> <C-w>j
+nmap <C-k> <C-w>k
+nmap <C-l> <C-w>l
+
+" タブ移動（Neovimのバッファ移動と統一）
+nmap <S-h> <Action>(PreviousTab)
+nmap <S-l> <Action>(NextTab)
+
+" ウィンドウ分割
+let g:WhichKeyDesc_w = "<leader>w Window"
+nmap <leader>wv <Action>(SplitVertically)
+nmap <leader>ws <Action>(SplitHorizontally)
+nmap <leader>wc <Action>(Unsplit)
+nmap <leader>wm <Action>(MoveEditorToOppositeTabGroup)
+
+" --- 5. LSP操作（<leader>l グループ）---
+" 優先機能: ld, li, lr, la
+
+let g:WhichKeyDesc_l = "<leader>l LSP"
+
+" 定義・参照（優先機能）
+nmap <leader>ld <Action>(GotoDeclaration)
+nmap <leader>lD <Action>(GotoTypeDeclaration)
+nmap <leader>li <Action>(GotoImplementation)
+nmap <leader>lr <Action>(FindUsages)
+nmap <leader>lR <Action>(RenameElement)
+
+" コードアクション・フォーマット（優先機能）
+nmap <leader>la <Action>(ShowIntentionActions)
+nmap <leader>lf <Action>(ReformatCode)
+nmap <leader>lk <Action>(QuickJavaDoc)
+nmap <leader>ls <Action>(ParameterInfo)
+
+" 診断
+nmap <leader>lo <Action>(ShowErrorDescription)
+nmap <leader>l, <Action>(GotoPreviousError)
+nmap <leader>l. <Action>(GotoNextError)
+
+" Trouble相当
+let g:WhichKeyDesc_lt = "<leader>lt Troubles"
+nmap <leader>ltd <Action>(ActivateProblemsViewToolWindow)
+nmap <leader>lts <Action>(FileStructurePopup)
+
+" --- 6. ファイル検索（<leader>f グループ）---
+" 優先機能: ff, fg
+
+let g:WhichKeyDesc_f = "<leader>f Find"
+nmap <leader>ff <Action>(GotoFile)
+nmap <leader>fg <Action>(FindInPath)
+nmap <leader>fb <Action>(RecentFiles)
+nmap <leader>fc <Action>(GotoAction)
+nmap <leader>fm <Action>(ShowBookmarks)
+nmap <leader>fv <Action>(PasteMultiple)
+nmap <leader>fr <Action>(SelectInProjectView)
+nmap <leader>fs <Action>(GotoSymbol)
+
+" --- 7. Git操作（<leader>g グループ）---
+
+let g:WhichKeyDesc_g = "<leader>g Git"
+nmap <leader>gg <Action>(ActivateVersionControlToolWindow)
+nmap <leader>gs <Action>(Vcs.Show.Local.Changes)
+nmap <leader>gb <Action>(Annotate)
+nmap <leader>gd <Action>(Compare.SameVersion)
+nmap <leader>gh <Action>(Vcs.ShowTabbedFileHistory)
+
+" Diff
+let g:WhichKeyDesc_gv = "<leader>gv Diff"
+nmap <leader>gvo <Action>(Diff.ShowDiff)
+nmap <leader>gvc <Action>(HideDiff)
+
+" GitHub関連
+let g:WhichKeyDesc_gy = "<leader>gy Copy Link"
+nmap <leader>gyl <Action>(CopyReference)
+nmap <leader>gyp <Action>(CopyPathFromRepositoryRootProvider)
+
+" --- 8. デバッグ操作（<leader>d グループ）---
+
+let g:WhichKeyDesc_d = "<leader>d Debug"
+nmap <leader>db <Action>(ToggleLineBreakpoint)
+nmap <leader>dB <Action>(EditBreakpoint)
+nmap <leader>dc <Action>(Resume)
+nmap <leader>di <Action>(StepInto)
+nmap <leader>do <Action>(StepOver)
+nmap <leader>dO <Action>(StepOut)
+nmap <leader>du <Action>(ActivateDebugToolWindow)
+nmap <leader>dh <Action>(QuickEvaluateExpression)
+nmap <leader>dp <Action>(EvaluateExpression)
+nmap <leader>dq <Action>(Stop)
+
+" --- 9. テスト操作（<leader>t グループ）---
+
+let g:WhichKeyDesc_t = "<leader>t Test"
+nmap <leader>tt <Action>(RunClass)
+nmap <leader>tf <Action>(Run)
+nmap <leader>td <Action>(DebugClass)
+nmap <leader>ts <Action>(ActivateRunToolWindow)
+nmap <leader>to <Action>(RerunTests)
+nmap <leader>tl <Action>(RerunFailedTests)
+
+" --- 10. Java専用操作（<leader>J グループ）---
+
+let g:WhichKeyDesc_J = "<leader>J Java"
+
+" リファクタリング
+nmap <leader>Jo <Action>(OptimizeImports)
+nmap <leader>Jv <Action>(IntroduceVariable)
+vmap <leader>Jv <Action>(IntroduceVariable)
+nmap <leader>JV <Action>(IntroduceVariable)
+vmap <leader>JV <Action>(IntroduceVariable)
+nmap <leader>JC <Action>(IntroduceConstant)
+vmap <leader>JC <Action>(IntroduceConstant)
+nmap <leader>Jm <Action>(ExtractMethod)
+vmap <leader>Jm <Action>(ExtractMethod)
+
+" テスト・デバッグ
+nmap <leader>Jt <Action>(RunClass)
+nmap <leader>JT <Action>(Run)
+nmap <leader>Jdb <Action>(ToggleLineBreakpoint)
+nmap <leader>Jc <Action>(Resume)
+nmap <leader>Ji <Action>(StepInto)
+nmap <leader>JO <Action>(StepOut)
+
+" Spring Boot
+let g:WhichKeyDesc_Js = "<leader>Js Spring Boot"
+nmap <leader>Jsr <Action>(Run)
+nmap <leader>Jsd <Action>(Debug)
+
+" DAP UI
+nmap <leader>Jdu <Action>(ActivateDebugToolWindow)
+
+" --- 11. ファイルツリー（<leader>e グループ）---
+
+let g:WhichKeyDesc_e = "<leader>e Explorer"
+nmap <leader>ee <Action>(SelectInProjectView)
+nmap <leader>ef <Action>(SelectInProjectView)
+nmap <leader>eq <Action>(HideActiveWindow)
+nmap <leader>er <Action>(SynchronizeCurrentFile)
+
+" --- 12. EasyMotion（flash.nvim代替）---
+
+" flash.nvimの<leader>j（ワードジャンプ）に相当
+nmap <leader>j <Plug>(easymotion-bd-w)
+
+" flash.nvimの<leader>k（行ジャンプ）に相当
+nmap <leader>k <Plug>(easymotion-bd-jk)
+
+" 2文字検索ジャンプ
+nmap s <Plug>(easymotion-s2)
+
+" flash.nvimのS（Treesitter選択）は直接対応なし
+" 代替として構造選択を使用
+nmap S <Action>(EditorSelectWord)
+vmap S <Action>(EditorSelectWord)
+
+" --- 13. その他便利機能 ---
+
+" パスコピー（<C-p>）
+nmap <C-p> <Action>(CopyAbsolutePath)
+
+" クイックリファクタリング
+nmap <leader>r <Action>(Refactorings.QuickListPopupAction)
+
+" コード生成
+let g:WhichKeyDesc_c = "<leader>c Code"
+nmap <leader>cg <Action>(Generate)
+
+" ターミナル
+nmap <C-q> <Action>(ActivateTerminalToolWindow)
+
+" 閉じる
+nmap <leader>q <Action>(CloseContent)
+
+" バッファ全閉じ
+nmap <leader>Q <Action>(CloseAllEditors)
+
+" --- 14. Which-Key説明 ---
+
+" 個別アクションの説明
+let g:WhichKeyDesc_ld = "<leader>ld Go to Definition"
+let g:WhichKeyDesc_li = "<leader>li Go to Implementation"
+let g:WhichKeyDesc_lr = "<leader>lr Find References"
+let g:WhichKeyDesc_lR = "<leader>lR Rename"
+let g:WhichKeyDesc_la = "<leader>la Code Action"
+let g:WhichKeyDesc_lf = "<leader>lf Format"
+let g:WhichKeyDesc_ff = "<leader>ff Find File"
+let g:WhichKeyDesc_fg = "<leader>fg Find in Path (grep)"
+let g:WhichKeyDesc_fb = "<leader>fb Recent Files"
+let g:WhichKeyDesc_db = "<leader>db Toggle Breakpoint"
+let g:WhichKeyDesc_dc = "<leader>dc Continue"
+let g:WhichKeyDesc_tt = "<leader>tt Run Test"
+let g:WhichKeyDesc_Jo = "<leader>Jo Optimize Imports"

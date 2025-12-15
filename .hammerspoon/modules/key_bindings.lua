@@ -39,9 +39,10 @@ local function swapCmdCtrl(event)
 
   -- コンソールアプリの場合：c, v のみ入れ替え対象
   if is_console_app then
-    if key_char ~= "c" and key_char ~= "v" then
-      return false  -- c, v 以外はそのまま通す
-    end
+    -- if key_char ~= "c" and key_char ~= "v" then
+    --   return false  -- c, v 以外はそのまま通す
+    -- end
+    return false
   end
 
   -- Ctrl+キー → Cmd+キー に変換
