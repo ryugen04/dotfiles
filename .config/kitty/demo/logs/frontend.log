@@ -1,0 +1,6 @@
+23:11:05 [Frontend] INFO Frontend server starting on port 9001
+23:11:10 [Frontend] INFO Request: /api/users/2
+23:11:10 [Frontend] INFO Proxying to BFF: http://localhost:9003/api/users/2
+23:11:10 [Frontend] ERROR BFF returned error: 500
+23:11:10 [Frontend] INFO 127.0.0.1 code 500, message BFF Error: Backend Error: Internal Server Error: Division by zero for user 2
+23:11:10 [Frontend] INFO 127.0.0.1 "GET /api/users/2 HTTP/1.1" 500 -

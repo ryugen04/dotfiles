@@ -1,0 +1,21 @@
+23:11:06 [BFF] INFO BFF server starting on port 9003
+23:11:10 [BFF] INFO Request: /api/users/2
+23:11:10 [BFF] INFO Forwarding to Backend: http://localhost:9002/users/2
+23:11:10 [BFF] ERROR Backend error: 500 - Internal Server Error: Division by zero for user 2
+23:11:10 [BFF] ERROR Error details: <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+        "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html;charset=utf-8">
+        <title>Error response</title>
+    </head>
+    <body>
+        <h1>Error response</h1>
+        <p>Error code: 500</p>
+        <p>Message: Internal Server Error: Division by zero for user 2.</p>
+        <p>Error code explanation: 500 - Server got itself in trouble.</p>
+    </body>
+</html>
+
+23:11:10 [BFF] INFO 127.0.0.1 code 500, message Backend Error: Internal Server Error: Division by zero for user 2
+23:11:10 [BFF] INFO 127.0.0.1 "GET /api/users/2 HTTP/1.1" 500 -

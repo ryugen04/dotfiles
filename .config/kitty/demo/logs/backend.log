@@ -1,0 +1,10 @@
+23:11:06 [Backend] INFO Backend server starting on port 9002
+23:11:10 [Backend] INFO Request: /users/2
+23:11:10 [Backend] INFO Fetching user detail for id=2
+23:11:10 [Backend] INFO Found user: Bob
+23:11:10 [Backend] INFO Calculating discount rate for user Bob...
+23:11:10 [Backend] ERROR ZeroDivisionError: Cannot calculate discount for user Bob
+23:11:10 [Backend] ERROR   user_id=2, purchase_count=0
+23:11:10 [Backend] ERROR   Fix: Add check for purchase_count == 0 in handle_user_detail()
+23:11:10 [Backend] INFO 127.0.0.1 code 500, message Internal Server Error: Division by zero for user 2
+23:11:10 [Backend] INFO 127.0.0.1 "GET /users/2 HTTP/1.1" 500 -

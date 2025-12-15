@@ -1,0 +1,5 @@
+127.0.0.1 - - [14/Dec/2025 22:47:45] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 22:47:46] code 404, message File not found
+127.0.0.1 - - [14/Dec/2025 22:47:46] "GET /nonexistent HTTP/1.1" 404 -
+127.0.0.1 - - [14/Dec/2025 22:47:46] code 404, message File not found
+127.0.0.1 - - [14/Dec/2025 22:47:46] "GET /error/test HTTP/1.1" 404 -
