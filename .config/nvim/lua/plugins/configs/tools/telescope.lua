@@ -37,8 +37,25 @@ return {
 
       telescope.setup({
         defaults = {
+          -- 中央フローティングウィンドウ（IntelliJスタイル）
+          layout_strategy = "center",
+          layout_config = {
+            center = {
+              width = 0.7,
+              height = 0.6,
+              preview_cutoff = 40,
+            },
+          },
+          sorting_strategy = "ascending",
+          results_title = false,
+          border = true,
+          borderchars = {
+            prompt = { "─", "│", " ", "│", "╭", "╮", "│", "│" },
+            results = { "─", "│", "─", "│", "├", "┤", "╯", "╰" },
+            preview = { "─", "│", "─", "│", "╭", "╮", "╯", "╰" },
+          },
           file_ignore_patterns = {
-            -- 検索から除外するものを定
+            -- 検索から除外するものを定義
             "^.git/",
             "^.cache/",
           },
@@ -50,7 +67,7 @@ return {
             },
           },
           vimgrep_arguments = {
-            -- ripggrepコマンドのオプション
+            -- ripgrepコマンドのオプション
             "rg",
             "--color=never",
             "--no-heading",
@@ -97,6 +114,8 @@ return {
             hidden = { file_browser = true, folder_browser = true },
             mappings = {
               ["i"] = {
+                -- Ctrl+Oを無効化（ジャンプリストとの競合を回避）
+                ["<c-o>"] = false,
                 -- 現在のディレクトリでファイル検索
                 ["<c-f>"] = function(prompt_bufnr)
                   -- 現在のファイルブラウザのディレクトリを取得

@@ -103,6 +103,28 @@ return {
           { "<leader>er", "<cmd>NvimTreeRefresh<CR>",                 desc = "NvimTreeRefresh" },
         })
 
+        -- パネル・ウィンドウを閉じる操作（IntelliJスタイル）
+        wk.add({
+          { "<leader>q",  group = "Close Panel" },
+          { "<leader>qe", "<cmd>NvimTreeClose<CR>",                   desc = "ツリーを閉じる" },
+          { "<leader>qt", "<cmd>Trouble close<CR>",                   desc = "Troubleを閉じる" },
+          { "<leader>qT", "<cmd>ToggleTermToggleAll<CR>",             desc = "ターミナルを閉じる" },
+          { "<leader>qc", "<cmd>cclose<CR>",                          desc = "Quickfixを閉じる" },
+          { "<leader>ql", "<cmd>lclose<CR>",                          desc = "Locationlistを閉じる" },
+          {
+            "<leader>qa",
+            function()
+              -- 全パネルを閉じる
+              vim.cmd("NvimTreeClose")
+              vim.cmd("Trouble close")
+              vim.cmd("cclose")
+              vim.cmd("lclose")
+              pcall(function() vim.cmd("ToggleTermToggleAll") end)
+            end,
+            desc = "全パネルを閉じる"
+          },
+        })
+
         local function open_in_new_tab(cmd)
           vim.cmd("tabnew")
           local win = vim.api.nvim_get_current_win()
@@ -431,6 +453,60 @@ return {
             { "<leader>aip", function() require('avante').previous_suggestion() end, desc = "Previous suggestion" },
           },
         })
+
+        local function register_kotlin_keymaps(bufnr)
+          local ok_api, kotlin_api = pcall(require, 'kotlin-extended-lsp.api')
+          if not ok_api then return end
+
+          -- LSP基本操作（Kotlin拡張版で上書き）
+          wk.add({
+            {
+              mode = { "n", "v" },
+              { "<leader>ld", kotlin_api.goto_definition, desc = "Go to definition (TS+LSP)", buffer = bufnr },
+              { "<leader>lD", kotlin_api.goto_type_definition, desc = "Go to type definition", buffer = bufnr },
+              { "<leader>li", kotlin_api.goto_implementation, desc = "Go to implementation", buffer = bufnr },
+              { "<leader>la", kotlin_api.code_actions, desc = "Code action (Kotlin)", buffer = bufnr },
+            },
+          })
+
+          -- Kotlin拡張機能
+          wk.add({
+            { "<leader>lx", group = "Kotlin Extended", buffer = bufnr },
+            {
+              mode = { "n", "v" },
+              { "<leader>lxd", kotlin_api.decompile, desc = "Decompile (逆コンパイル)", buffer = bufnr },
+              { "<leader>lxo", kotlin_api.organize_imports, desc = "Organize imports (import整理)", buffer = bufnr },
+              { "<leader>lxf", kotlin_api.apply_fix, desc = "Apply fix (修正を適用)", buffer = bufnr },
+              { "<leader>lxr", kotlin_api.refactor, desc = "Refactor menu (リファクタリング)", buffer = bufnr },
+              { "<leader>lxl", kotlin_api.lint, desc = "Run Detekt (静的解析)", buffer = bufnr },
+            },
+          })
+
+          -- テスト関連（Kotlinファイルでのオーバーライド）
+          wk.add({
+            {
+              mode = { "n", "v" },
+              { "<leader>tt", kotlin_api.test_nearest, desc = "Run nearest test (Kotlin)", buffer = bufnr },
+              { "<leader>tf", kotlin_api.test_file, desc = "Run file tests (Kotlin)", buffer = bufnr },
+              { "<leader>ta", kotlin_api.test_all, desc = "Run all tests (Kotlin)", buffer = bufnr },
+            },
+          })
+        end
+
+        -- Kotlin用キーバインド（FileType kotlin 時のみ登録）
+        vim.api.nvim_create_autocmd("FileType", {
+          pattern = "kotlin",
+          callback = function()
+            register_kotlin_keymaps(vim.api.nvim_get_current_buf())
+          end,
+        })
+
+        -- which-key読み込み前に開いていたKotlinバッファにも適用
+        for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+          if vim.api.nvim_buf_is_loaded(bufnr) and vim.bo[bufnr].filetype == "kotlin" then
+            register_kotlin_keymaps(bufnr)
+          end
+        end
       else
         vim.keymap.set("n", "<leader>fb", "<Cmd>call VSCodeNotify('workbench.action.quickOpen')<CR>")
         vim.keymap.set("n", "H", "<Cmd>call VSCodeNotify('workbench.action.previousEditor')<CR>")
