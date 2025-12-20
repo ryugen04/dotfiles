@@ -1,0 +1,29 @@
+# Stow global ignore patterns
+# Comments and blank lines are allowed
+
+# Version control
+\.git
+\.gitignore
+\.gitmodules
+
+# Editor files
+\.vscode
+\.idea
+\.*\.swp
+\.*\.swo
+
+# OS files
+\.DS_Store
+Thumbs\.db
+
+# Build artifacts
+__pycache__
+\.pyc$
+node_modules
+
+# Documentation
+README\.md
+LICENSE
+
+# Package managers
+\.venv
