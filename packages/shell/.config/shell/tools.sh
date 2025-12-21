@@ -22,14 +22,7 @@ fi
 export DENO_INSTALL="$HOME/.deno"
 [[ -d "$DENO_INSTALL" ]] && _add_to_path "$DENO_INSTALL/bin"
 
-# zoxide
-if command -v zoxide &>/dev/null; then
-    if [[ -n "$BASH_VERSION" ]]; then
-        eval "$(zoxide init bash)"
-    elif [[ -n "$ZSH_VERSION" ]]; then
-        eval "$(zoxide init zsh)"
-    fi
-fi
+# zoxide は各シェルの設定ファイル（.bashrc/.zshrc）の最後で初期化
 
 # Starship プロンプト（最後に初期化）
 if command -v starship &>/dev/null; then

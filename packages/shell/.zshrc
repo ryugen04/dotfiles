@@ -29,3 +29,6 @@ esac
 
 # zsh 補完
 autoload -Uz compinit && compinit
+
+# zoxide（最後に初期化）
+command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"

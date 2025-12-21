@@ -36,3 +36,6 @@ if ! shopt -oq posix; then
         source /etc/bash_completion
     fi
 fi
+
+# zoxide（最後に初期化）
+command -v zoxide &>/dev/null && eval "$(zoxide init bash)"
