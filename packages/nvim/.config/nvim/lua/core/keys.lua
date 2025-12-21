@@ -15,11 +15,8 @@ local function setup()
   -- 編集操作
   map('i', '<c-o>', '<left><c-o>')
 
-  -- ウィンドウ操作
-  map('n', '<c-h>', '<cmd>wincmd h<cr>')
-  map('n', '<c-j>', '<cmd>wincmd j<cr>')
-  map('n', '<c-k>', '<cmd>wincmd k<cr>')
-  map('n', '<c-l>', '<cmd>wincmd l<cr>')
+  -- ウィンドウ操作: vim-kitty-navigatorプラグインが担当
+  -- <C-h/j/k/l>はkittyペインとのシームレス移動に使用
 
   -- コマンドライン
   map('n', ';', ':')
@@ -79,11 +76,11 @@ local function setup()
     vim.cmd.normal('mzJ`z')
   end)
 
-  -- ターミナルモード
-  map('t', '<C-h>', '<C-\\><C-N><cmd>wincmd h<cr>')
-  map('t', '<C-j>', '<C-\\><C-N><cmd>wincmd j<cr>')
-  map('t', '<C-k>', '<C-\\><C-N><cmd>wincmd k<cr>')
-  map('t', '<C-l>', '<C-\\><C-N><cmd>wincmd l<cr>')
+  -- ターミナルモード: vim-kitty-navigatorコマンドでシームレス移動
+  map('t', '<C-h>', '<C-\\><C-N><cmd>KittyNavigateLeft<cr>')
+  map('t', '<C-j>', '<C-\\><C-N><cmd>KittyNavigateDown<cr>')
+  map('t', '<C-k>', '<C-\\><C-N><cmd>KittyNavigateUp<cr>')
+  map('t', '<C-l>', '<C-\\><C-N><cmd>KittyNavigateRight<cr>')
   map('t', '<ESC>', '<C-\\><C-n>')
 
   -- 環境固有のマッピング
