@@ -1,6 +1,6 @@
 ---
 name: dotfiles
-description: dotfilesリポジトリの構成理解、メンテナンス、新規PC設定、更新同期をサポートする。使用タイミング: (1) dotfilesの構成やパッケージ一覧を確認したい時、(2) 新規パッケージを追加・削除したい時、(3) 新しいPCにdotfilesをセットアップしたい時、(4) 他のマシンからの変更を取り込みたい時、(5) stowコマンドの使い方を確認したい時。
+description: Use when managing dotfiles repository. Triggers: (1) checking dotfiles structure or package list, (2) adding or removing packages, (3) setting up dotfiles on new machine, (4) syncing changes from other machines, (5) stow command usage questions.
 ---
 
 # dotfiles 管理スキル

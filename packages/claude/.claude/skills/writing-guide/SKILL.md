@@ -1,6 +1,6 @@
 ---
 name: writing-guide
-description: 技術ドキュメントの作成・校正ガイドライン。AI生成らしさを排除し、自然で読みやすい日本語文章を作成する。使用タイミング: (1) 技術ドキュメントやREADMEを作成する時、(2) 既存ドキュメントを校正・レビューする時、(3) ブログ記事や技術解説を書く時。
+description: Use when creating or reviewing technical documentation. Provides guidelines for natural, readable Japanese writing without AI-generated artifacts. Triggers: (1) creating technical documents or READMEs, (2) proofreading or reviewing existing documents, (3) writing blog posts or technical explanations.
 ---
 
 # 技術ドキュメント作成・校正

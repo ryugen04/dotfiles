@@ -1,6 +1,6 @@
 ---
 name: catchup
-description: 学習支援・振り返りスキル。コード理解度の確認と知識整理を支援する。使用タイミング: (1) 「今日の振り返り」「daily」と言われた時、(2) 「週次振り返り」「weekly」と言われた時、(3) 「理解度テスト」「test」と言われた時、(4) 「現在地確認」「where」と言われた時、(5) セッション終了前の振り返り時。
+description: Use when user requests learning review or knowledge consolidation. Triggers: (1) "daily review" or "daily" keywords, (2) "weekly review" or "weekly" keywords, (3) "understanding test" or "test" keywords, (4) "current location" or "where" keywords, (5) end-of-session retrospectives.
 ---
 
 # Catchup - 学習支援
