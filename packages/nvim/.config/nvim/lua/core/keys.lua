@@ -19,7 +19,7 @@ local function setup()
   -- <C-h/j/k/l>はkittyペインとのシームレス移動に使用
 
   -- コマンドライン
-  map('n', ';', ':')
+  map('n', ';', ':', { silent = false })
 
   -- ターミナル操作
   map('t', '<c-q>', '<c-\\><c-n><cmd>quit<cr>')
