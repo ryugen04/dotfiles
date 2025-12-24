@@ -1,6 +1,15 @@
 # tools.sh - ツール初期化
 
-# NVM (Node Version Manager)
+# mise (ツールバージョン管理)
+if [[ -x "$HOME/.local/bin/mise" ]]; then
+    if [[ -n "$BASH_VERSION" ]]; then
+        eval "$("$HOME/.local/bin/mise" activate bash)"
+    elif [[ -n "$ZSH_VERSION" ]]; then
+        eval "$("$HOME/.local/bin/mise" activate zsh)"
+    fi
+fi
+
+# NVM (Node Version Manager) - 将来的にmiseへ移行予定
 export NVM_DIR="$HOME/.nvm"
 [[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh"
 [[ -s "$NVM_DIR/bash_completion" ]] && source "$NVM_DIR/bash_completion"

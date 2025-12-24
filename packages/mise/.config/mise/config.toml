@@ -1,0 +1,15 @@
+# mise グローバル設定
+# https://mise.jdx.dev/
+
+[tools]
+# YAMLプロセッサ
+"aqua:mikefarah/yq" = "latest"
+
+# 将来的にnvm/pyenv/rbenvから移行
+# node = "22"
+# python = "3.12"
+# ruby = "3.3"
+
+[settings]
+# 実験的機能
+experimental = true
