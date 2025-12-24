@@ -97,7 +97,7 @@ return {
       if not vim.g.vscode then
         wk.add({
           { "<leader>e",  group = "NvimTree" },
-          { "<leader>ee", "<cmd>NvimTreeOpen | NvimTreeFindFile<CR>", desc = "NvimTreeFindFile" },
+          { "<leader>ee", "<cmd>NvimTreeFindFile<CR>", desc = "NvimTreeFindFile" },
           { "<leader>ef", "<cmd>NvimTreeFindFile<CR>",                desc = "NvimTreeFindFile" },
           { "<leader>eq", "<cmd>NvimTreeClose<CR>",                   desc = "NvimTreeClose" },
           { "<leader>er", "<cmd>NvimTreeRefresh<CR>",                 desc = "NvimTreeRefresh" },

@@ -4,7 +4,7 @@ return {
 		"nvim-tree/nvim-tree.lua",
 		cond = not env.is_vscode(),
 		dependencies = { "nvim-tree/nvim-web-devicons" },
-		cmd = { "NvimTreeOpen", "NvimTreeClose", "NvimTreeFocus", "NvimTreeToggle" },
+		cmd = { "NvimTreeOpen", "NvimTreeClose", "NvimTreeFocus", "NvimTreeToggle", "NvimTreeFindFile", "NvimTreeRefresh" },
 		config = function()
 			local api = require("nvim-tree.api")
 
@@ -54,7 +54,12 @@ return {
 				map("O", api.node.open.no_window_picker, "Open: No Window Picker")
 				map("E", api.tree.expand_all, "Expand All")
 				map("W", api.tree.collapse_all, "Collapse All")
-				map("ze", api.node.expand, "Expand Folder Recursively")
+				map("zo", function()
+					local node = api.tree.get_node_under_cursor()
+					if node then
+						api.tree.expand_all(node)
+					end
+				end, "Expand Folder Recursively")
 				map("zc", api.node.navigate.parent_close, "Collapse Folder")
 
 				-- copy
