@@ -1,3 +1,8 @@
+---
+name: kotlin-exposed-philosophy
+description: Use when writing or reviewing Kotlin Exposed code. Provides core principles (SQL-first, DSL vs DAO, transaction management), anti-patterns (N+1 queries, operations outside transaction), and senior engineer guidelines.
+---
+
 # Kotlin Exposed Philosophy
 
 Kotlin Exposed の設計思想とシニアエンジニアが守るべき原則。

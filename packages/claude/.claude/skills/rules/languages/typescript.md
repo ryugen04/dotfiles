@@ -1,3 +1,8 @@
+---
+name: typescript-philosophy
+description: Use when writing or reviewing TypeScript code. Provides core principles (structural typing, type inference, discriminated unions), anti-patterns (any abuse, type assertion overuse), and senior engineer guidelines.
+---
+
 # TypeScript Philosophy
 
 TypeScript の設計思想とシニアエンジニアが守るべき原則。

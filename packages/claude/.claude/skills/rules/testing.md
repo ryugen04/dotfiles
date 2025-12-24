@@ -1,3 +1,8 @@
+---
+name: testing-philosophy
+description: Use when writing or reviewing tests. Provides core principles (test pyramid vs trophy, AAA pattern, test independence), anti-patterns (excessive mocking, testing implementation details, flaky tests), and senior engineer guidelines.
+---
+
 # Testing Philosophy
 
 テスト設計の思想とシニアエンジニアが守るべき原則。

@@ -1,3 +1,8 @@
+---
+name: react-philosophy
+description: Use when writing or reviewing React code. Provides core principles (UI=f(state), declarative UI, unidirectional data flow), anti-patterns (useEffect abuse, useMemo overuse), and senior engineer guidelines.
+---
+
 # React Philosophy
 
 React の設計思想とシニアエンジニアが守るべき原則。

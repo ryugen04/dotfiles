@@ -1,3 +1,8 @@
+---
+name: kotlin-philosophy
+description: Use when writing or reviewing Kotlin code. Provides core principles (null safety, immutability, data classes, sealed classes, coroutines), anti-patterns (!! operator abuse, var overuse), and senior engineer guidelines.
+---
+
 # Kotlin Philosophy
 
 Kotlin の設計思想とシニアエンジニアが守るべき原則。

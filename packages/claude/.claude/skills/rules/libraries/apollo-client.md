@@ -1,3 +1,8 @@
+---
+name: apollo-client-philosophy
+description: Use when writing or reviewing Apollo Client code. Provides core principles (normalized cache, declarative data fetching, fetch policies), anti-patterns (refetchQueries overuse, wrong fetch policy), and senior engineer guidelines.
+---
+
 # Apollo Client Philosophy
 
 Apollo Client の設計思想とシニアエンジニアが守るべき原則。

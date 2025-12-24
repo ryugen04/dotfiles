@@ -1,3 +1,8 @@
+---
+name: mobx-philosophy
+description: Use when writing or reviewing MobX code. Provides core principles (TFRP, observable/computed/action, automatic tracking), anti-patterns (mutation outside action, forgetting observer), and senior engineer guidelines.
+---
+
 # MobX Philosophy
 
 MobX の設計思想とシニアエンジニアが守るべき原則。

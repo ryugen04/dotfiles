@@ -1,3 +1,8 @@
+---
+name: graphql-philosophy
+description: Use when writing or reviewing GraphQL schemas and queries. Provides core principles (client-driven fetching, thinking in graphs, N+1/DataLoader), anti-patterns (deep nesting, missing pagination), and senior engineer guidelines.
+---
+
 # GraphQL Philosophy
 
 GraphQL の設計思想とシニアエンジニアが守るべき原則。
