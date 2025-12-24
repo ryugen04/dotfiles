@@ -1,0 +1,49 @@
+# Claude Code プラグイン設定
+# インストール: ~/.claude/scripts/install-plugins.sh
+
+# マーケットプレイス
+marketplaces:
+  - name: anthropic-agent-skills
+    repo: anthropics/skills
+
+  - name: claude-plugins-official
+    repo: anthropics/claude-plugins-official
+
+  - name: superpowers-marketplace
+    repo: obra/superpowers-marketplace
+
+  - name: plugins-plus
+    repo: jeremylongshore/claude-code-plugins-plus
+
+# プラグイン
+plugins:
+  # Anthropic公式Skills（スキルのみ、コマンドなし）
+  - name: example-skills
+    marketplace: anthropic-agent-skills
+    description: docx/pdf/pptx/xlsx等のスキル
+
+  # Anthropic公式Plugins（コマンドあり）
+  - name: pr-review-toolkit
+    marketplace: claude-plugins-official
+    description: /review-pr コマンド
+
+  - name: security-guidance
+    marketplace: claude-plugins-official
+    description: セキュリティリマインダーhook
+
+  - name: code-review
+    marketplace: claude-plugins-official
+    description: /code-review コマンド
+
+  - name: commit-commands
+    marketplace: claude-plugins-official
+    description: /commit /commit-push-pr コマンド
+
+  - name: frontend-design
+    marketplace: claude-plugins-official
+    description: フロントエンド設計スキル
+
+  # obra/superpowers
+  - name: superpowers
+    marketplace: superpowers-marketplace
+    description: /brainstorm /write-plan /execute-plan + 14スキル

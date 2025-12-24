@@ -1,0 +1,8 @@
+{
+  "usageStatisticsEnabled": false,
+  "security": {
+    "auth": {
+      "selectedType": "oauth-personal"
+    }
+  }
+}
