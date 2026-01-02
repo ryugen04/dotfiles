@@ -66,6 +66,10 @@ keybindings:
           command: gh pr diff {{.PrNumber}} --repo {{.RepoName}} | delta
         - key: c
           command: gh pr checkout {{.PrNumber}} --repo {{.RepoName}}
+        - key: v
+          command: gh pr checkout {{.PrNumber}} --repo {{.RepoName}} && nvim -c "DiffviewOpen origin/HEAD...HEAD"
+        - key: O
+          command: gh pr checkout {{.PrNumber}} --repo {{.RepoName}} && nvim -c "Octo pr"
     issues:
         - key: o
           command: bash -c 'url=$(gh issue view {{.IssueNumber}} --repo {{.RepoName}} --json url -q .url) && nvim -c "Octo $url"'

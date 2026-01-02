@@ -10,13 +10,27 @@ return {
       require("claudecode").setup({
         terminal = {
           provider = "snacks",
-          -- フローティングウィンドウで開く（octo.nvimのレイアウトと干渉しない）
           snacks_win_opts = {
-            position = "float",
-            width = 0.85,
-            height = 0.85,
+            position = "right",
+            width = 0.30,
+            height = 1.0,
           },
         },
+      })
+
+      -- Claude Code状態追跡用autocmd
+      vim.api.nvim_create_autocmd("User", {
+        pattern = "ClaudeCodeOpen",
+        callback = function()
+          vim.g.claude_code_was_open = true
+        end,
+      })
+
+      vim.api.nvim_create_autocmd("User", {
+        pattern = "ClaudeCodeClose",
+        callback = function()
+          vim.g.claude_code_was_open = false
+        end,
       })
     end,
     keys = {

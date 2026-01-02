@@ -40,7 +40,53 @@ return {
   {
     'sindrets/diffview.nvim',
     cond = not env.is_vscode(),
-    cmd = { "DiffviewOpen", "DiffviewClose", "DiffviewToggleFiles", "DiffviewFocusFiles", "DiffviewRefresh" },
+    cmd = { "DiffviewOpen", "DiffviewClose", "DiffviewToggleFiles", "DiffviewFocusFiles", "DiffviewRefresh", "DiffviewFileHistory" },
+    config = function()
+      local actions = require("diffview.actions")
+      require("diffview").setup({
+        enhanced_diff_hl = true,
+        view = {
+          default = {
+            layout = "diff2_horizontal",
+            winbar_info = true,
+          },
+        },
+        file_panel = {
+          listing_style = "tree",
+          win_config = {
+            position = "left",
+            width = 35,
+          },
+        },
+        keymaps = {
+          view = {
+            ["gf"] = actions.goto_file_edit,
+            ["<C-w>gf"] = actions.goto_file_tab,
+            ["<C-w><C-f>"] = actions.goto_file_split,
+          },
+          file_panel = {
+            ["gf"] = actions.goto_file_edit,
+            ["<C-w>gf"] = actions.goto_file_tab,
+            ["o"] = actions.select_entry,
+          },
+        },
+        hooks = {
+          view_opened = function(view)
+            vim.defer_fn(function()
+              if vim.g.claude_code_was_open then
+                vim.cmd("ClaudeCode")
+              end
+            end, 100)
+          end,
+        },
+      })
+    end,
+    keys = {
+      { "<leader>gdo", "<cmd>DiffviewOpen<cr>", desc = "Diffview Open" },
+      { "<leader>gdc", "<cmd>DiffviewClose<cr>", desc = "Diffview Close" },
+      { "<leader>gdf", "<cmd>DiffviewToggleFiles<cr>", desc = "Toggle Files" },
+      { "<leader>gdh", "<cmd>DiffviewFileHistory %<cr>", desc = "File History" },
+    },
   },
   {
     'APZelos/blamer.nvim',
@@ -94,7 +140,7 @@ return {
           projects_v2 = true,
         },
         ui = {
-          use_signcolumn = true,
+          use_signcolumn = false,
         },
         issues = {
           order_by = {
