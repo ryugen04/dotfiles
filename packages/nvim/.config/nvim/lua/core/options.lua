@@ -7,6 +7,7 @@ local function setup()
     -- 分割方向
     splitright = true,
     splitbelow = true,
+    equalalways = false,  -- 新しいウィンドウ開いても他のウィンドウをリサイズしない
 
     -- システム連携
     clipboard = 'unnamedplus',

@@ -214,15 +214,13 @@ customCommands:
     context: "global"
     description: "Pull Request作成 (octo.nvim)"
     command: "git push -u origin HEAD && nvim -c 'Octo pr create'"
-    loadingText: "octo.nvim起動中..."
-    output: terminal
+    subprocess: true
   # gh-dash起動 (Ctrl+G)
   - key: "<c-g>"
     context: "global"
     description: "gh-dash (GitHub Dashboard)"
     command: "gh dash"
-    loadingText: "gh-dash起動中..."
-    output: terminal
+    subprocess: true
   # ブランチのPRをOctoで開く (Ctrl+O) - localBranches
   - key: "<c-o>"
     context: "localBranches"
@@ -235,8 +233,7 @@ customCommands:
 
         echo "このブランチにPRがありません"; read -p "Enterで戻る"
       fi '
-    loadingText: "octo.nvim起動中..."
-    output: terminal
+    subprocess: true
   # 現在のブランチのPRをOctoで開く (Ctrl+O) - global
   - key: "<c-o>"
     context: "global"
@@ -249,5 +246,4 @@ customCommands:
 
         echo "このブランチにPRがありません"; read -p "Enterで戻る"
       fi '
-    loadingText: "octo.nvim起動中..."
-    output: terminal
+    subprocess: true

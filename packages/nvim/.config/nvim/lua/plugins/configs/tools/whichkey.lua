@@ -264,8 +264,12 @@ return {
             { "<leader>gg",  "<cmd>LazyGit<CR>",                                       desc = "open lazygit" },
             { "<leader>gs",  "<cmd>lua require('telescope.builtin').git_status()<CR>", desc = "git status files" },
             { "<leader>gb",  "<cmd>BlamerToggle<CR>",                                  desc = "show git blame" },
-            { "<leader>gvo", "<cmd>DiffviewOpen<CR>",                                  desc = "show git diff" },
-            { "<leader>gvc", "<cmd>DiffviewClose<CR>",                                 desc = "close git diff" },
+            -- Diffview
+            { "<leader>gd",  group = "Diffview" },
+            { "<leader>gdo", "<cmd>DiffviewOpen<CR>",                                  desc = "Diffview Open" },
+            { "<leader>gdc", "<cmd>DiffviewClose<CR>",                                 desc = "Diffview Close" },
+            { "<leader>gdf", "<cmd>DiffviewToggleFiles<CR>",                           desc = "Toggle Files" },
+            { "<leader>gdh", "<cmd>DiffviewFileHistory %<CR>",                         desc = "File History" },
             -- octo.nvim
             { "<leader>go",   group = "Octo" },
             -- 基本 (3キー)
