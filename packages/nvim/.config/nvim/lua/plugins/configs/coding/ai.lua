@@ -18,18 +18,55 @@ return {
         },
       })
 
-      -- Claude Code状態追跡用autocmd
-      vim.api.nvim_create_autocmd("User", {
-        pattern = "ClaudeCodeOpen",
+      -- diffviewウィンドウ均等化関数
+      local function equalize_diff_windows()
+        vim.defer_fn(function()
+          local wins = vim.api.nvim_tabpage_list_wins(0)
+          local diff_wins = {}
+          for _, win in ipairs(wins) do
+            local buf = vim.api.nvim_win_get_buf(win)
+            -- diffモードのウィンドウを検出
+            if vim.wo[win].diff then
+              table.insert(diff_wins, win)
+            end
+          end
+          -- diffウィンドウが2つあれば均等化
+          if #diff_wins == 2 then
+            local total_width = 0
+            for _, win in ipairs(diff_wins) do
+              total_width = total_width + vim.api.nvim_win_get_width(win)
+            end
+            local equal_width = math.floor(total_width / 2)
+            for _, win in ipairs(diff_wins) do
+              vim.api.nvim_win_set_width(win, equal_width)
+            end
+          end
+        end, 200)
+      end
+
+      -- ターミナルが開いた時にdiffviewを均等化
+      vim.api.nvim_create_autocmd("TermOpen", {
+        pattern = "*",
         callback = function()
-          vim.g.claude_code_was_open = true
+          local bufname = vim.api.nvim_buf_get_name(0)
+          if bufname:match("claude") then
+            vim.g.claude_code_was_open = true
+            equalize_diff_windows()
+          end
         end,
       })
 
-      vim.api.nvim_create_autocmd("User", {
-        pattern = "ClaudeCodeClose",
+      -- WinNewでも検出（snacks.nvimのウィンドウ作成時）
+      vim.api.nvim_create_autocmd("WinNew", {
         callback = function()
-          vim.g.claude_code_was_open = false
+          vim.defer_fn(function()
+            local buf = vim.api.nvim_get_current_buf()
+            local bufname = vim.api.nvim_buf_get_name(buf)
+            if bufname:match("claude") or bufname:match("snacks_terminal") then
+              vim.g.claude_code_was_open = true
+              equalize_diff_windows()
+            end
+          end, 100)
         end,
       })
     end,
