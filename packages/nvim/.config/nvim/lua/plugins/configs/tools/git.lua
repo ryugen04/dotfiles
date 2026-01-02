@@ -1,3 +1,5 @@
+local env = require('core.env')
+
 return {
   -- Git
   {
@@ -284,5 +286,34 @@ return {
         },
       })
     end,
+  },
+  -- remora.nvim - ローカルPRレビューツール
+  {
+    'ryugen04/remora.nvim',
+    cond = not env.is_vscode(),
+    cmd = { "RemoraOpen", "RemoraSubmitReview" },
+    dependencies = {
+      'nvim-lua/plenary.nvim',
+      'sindrets/diffview.nvim',
+      -- 'olimorris/codecompanion.nvim', -- オプション: AI機能用
+    },
+    config = function()
+      require('remora').setup({
+        -- デフォルト設定を使用
+        -- 必要に応じてカスタマイズ可能:
+        -- layout = {
+        --   left_sidebar_width = 35,
+        --   right_sidebar_width = 50,
+        -- },
+        -- file_tree = {
+        --   view_mode = 'tree', -- 'tree', 'flat', or 'status'
+        -- },
+      })
+    end,
+    keys = {
+      { "<leader>gr", nil, desc = "Remora PR Review" },
+      { "<leader>gro", "<cmd>RemoraOpen<cr>", desc = "Open PR Review" },
+      { "<leader>grs", "<cmd>RemoraSubmitReview<cr>", desc = "Submit Review" },
+    },
   },
 }
