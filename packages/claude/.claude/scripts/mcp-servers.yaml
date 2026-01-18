@@ -1,36 +1,50 @@
 # Claude Code MCP Servers
-# インストール: ~/.claude/scripts/install-mcp.sh
+# このファイルはテンプレートです。実際の設定は ~/.claude/mcp.json に配置してください。
+# トークンは平文で記載せず、1Password CLI（op://形式）を使用してください。
 
 servers:
-  # Gemini CLI経由でGeminiを使用（OAuth認証）
+  # Claude Code MCP（必須）
+  - name: claude_code
+    command: claude
+    args:
+      - "mcp"
+      - "serve"
+
+  # Gemini CLI（OAuth認証済み）
   - name: gemini-cli
     command: npx
     args:
       - "-y"
       - "gemini-mcp-tool"
 
+  # Context7（APIドキュメント取得）
   - name: context7
     command: npx
     args:
       - "-y"
       - "@upstash/context7-mcp"
 
-  # GitHub - 環境変数: GITHUB_PERSONAL_ACCESS_TOKEN
+  # ===== 以下はオプション（必要に応じて有効化） =====
+
+  # GitHub MCP
+  # 使用する場合は1Password CLIでトークンを管理:
+  #   GITHUB_PERSONAL_ACCESS_TOKEN: "op://Personal/GitHub PAT/credential"
   # - name: github
   #   command: npx
   #   args:
   #     - "-y"
   #     - "@modelcontextprotocol/server-github"
   #   env:
-  #     GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+  #     GITHUB_PERSONAL_ACCESS_TOKEN: "op://vault/item/credential"
 
-  # Slack - 環境変数: SLACK_BOT_TOKEN, SLACK_TEAM_ID, SLACK_CHANNEL_IDS
+  # Slack MCP
+  # 使用する場合は1Password CLIでトークンを管理
   # - name: slack
   #   command: npx
   #   args:
   #     - "-y"
   #     - "@modelcontextprotocol/server-slack"
   #   env:
-  #     SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN}"
-  #     SLACK_TEAM_ID: "${SLACK_TEAM_ID}"
-  #     SLACK_CHANNEL_IDS: "${SLACK_CHANNEL_IDS}"
+  #     SLACK_BOT_TOKEN: "op://vault/item/bot-token"
+  #     SLACK_TEAM_ID: "T02UJSVPVSM"
+  #     SLACK_CHANNEL_IDS: "C08RWNCHLFK"

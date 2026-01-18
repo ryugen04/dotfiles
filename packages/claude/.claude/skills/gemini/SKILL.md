@@ -117,9 +117,11 @@ web searchを使って[トピック]について調査し、結果を .claude/ge
 ## 出力先
 
 ```
-.claude/gemini-reports/
+.claude/gemini-reports/{トピック}-{YYYYMMDD-HHMM}.md
 ```
 
+**注意:** このファイルはプロジェクト固有です。
+プロジェクトルートの相対パスで保存されます。
 このディレクトリは `.gitignore` に追加すること。
 
 ---
