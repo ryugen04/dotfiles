@@ -14,3 +14,19 @@
 **/.claude/shell-snapshots/
 **/.claude/statsig/
 **/.claude/todos/
+**/.claude/cache/
+**/.claude/ide/
+**/.claude/paste-cache/
+**/.claude/plans/
+**/.claude/stats-cache.json
+**/.claude/telemetry/
+
+# Gemini CLI local files
+**/.gemini/context/
+**/.gemini/agentic_sessions/
+**/.gemini/mcp_history/
+**/.gemini/google_accounts.json
+**/.gemini/oauth_creds.json
+**/.gemini/state.json
+**/.gemini/tmp/
+**/.gemini/*.orig
