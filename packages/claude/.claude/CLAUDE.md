@@ -23,13 +23,13 @@ Claude CodeとGeminiは明確に役割を分担する。
 - 軽微なコード修正・編集
 - 最終的な成果物の確認・統合
 
-### 実行モード（CLI優先）
-| モード | 用途 | 呼び出し |
-|--------|------|----------|
-| CLI（推奨） | 大規模調査、反復タスク | Task → gemini-cli-investigator |
-| MCP | 単発クエリ、即座の回答 | mcp__gemini-cli__ask-gemini |
+### 実行モード（CLIのみ）
 
-**CLI モードの利点:**
+**重要: Gemini MCPは削除済み。必ずCLIモードを使用すること。**
+
+呼び出し方法: `Task → gemini-cli-investigator`
+
+**CLIモードの利点:**
 - 進捗がリアルタイムで見える
 - タスク完了まで自律的に反復実行
 - タイムアウトリスクが低い
@@ -73,7 +73,7 @@ export GITHUB_TOKEN=$(op read "op://Personal/GitHub PAT/credential")
 ### LSP機能
 - go-to-definition: 関数やクラスの定義元に移動
 - find-references: シンボルの参照箇所を検索
-- 大規模調査時はGemini MCPに委託し、ピンポイント調査時はLSP機能を活用
+- 大規模調査時はGemini CLI（Task → gemini-cli-investigator）に委託し、ピンポイント調査時はLSP機能を活用
 
 ### Ultrathink Mode
 - `alwaysThinkingEnabled: true` で常時有効
