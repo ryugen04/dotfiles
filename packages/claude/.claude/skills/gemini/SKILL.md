@@ -1,13 +1,72 @@
 ---
 name: gemini
-description: Use when delegating tasks to Gemini MCP. Two main use cases: (1) large-scale codebase investigation with @ syntax, (2) web search for latest information. Also for long log analysis, context optimization. Always request concrete report format without omissions or personal opinions.
+description: |
+  Use when delegating tasks to Gemini. Two execution modes:
+  (1) CLI mode (default): Subagent runs gemini CLI iteratively until task complete. Progress visible, suitable for large investigations.
+  (2) MCP mode: Direct MCP call for quick, single-shot queries.
+  Trigger: large-scale codebase investigation, web search, log analysis, context optimization.
 ---
 
-# Gemini MCP 活用ガイド
+# Gemini 活用ガイド
 
-2つの主要用途がある。責務とやり方が異なるため、混同しないこと。
+2つの実行モードがある。タスクの性質に応じて使い分ける。
 
-## レポート品質基準（両用途共通）
+## モード選択
+
+| 特性 | CLI モード（推奨） | MCP モード |
+|------|-------------------|------------|
+| 進捗表示 | リアルタイム | なし |
+| 反復実行 | 自動継続 | 単発 |
+| 適用場面 | 大規模調査、複雑なタスク | 簡単な質問、即座の回答 |
+| 呼び出し | Task → gemini-cli-investigator | mcp__gemini-cli__ask-gemini |
+
+---
+
+## CLI モード（推奨）
+
+**使用タイミング:**
+- 複数ファイルにまたがる調査
+- 呼び出し元・依存関係の追跡
+- Web検索（複数ソースの調査）
+- 長文ログの解析
+
+**呼び出し方:**
+```
+Task tool で gemini-cli-investigator エージェントを起動
+
+例:
+Task(
+  subagent_type: "gemini-cli-investigator",
+  prompt: "henry-backend の UserService について依存関係を調査し、
+           呼び出し元を全て特定してレポートを作成してください"
+)
+```
+
+**特徴:**
+- サブエージェントが `gemini --yolo` でCLIを反復実行
+- タスク完了まで自律的に調査を続ける
+- 進捗がリアルタイムで見える
+- 結果は `.claude/work/gemini-reports/` に出力
+
+---
+
+## MCP モード（単発クエリ）
+
+**使用タイミング:**
+- 単純な質問への即座の回答
+- 特定ファイルのピンポイント分析
+- changeMode での編集提案取得
+
+**呼び出し方:**
+```
+mcp__gemini-cli__ask-gemini(
+  prompt: "@file.ts このコードの目的を説明して"
+)
+```
+
+---
+
+## レポート品質基準（両モード共通）
 
 **必須:**
 - 省略禁止: 「他にも...」「同様に...」「など」で逃げない
@@ -22,142 +81,103 @@ description: Use when delegating tasks to Gemini MCP. Two main use cases: (1) la
 
 ---
 
-## 用途1: コード調査
-
-大規模コードベースの調査。100万トークンウィンドウを活用。
-
-### いつ使う
-- 複数ファイルにまたがる調査
-- 呼び出し元・依存関係の追跡
-- パターンの網羅的な検索
-
-### プロンプトテンプレート
-
-```
-@src/xxx @src/yyy について以下を調査し、結果を .claude/gemini-reports/{トピック}-{YYYYMMDD-HHMM}.md に書き出してください。
-
-## 調査内容
-[具体的な質問]
-
-## 出力ルール
-- 発見した全件を列挙（省略禁止）
-- 各発見に必ず ファイルパス:行番号 を付ける
-- コードの該当箇所を引用する
-- 推測・私見は書かない。コードから読み取れる事実のみ
-- 「など」「他にも」で逃げない
-
-## 出力フォーマット
-# {調査タイトル}
-調査日時: YYYY-MM-DD HH:MM
-対象ファイル: [一覧]
-
-## 発見事項
-### 1. [発見タイトル]
-- ファイル: path/to/file.ts:42
-- コード:
-  ```
-  [該当コード]
-  ```
-- 事実: [コードから読み取れる事実のみ]
-
-### 2. [発見タイトル]
-...（全件列挙）
-
-## サマリー
-- [事実の箇条書き、3-5項目]
-```
-
----
-
-## 用途2: Web検索
-
-Google Search Groundingによる最新情報の調査。
-
-### いつ使う
-- 公式ドキュメントの最新情報
-- ライブラリのバージョン・変更点
-- ベストプラクティスの調査
-
-### プロンプトテンプレート
-
-```
-web searchを使って[トピック]について調査し、結果を .claude/gemini-reports/{トピック}-{YYYYMMDD-HHMM}.md に書き出してください。
-
-## 調査内容
-[具体的な質問]
-
-## 出力ルール
-- 発見した情報全てを列挙（省略禁止）
-- 各情報に必ずソースURLを付ける
-- 公式ドキュメントを優先、非公式は明記
-- 推測・私見は書かない。ソースに書いてある事実のみ
-- 「など」「他にも」で逃げない
-
-## 出力フォーマット
-# {調査タイトル}
-調査日時: YYYY-MM-DD HH:MM
-検索クエリ: [使用したクエリ]
-
-## 発見事項
-### 1. [発見タイトル]
-- ソース: [URL]
-- 情報種別: 公式ドキュメント / ブログ / GitHub Issue 等
-- 内容: [ソースに書いてある事実のみ]
-- 引用: "[該当箇所の引用]"
-
-### 2. [発見タイトル]
-...（全件列挙）
-
-## サマリー
-- [事実の箇条書き、3-5項目]
-```
-
----
-
 ## 出力先
 
 ```
-.claude/gemini-reports/{トピック}-{YYYYMMDD-HHMM}.md
+.claude/work/gemini-reports/{トピック}-{YYYYMMDD-HHMM}.md
 ```
 
-**注意:** このファイルはプロジェクト固有です。
-プロジェクトルートの相対パスで保存されます。
-このディレクトリは `.gitignore` に追加すること。
-
----
-
-## 利用可能なツール
-
-| ツール | 用途 |
-|--------|------|
-| `ask-gemini` | プロンプト送信、ファイル分析（@構文）、Web検索 |
-| `brainstorm` | アイデア生成（レポート形式ではない） |
+**注意:** プロジェクトルートの相対パスで保存。
+`.gitignore` に追加推奨。
 
 ---
 
 ## 委託判断フロー
 
-1. 外部の最新情報が必要？ → **用途2: Web検索**
-2. ローカルファイルの大量読み込み？ → **用途1: コード調査**
-3. コンテキスト節約が重要？ → Gemini
-4. ユーザー対話が必要？ → Claude Code直接対応
+```
+タスクを受け取る
+    │
+    ▼
+外部の最新情報が必要？ ──Yes──▶ Web検索（CLI推奨）
+    │No
+    ▼
+大量ファイル読み込み？ ──Yes──▶ コード調査（CLI推奨）
+    │No
+    ▼
+単発の簡単な質問？ ──Yes──▶ MCP モード
+    │No
+    ▼
+ユーザー対話が必要？ ──Yes──▶ Claude Code直接対応
+```
 
 ---
 
-## その他の機能
+## CLI モードの実行例
+
+### コード調査
+
+```
+Task(
+  subagent_type: "gemini-cli-investigator",
+  prompt: |
+    henry-backend/general-api の認証フローを調査してください。
+
+    調査項目:
+    1. 認証に関わるクラス・メソッドの一覧
+    2. 呼び出しフローの図解
+    3. 外部サービスとの連携箇所
+
+    結果は .claude/gemini-reports/auth-flow-{timestamp}.md に出力
+)
+```
+
+### Web検索
+
+```
+Task(
+  subagent_type: "gemini-cli-investigator",
+  prompt: |
+    web searchを使って、Kotlin Coroutinesの最新ベストプラクティスを調査してください。
+
+    調査項目:
+    1. 公式ドキュメントの推奨パターン
+    2. Spring Boot 3.x との統合方法
+    3. エラーハンドリングのパターン
+
+    結果は .claude/gemini-reports/kotlin-coroutines-{timestamp}.md に出力
+)
+```
+
+---
+
+## MCP モードの機能
 
 ### 編集提案モード
 changeMode=trueで構造化された編集提案を取得。
 
 ```
-prompt: "@src/api/users.ts エラーハンドリングを改善して"
-changeMode: true
+mcp__gemini-cli__ask-gemini(
+  prompt: "@src/api/users.ts エラーハンドリングを改善して",
+  changeMode: true
+)
 ```
 
 ### コード実行（sandbox）
 sandbox=trueでコードを安全に実行。
 
 ```
-prompt: "このPythonスクリプトを実行して結果を教えて"
-sandbox: true
+mcp__gemini-cli__ask-gemini(
+  prompt: "このPythonスクリプトを実行して結果を教えて",
+  sandbox: true
+)
+```
+
+### ブレインストーミング
+
+```
+mcp__gemini-cli__brainstorm(
+  prompt: "ユーザー認証の改善案",
+  domain: "software",
+  ideaCount: 10
+)
 ```
