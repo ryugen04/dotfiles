@@ -10,7 +10,7 @@ allowed-tools: ["Read", "Grep", "Glob", "WebSearch"]
 
 ## 知識ベース
 
-@skills/scrum/SKILL.md
+@skills/knowledge/scrum/SKILL.md
 
 ## 対応方針
 

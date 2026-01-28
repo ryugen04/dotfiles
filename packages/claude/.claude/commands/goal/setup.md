@@ -10,8 +10,8 @@ allowed-tools: ["Read", "Write", "AskUserQuestion", "Glob"]
 
 ## 知識ベース
 
-@skills/goal/SKILL.md
-@skills/goal/templates/context.md
+@skills/knowledge/goal/SKILL.md
+@templates/goal/context.md
 
 ## 実行手順
 

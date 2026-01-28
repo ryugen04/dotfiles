@@ -10,7 +10,8 @@ allowed-tools: ["Read", "Write", "Glob"]
 
 ## 知識ベース
 
-@skills/scrum/adr.md
+@skills/knowledge/scrum/SKILL.md
+@templates/scrum/adr-format.md
 
 ## 実行手順
 

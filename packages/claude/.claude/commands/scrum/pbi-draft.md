@@ -10,8 +10,8 @@ allowed-tools: ["Read", "Grep", "Glob", "Write"]
 
 ## 知識ベース
 
-@skills/scrum/pbi-draft.md
-@skills/scrum/templates/dor.md
+@skills/knowledge/scrum/SKILL.md
+@templates/scrum/dor.md
 
 ## 実行
 

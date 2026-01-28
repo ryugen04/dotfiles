@@ -17,7 +17,7 @@ git diff @{u}..HEAD --name-only
 
 ## レビュー定義
 
-@skills/code/reviewing-code/SKILL.md
+@skills/review/SKILL.md
 
 ## 実行
 

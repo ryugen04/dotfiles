@@ -4,6 +4,7 @@ description: |
   Use when reviewing React, Kotlin, or GraphQL code for framework/language philosophy violations. Triggers: React components, Kotlin server code, GraphQL resolvers. Detects: useEffect misuse, props drilling, Java-style Kotlin, mutable data classes, when-as-statement, N+1 in resolvers, nullable field overuse. Checks idiomatic patterns for each technology stack.
 model: opus
 color: cyan
+skills: coding-rules
 ---
 
 あなたはフレームワークと言語の思想に精通した専門家です。各技術が持つ設計哲学を深く理解し、それに反するアンチパターンを検出します。

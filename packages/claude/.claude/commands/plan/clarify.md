@@ -10,8 +10,8 @@ allowed-tools: ["Read", "Grep", "Glob", "AskUserQuestion"]
 
 ## 知識ベース
 
-@skills/plan/SKILL.md
-@skills/plan/templates/format.md
+@skills/knowledge/plan/SKILL.md
+@templates/plan/format.md
 
 ## 実行手順
 

@@ -2,6 +2,7 @@
 name: plan-clarify
 description: Use before EnterPlanMode to clarify requirements, identify unknowns, and ensure high-quality planning input.
 allowed-tools: Read, Grep, Glob, AskUserQuestion
+disable-model-invocation: true
 ---
 
 # 計画前の要件明確化

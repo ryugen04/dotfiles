@@ -18,7 +18,7 @@ git diff --name-only           # 未ステージング
 
 ## レビュー定義
 
-@skills/code/reviewing-code/SKILL.md
+@skills/review/SKILL.md
 
 ## 実行
 

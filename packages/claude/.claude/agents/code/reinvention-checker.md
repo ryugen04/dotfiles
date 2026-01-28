@@ -4,6 +4,7 @@ description: |
   Use when reviewing new utility functions, helper classes, or data processing logic. Triggers: new function/class creation, custom implementations of common patterns. Detects: reimplementation of standard library functions, existing npm/maven packages, project utilities already available. Checks: date formatting, string manipulation, array operations, HTTP clients, validation logic.
 model: sonnet
 color: yellow
+skills: coding-rules
 ---
 
 あなたは車輪の再発明を検出する専門家です。新しいコードが既存のライブラリ、標準関数、またはプロジェクト内のユーティリティで代替可能かを徹底的に調査します。

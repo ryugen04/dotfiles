@@ -10,7 +10,7 @@ allowed-tools: ["Read", "Write", "AskUserQuestion", "Glob", "WebSearch"]
 
 ## 知識ベース
 
-@skills/goal/SKILL.md
+@skills/knowledge/goal/SKILL.md
 
 ## コンテキスト読み込み
 

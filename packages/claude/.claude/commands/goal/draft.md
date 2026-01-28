@@ -10,8 +10,8 @@ allowed-tools: ["Read", "Write", "AskUserQuestion", "Glob"]
 
 ## 知識ベース
 
-@skills/goal/SKILL.md
-@skills/goal/templates/period-goal.md
+@skills/knowledge/goal/SKILL.md
+@templates/goal/period-goal.md
 
 ## 前提確認
 

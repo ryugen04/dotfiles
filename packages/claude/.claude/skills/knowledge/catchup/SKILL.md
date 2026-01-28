@@ -1,6 +1,7 @@
 ---
 name: catchup
 description: Use when user requests learning review or knowledge consolidation. Triggers: (1) "daily review" or "daily" keywords, (2) "weekly review" or "weekly" keywords, (3) "understanding test" or "test" keywords, (4) "current location" or "where" keywords, (5) end-of-session retrospectives.
+disable-model-invocation: true
 ---
 
 # Catchup - 学習支援

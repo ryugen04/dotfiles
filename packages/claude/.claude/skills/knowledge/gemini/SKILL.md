@@ -5,6 +5,7 @@ description: |
   (1) CLI mode (default): Subagent runs gemini CLI iteratively until task complete. Progress visible, suitable for large investigations.
   (2) MCP mode: Direct MCP call for quick, single-shot queries.
   Trigger: large-scale codebase investigation, web search, log analysis, context optimization.
+disable-model-invocation: true
 ---
 
 # Gemini 活用ガイド

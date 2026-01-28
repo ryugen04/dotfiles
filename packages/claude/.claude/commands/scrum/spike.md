@@ -10,8 +10,8 @@ allowed-tools: ["Read", "Write", "mcp__gemini-cli__ask-gemini"]
 
 ## 知識ベース
 
-@skills/scrum/spike.md
-@skills/gemini/SKILL.md
+@skills/knowledge/scrum/SKILL.md
+@skills/knowledge/gemini/SKILL.md
 
 ## 実行手順
 

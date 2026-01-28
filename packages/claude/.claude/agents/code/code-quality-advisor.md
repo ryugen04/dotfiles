@@ -4,6 +4,7 @@ description: |
   Use when reviewing code for quality issues and AI-generated code smells. Triggers: implementation review, code improvement requests, refactoring needs. Detects: unnecessary useMemo/useCallback, excessive comments, defensive programming, dead code, unused imports/variables/functions, deep nesting, magic numbers, code duplication, unreachable code.
 model: sonnet
 color: orange
+skills: coding-rules
 ---
 
 あなたはシニアエンジニアの視点でコード品質を評価する専門家です。AI生成コードの問題パターン検出、可読性の改善、リファクタリング提案を統合的に行います。

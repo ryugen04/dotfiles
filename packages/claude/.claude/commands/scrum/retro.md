@@ -10,7 +10,7 @@ allowed-tools: ["Read", "Grep", "Glob", "Write"]
 
 ## 知識ベース
 
-@skills/scrum/retro-prepare.md
+@skills/knowledge/scrum/SKILL.md
 
 ## 実行手順
 

@@ -2,6 +2,7 @@
 name: goal-setting
 description: Use when setting, reviewing, or discussing personal career goals. Supports goal design with WIN-WIN approach for both individual and organization.
 allowed-tools: Read, Write, AskUserQuestion
+disable-model-invocation: true
 ---
 
 # 個人目標設定フレームワーク

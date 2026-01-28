@@ -2,6 +2,7 @@
 name: user-commands
 description: Guide for using custom user commands. Explains available commands, when to use them, and recommended workflows for scrum, planning, goals, and code review.
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 # ユーザーコマンドガイド

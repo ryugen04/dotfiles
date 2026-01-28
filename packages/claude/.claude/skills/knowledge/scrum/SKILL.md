@@ -2,6 +2,7 @@
 name: scrum-coach
 description: Use when consulting about Scrum practices, ceremonies, or team dynamics. Provides expert coaching based on Scrum Guide and agile best practices.
 allowed-tools: Read, Grep, Glob, WebSearch
+disable-model-invocation: true
 ---
 
 # スクラムコーチ
