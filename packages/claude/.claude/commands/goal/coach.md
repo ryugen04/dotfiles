@@ -1,7 +1,12 @@
 ---
 description: "目標に関する相談: キャリア・目標設定の壁打ち相手"
 argument-hint: "[相談内容]"
-allowed-tools: ["Read", "Write", "AskUserQuestion", "Glob", "WebSearch"]
+allowed-tools:
+  - Read
+  - Write
+  - AskUserQuestion
+  - Glob
+  - WebSearch
 ---
 
 # 目標設定コーチング

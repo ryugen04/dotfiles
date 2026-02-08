@@ -1,7 +1,11 @@
 ---
 description: "レトロ準備: スプリントデータ収集と手法提案"
 argument-hint: "[スプリント番号] [メモや前回アクション]"
-allowed-tools: ["Read", "Grep", "Glob", "Write"]
+allowed-tools:
+  - Read
+  - Grep
+  - Glob
+  - Write
 ---
 
 # レトロスペクティブ準備

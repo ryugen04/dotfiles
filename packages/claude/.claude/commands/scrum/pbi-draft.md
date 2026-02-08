@@ -1,7 +1,11 @@
 ---
 description: "PBI案作成: POの要望をユーザーストーリー・ACに変換"
 argument-hint: "[POからの要望や機能説明]"
-allowed-tools: ["Read", "Grep", "Glob", "Write"]
+allowed-tools:
+  - Read
+  - Grep
+  - Glob
+  - Write
 ---
 
 # PBI案作成

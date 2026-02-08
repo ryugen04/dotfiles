@@ -1,7 +1,11 @@
 ---
 description: "計画前の要件明確化: 不明点を質問し、粒度を判定してEnterPlanModeの精度を向上"
 argument-hint: "[タスクの説明]"
-allowed-tools: ["Read", "Grep", "Glob", "AskUserQuestion"]
+allowed-tools:
+  - Read
+  - Grep
+  - Glob
+  - AskUserQuestion
 ---
 
 # 計画前の要件明確化

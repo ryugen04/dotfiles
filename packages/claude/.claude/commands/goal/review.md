@@ -1,7 +1,11 @@
 ---
 description: "目標の定期振り返り: 月次で進捗確認と軌道修正"
 argument-hint: "[YYYY-MM: 例 2026-01]"
-allowed-tools: ["Read", "Write", "AskUserQuestion", "Glob"]
+allowed-tools:
+  - Read
+  - Write
+  - AskUserQuestion
+  - Glob
 ---
 
 # 月次目標振り返り

@@ -1,7 +1,10 @@
 ---
 description: "ドメイン調査: PBI精緻化のための調査をGemini MCPで実行"
 argument-hint: "[調査テーマ]"
-allowed-tools: ["Read", "Write", "mcp__gemini-cli__ask-gemini"]
+allowed-tools:
+  - Read
+  - Write
+  - mcp__gemini-cli__ask-gemini
 ---
 
 # ドメイン調査 (Spike)

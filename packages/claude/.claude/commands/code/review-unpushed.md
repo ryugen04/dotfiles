@@ -1,7 +1,12 @@
 ---
 description: "未プッシュコミットのレビュー: 12個の専門エージェントで包括的にレビュー"
 argument-hint: "[parallel]"
-allowed-tools: ["Bash", "Glob", "Grep", "Read", "Task"]
+allowed-tools:
+  - Bash
+  - Glob
+  - Grep
+  - Read
+  - Task
 ---
 
 # Unpushed Commits Review

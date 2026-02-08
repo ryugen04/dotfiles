@@ -1,7 +1,11 @@
 ---
 description: "スクラム相談: スクラムガイドとベストプラクティスに基づくコーチング"
 argument-hint: "[質問や相談内容]"
-allowed-tools: ["Read", "Grep", "Glob", "WebSearch"]
+allowed-tools:
+  - Read
+  - Grep
+  - Glob
+  - WebSearch
 ---
 
 # スクラムコーチ

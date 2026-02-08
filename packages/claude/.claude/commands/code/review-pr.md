@@ -1,7 +1,12 @@
 ---
 description: "PRレビュー: merge baseとの差分を12個の専門エージェントで包括的にレビュー"
 argument-hint: "[parallel]"
-allowed-tools: ["Bash", "Glob", "Grep", "Read", "Task"]
+allowed-tools:
+  - Bash
+  - Glob
+  - Grep
+  - Read
+  - Task
 ---
 
 # PR Review (Merge Base)

@@ -1,7 +1,10 @@
 ---
 description: "ADR作成: 技術的意思決定の記録"
 argument-hint: "[決定事項のタイトル]"
-allowed-tools: ["Read", "Write", "Glob"]
+allowed-tools:
+  - Read
+  - Write
+  - Glob
 ---
 
 # ADR (Architecture Decision Record) 作成

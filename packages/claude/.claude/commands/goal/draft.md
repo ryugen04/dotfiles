@@ -1,7 +1,11 @@
 ---
 description: "目標案の作成: 3つのアプローチでバランスの取れた目標を設計"
 argument-hint: "[期間名: 例 2026-H1]"
-allowed-tools: ["Read", "Write", "AskUserQuestion", "Glob"]
+allowed-tools:
+  - Read
+  - Write
+  - AskUserQuestion
+  - Glob
 ---
 
 # 個人目標の作成

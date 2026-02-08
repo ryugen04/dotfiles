@@ -1,7 +1,11 @@
 ---
 description: "目標設定の初期セットアップ: 自分のなりたい像と会社の期待を整理"
 argument-hint: ""
-allowed-tools: ["Read", "Write", "AskUserQuestion", "Glob"]
+allowed-tools:
+  - Read
+  - Write
+  - AskUserQuestion
+  - Glob
 ---
 
 # 目標設定コンテキストのセットアップ
