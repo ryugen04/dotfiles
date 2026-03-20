@@ -1,0 +1,30 @@
+# Dotfiles Project - Codex CLI Configuration
+# プロジェクト固有の設定（~/.codex/config.toml より優先）
+
+# サンドボックス: workspace-write がスイートスポット
+sandbox_mode = "workspace-write"
+
+# 承認ポリシー: 非インタラクティブ実行用
+# CLIから呼ばれる場合は never、対話時は on-request に切り替え
+approval_policy = "on-request"
+
+# プロファイル定義
+[profiles.implement]
+# 実装委託用: 高精度・自動実行
+model = "gpt-5.3-codex"
+model_reasoning_effort = "high"
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+
+[profiles.review]
+# レビュー用: 読み取り専用
+model = "gpt-5.3-codex"
+model_reasoning_effort = "high"
+sandbox_mode = "workspace-read"
+
+[profiles.fast]
+# 高速実装用: 軽量モデル
+model = "gpt-5.1-codex-mini"
+model_reasoning_effort = "low"
+approval_policy = "never"
+sandbox_mode = "workspace-write"

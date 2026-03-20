@@ -1,3 +1,4 @@
+notARepository: skip
 git:
   parseEmoji: true
 gui:
@@ -200,8 +201,10 @@ customCommands:
     command: >-
       bash -c ' branches=$(git branch --merged | grep -v "\*\|main\|master\|develop") if [ -z "$branches" ]; then
 
+
         echo "削除対象のマージ済みブランチはありません"
       else
+
 
         selected=$(echo "$branches" | fzf --multi --header="削除するブランチを選択 (Tab: 複数選択, Enter: 確定)")
         if [ -n "$selected" ]; then
@@ -214,13 +217,13 @@ customCommands:
     context: "global"
     description: "Pull Request作成 (octo.nvim)"
     command: "git push -u origin HEAD && nvim -c 'Octo pr create'"
-    subprocess: true
+    output: terminal
   # gh-dash起動 (Ctrl+G)
   - key: "<c-g>"
     context: "global"
     description: "gh-dash (GitHub Dashboard)"
     command: "gh dash"
-    subprocess: true
+    output: terminal
   # ブランチのPRをOctoで開く (Ctrl+O) - localBranches
   - key: "<c-o>"
     context: "localBranches"
@@ -228,12 +231,14 @@ customCommands:
     command: >-
       bash -c ' git checkout {{.SelectedLocalBranch.Name}} && if gh pr view --json number -q .number >/dev/null 2>&1; then
 
+
         nvim -c "Octo pr"
       else
 
+
         echo "このブランチにPRがありません"; read -p "Enterで戻る"
       fi '
-    subprocess: true
+    output: terminal
   # 現在のブランチのPRをOctoで開く (Ctrl+O) - global
   - key: "<c-o>"
     context: "global"
@@ -241,9 +246,11 @@ customCommands:
     command: >-
       bash -c ' if gh pr view --json number -q .number >/dev/null 2>&1; then
 
+
         nvim -c "Octo pr"
       else
 
+
         echo "このブランチにPRがありません"; read -p "Enterで戻る"
       fi '
-    subprocess: true
+    output: terminal

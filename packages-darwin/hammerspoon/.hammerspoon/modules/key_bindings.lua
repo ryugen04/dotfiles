@@ -6,6 +6,7 @@ local console_apps = {
   ["iTerm2"] = true,
   ["WezTerm"] = true,
   ["kitty"] = true,
+  ["cmux"] = true,
 }
 
 -- Slackで除外するキー（slack_bindings.luaで処理）
@@ -19,6 +20,12 @@ local slack_excluded_keys = {
   ["t"] = true, -- Cmd+Shift+T用
 }
 
+-- 全アプリでCtrl↔Cmdスワップから除外するキー
+-- Ctrl+Spaceは入力切替としてどのアプリでも統一
+local swap_excluded_keys = {
+  ["space"] = true,
+}
+
 -- Ctrl/Cmdキーの入れ替えを行う
 -- コンソールアプリ：c, v のみ入れ替え
 -- 他のアプリ：全てのキーで入れ替え
@@ -30,6 +37,11 @@ local function swapCmdCtrl(event)
   local front_app = hs.application.frontmostApplication()
   local app_name = front_app:name()
   local is_console_app = console_apps[app_name]
+
+  -- 全アプリ共通：スワップ除外キーはそのまま通す
+  if swap_excluded_keys[key_char] then
+    return false
+  end
 
   -- Slackの場合：除外キーはslack_bindings.luaで処理するのでスキップ
   -- Ctrl→Cmd変換もCmd→Ctrl変換も両方スキップ

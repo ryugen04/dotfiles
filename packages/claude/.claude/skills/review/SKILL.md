@@ -33,11 +33,18 @@ description: Use when executing /code:review-uncommited, /code:review-unpushed, 
 | 11 | `code:security-checker` | セキュリティ脆弱性 | 常に |
 | 12 | `code:performance-checker` | パフォーマンス問題 | 常に |
 
+### オプション（1個）
+
+| # | subagent_type | 用途 | 起動条件 |
+|---|---------------|------|----------|
+| 13 | `code:copilot-codex-reviewer` | Beast Mode式Codexレビュー | 引数に`copilot`指定時 |
+
 ## 起動ルール
 
 1. **並列実行**: 引数に`parallel`があれば全エージェントを単一メッセージで起動
 2. **スキップ報告**: 条件を満たさない場合は理由を明示
 3. **起動前報告**: エージェント起動前に起動状況テーブルを表示
+4. **Copilotオプション**: 引数に`copilot`があれば13番目のエージェントも起動（12個と並列実行可能）
 
 ## 結果フォーマット
 

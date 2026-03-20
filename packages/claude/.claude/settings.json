@@ -7,48 +7,88 @@
     "allow": [
       "Bash(git:*)",
       "Bash(npm:*)",
-      "Bash(mise:*)",
-      "Read(/home/glaucus03/dev/**)"
+      "Bash(mise:*)"
     ],
     "deny": [
       "Bash(rm -rf /*)",
-      "Bash(sudo:*)"
-    ]
+      "Bash(sudo:*)",
+      "Bash(git push --force:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(dropdb:*)",
+      "Bash(docker rm -f:*)"
+    ],
+    "defaultMode": "auto"
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{
+          "type": "command",
+          "command": "bash \"$HOME/.claude/hooks/block_destructive.sh\"",
+          "timeout": 5000
+        }]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/log_posttool.sh\"",
-            "timeout": 10000
+            "command": "bash \"$HOME/.claude/hooks/auto_lint.sh\"",
+            "timeout": 15000
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/capture_error.sh\"",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "*",
+        "hooks": [{
+          "type": "command",
+          "command": "bash \"$HOME/.claude/hooks/kitty_tab_color.sh\" alert",
+          "timeout": 5000
+        }]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [{
+          "type": "command",
+          "command": "bash \"$HOME/.claude/hooks/kitty_tab_color.sh\" reset",
+          "timeout": 5000
+        }]
       }
     ],
     "PreCompact": [
       {
         "matcher": "manual",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/compact_log.sh\"",
-            "timeout": 15000
-          }
-        ]
+        "hooks": [{
+          "type": "command",
+          "command": "bash \"$HOME/.claude/hooks/compact_log.sh\"",
+          "timeout": 15000
+        }]
       }
     ],
     "SessionEnd": [
       {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/record_usage.sh\"",
-            "timeout": 30000
-          }
-        ]
+        "hooks": [{
+          "type": "command",
+          "command": "bash \"$HOME/.claude/hooks/record_usage.sh\"",
+          "timeout": 30000
+        }]
       }
     ]
   },
@@ -64,5 +104,5 @@
   },
   "alwaysThinkingEnabled": true,
   "skipDangerousModePermissionPrompt": true,
-  "effortLevel": "medium"
+  "skipAutoPermissionPrompt": true
 }

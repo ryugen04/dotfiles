@@ -1,6 +1,9 @@
 return {
   'knubie/vim-kitty-navigator',
   lazy = false,
+  cond = function()
+    return require('core.env').is_kitty()
+  end,
   init = function()
     -- kittyリモートコントロール用パスワード（kitty.confで設定した値と一致させる）
     vim.g.kitty_navigator_password = "claude-dev"

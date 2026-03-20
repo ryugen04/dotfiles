@@ -1,0 +1,15 @@
+# cmux:open プリセット設定
+# プリセット名 → URL のマッピング
+
+presets:
+  # ローカル開発
+  dashboard: "http://localhost:3000/dashboard"
+  admin: "http://localhost:3000/admin"
+
+  # ドキュメント
+  mdn: "https://developer.mozilla.org"
+  caniuse: "https://caniuse.com"
+
+# ローカル開発用のデフォルト設定
+local:
+  port: 3000
