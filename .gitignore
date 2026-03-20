@@ -27,7 +27,7 @@
 **/.claude/policy-limits.json
 **/.claude/mcp-needs-auth-cache.json
 **/.claude/.credentials.json
-packages/claude/.claude/work/
+**/.claude/work/
 
 # Gemini CLI local files
 **/.gemini/context/
