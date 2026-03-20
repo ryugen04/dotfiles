@@ -20,6 +20,14 @@
 **/.claude/plans/
 **/.claude/stats-cache.json
 **/.claude/telemetry/
+**/.claude/tasks/
+**/.claude/backups/
+**/.claude/sessions/
+**/.claude/teams/
+**/.claude/policy-limits.json
+**/.claude/mcp-needs-auth-cache.json
+**/.claude/.credentials.json
+packages/claude/.claude/work/
 
 # Gemini CLI local files
 **/.gemini/context/
@@ -30,3 +38,9 @@
 **/.gemini/state.json
 **/.gemini/tmp/
 **/.gemini/*.orig
+**/.gemini/history/
+**/.gemini/installation_id
+**/.gemini/mcp-oauth-tokens.json
+**/.gemini/projects.json
+**/.gemini/trustedFolders.json
+!packages/gemini/.gemini/settings.json

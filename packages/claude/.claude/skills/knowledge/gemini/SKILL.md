@@ -38,7 +38,7 @@ Task tool で gemini-cli-investigator エージェントを起動
 例:
 Task(
   subagent_type: "gemini-cli-investigator",
-  prompt: "henry-backend の UserService について依存関係を調査し、
+  prompt: "example-app の UserService について依存関係を調査し、
            呼び出し元を全て特定してレポートを作成してください"
 )
 ```
@@ -121,7 +121,7 @@ mcp__gemini-cli__ask-gemini(
 Task(
   subagent_type: "gemini-cli-investigator",
   prompt: |
-    henry-backend/general-api の認証フローを調査してください。
+    example-app/api-server の認証フローを調査してください。
 
     調査項目:
     1. 認証に関わるクラス・メソッドの一覧

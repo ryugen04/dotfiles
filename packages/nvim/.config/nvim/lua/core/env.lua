@@ -73,6 +73,16 @@ function M.get_env(name)
   return nil
 end
 
+-- ターミナルエミュレータ判定
+function M.is_kitty()
+  return M.get_env('TERM_PROGRAM') == 'kitty'
+end
+
+function M.is_cmux()
+  local term = M.get_env('TERM_PROGRAM')
+  return term == 'ghostty' or term == 'cmux'
+end
+
 -- 条件に応じた設定値の選択
 function M.select_by_os(opts)
   if M.is_windows() and opts.windows then

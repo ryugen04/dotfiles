@@ -1,0 +1,11 @@
+{
+  "name": "cmux-tools",
+  "private": true,
+  "description": "cmux integration tools for Claude Code",
+  "scripts": {
+    "difit": "difit"
+  },
+  "dependencies": {
+    "difit": "^1.0.0"
+  }
+}

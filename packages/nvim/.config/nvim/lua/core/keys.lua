@@ -76,11 +76,7 @@ local function setup()
     vim.cmd.normal('mzJ`z')
   end)
 
-  -- ターミナルモード: vim-kitty-navigatorコマンドでシームレス移動
-  map('t', '<C-h>', '<C-\\><C-N><cmd>KittyNavigateLeft<cr>')
-  map('t', '<C-j>', '<C-\\><C-N><cmd>KittyNavigateDown<cr>')
-  map('t', '<C-k>', '<C-\\><C-N><cmd>KittyNavigateUp<cr>')
-  map('t', '<C-l>', '<C-\\><C-N><cmd>KittyNavigateRight<cr>')
+  -- ターミナルモード: ナビゲータープラグインが担当（kitty-navigator/cmux-navigator）
   map('t', '<ESC>', '<C-\\><C-n>')
 
   -- 環境固有のマッピング

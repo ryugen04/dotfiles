@@ -1,6 +1,10 @@
+-- hs CLI連携を有効化（Raycast Script Commandsから呼び出すために必要）
+require("hs.ipc")
+
 local key_bindings = require "modules.key_bindings"
 local slack_bindings = require "modules.slack_bindings"
 local window_management = require "modules.window_manager"
+local layouts = require "modules.layouts"
 
 -- Caps LockをHyper Key (ctrl + shift + cmd + option)にマッピング
 -- Hammerspoon単体で実装

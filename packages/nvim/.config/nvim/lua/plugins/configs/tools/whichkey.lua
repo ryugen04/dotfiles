@@ -459,40 +459,32 @@ return {
         })
 
         local function register_kotlin_keymaps(bufnr)
-          local ok_api, kotlin_api = pcall(require, 'kotlin-extended-lsp.api')
-          if not ok_api then return end
-
-          -- LSP基本操作（Kotlin拡張版で上書き）
+          -- LSP基本操作（kotlin.nvim + kotlin-lsp v262）
           wk.add({
             {
               mode = { "n", "v" },
-              { "<leader>ld", kotlin_api.goto_definition, desc = "Go to definition (TS+LSP)", buffer = bufnr },
-              { "<leader>lD", kotlin_api.goto_type_definition, desc = "Go to type definition", buffer = bufnr },
-              { "<leader>li", kotlin_api.goto_implementation, desc = "Go to implementation", buffer = bufnr },
-              { "<leader>la", kotlin_api.code_actions, desc = "Code action (Kotlin)", buffer = bufnr },
+              { "<leader>ld", vim.lsp.buf.definition, desc = "Go to definition", buffer = bufnr },
+              { "<leader>lD", "<cmd>KotlinTypeDefinition<cr>", desc = "Go to type definition", buffer = bufnr },
+              { "<leader>li", "<cmd>KotlinImplementation<cr>", desc = "Go to implementation", buffer = bufnr },
+              { "<leader>la", "<cmd>KotlinCodeActions<cr>", desc = "Code action (Kotlin)", buffer = bufnr },
             },
           })
 
-          -- Kotlin拡張機能
+          -- Kotlin拡張機能（kotlin.nvim コマンド）
           wk.add({
-            { "<leader>lx", group = "Kotlin Extended", buffer = bufnr },
+            { "<leader>lk", group = "Kotlin", buffer = bufnr },
             {
               mode = { "n", "v" },
-              { "<leader>lxd", kotlin_api.decompile, desc = "Decompile (逆コンパイル)", buffer = bufnr },
-              { "<leader>lxo", kotlin_api.organize_imports, desc = "Organize imports (import整理)", buffer = bufnr },
-              { "<leader>lxf", kotlin_api.apply_fix, desc = "Apply fix (修正を適用)", buffer = bufnr },
-              { "<leader>lxr", kotlin_api.refactor, desc = "Refactor menu (リファクタリング)", buffer = bufnr },
-              { "<leader>lxl", kotlin_api.lint, desc = "Run Detekt (静的解析)", buffer = bufnr },
-            },
-          })
-
-          -- テスト関連（Kotlinファイルでのオーバーライド）
-          wk.add({
-            {
-              mode = { "n", "v" },
-              { "<leader>tt", kotlin_api.test_nearest, desc = "Run nearest test (Kotlin)", buffer = bufnr },
-              { "<leader>tf", kotlin_api.test_file, desc = "Run file tests (Kotlin)", buffer = bufnr },
-              { "<leader>ta", kotlin_api.test_all, desc = "Run all tests (Kotlin)", buffer = bufnr },
+              { "<leader>lko", "<cmd>KotlinOrganizeImports<cr>", desc = "Organize imports", buffer = bufnr },
+              { "<leader>lkf", "<cmd>KotlinFormat<cr>", desc = "Format (IntelliJ)", buffer = bufnr },
+              { "<leader>lkh", "<cmd>KotlinInlayHintsToggle<cr>", desc = "Toggle inlay hints", buffer = bufnr },
+              { "<leader>lkd", "<cmd>KotlinHintsToggle<cr>", desc = "Toggle diagnostic hints", buffer = bufnr },
+              { "<leader>lks", "<cmd>KotlinSymbols<cr>", desc = "Document symbols", buffer = bufnr },
+              { "<leader>lkw", "<cmd>KotlinWorkspaceSymbols<cr>", desc = "Workspace symbols", buffer = bufnr },
+              { "<leader>lkr", "<cmd>KotlinReferences<cr>", desc = "References", buffer = bufnr },
+              { "<leader>lkn", "<cmd>KotlinRename<cr>", desc = "Rename", buffer = bufnr },
+              { "<leader>lkq", "<cmd>KotlinQuickFix<cr>", desc = "Quick fix", buffer = bufnr },
+              { "<leader>lkc", "<cmd>KotlinCleanWorkspace<cr>", desc = "Clean workspace cache", buffer = bufnr },
             },
           })
         end

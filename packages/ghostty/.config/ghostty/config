@@ -1,0 +1,160 @@
+# ============================================================================
+# Ghostty Configuration (for cmux)
+# Migrated from kitty
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# Font Settings
+# ----------------------------------------------------------------------------
+
+# Primary font
+font-family = FiraCode Nerd Font
+font-size = 12
+
+# Japanese fallback - try system default (remove Cica)
+# font-family = Cica
+
+# Emoji fallback
+font-family = Apple Color Emoji
+
+# Disable discretionary ligatures to prevent Japanese character merging
+font-feature = -dlig
+
+# Japanese: use square gothic (角ゴシック), not round gothic (丸ゴシック)
+# Hiragana, Katakana, CJK Unified Ideographs
+font-codepoint-map = U+3040-U+30FF,U+4E00-U+9FFF,U+3000-U+303F=Hiragino Kaku Gothic ProN
+
+# Font rendering (macOS)
+font-thicken = true
+
+# ----------------------------------------------------------------------------
+# Color Scheme (migrated from kitty)
+# ----------------------------------------------------------------------------
+
+background = #16171E
+foreground = #D1D2D3
+
+# Cursor
+cursor-color = #52ad70
+cursor-text = #FEFFFF
+cursor-style = block
+cursor-style-blink = false
+
+# Black
+palette = 0=#000000
+palette = 8=#676767
+
+# Red
+palette = 1=#E68E8E
+palette = 9=#FF6D67
+
+# Green
+palette = 2=#83AC8E
+palette = 10=#5FF967
+
+# Yellow
+palette = 3=#F5B78A
+palette = 11=#FEFB67
+
+# Blue
+palette = 4=#9BB8DC
+palette = 12=#6871FF
+
+# Magenta
+palette = 5=#BAACE2
+palette = 13=#FF76FF
+
+# Cyan
+palette = 6=#00C5C7
+palette = 14=#5FFDFF
+
+# White
+palette = 7=#C7C7C7
+palette = 15=#FEFFFF
+
+# Background opacity
+background-opacity = 0.6
+
+# ----------------------------------------------------------------------------
+# Shell Integration
+# ----------------------------------------------------------------------------
+
+shell-integration = zsh
+
+# ----------------------------------------------------------------------------
+# macOS Settings
+# ----------------------------------------------------------------------------
+
+macos-option-as-alt = true
+confirm-close-surface = false
+
+# ----------------------------------------------------------------------------
+# Window Settings
+# ----------------------------------------------------------------------------
+
+window-padding-x = 0
+window-padding-y = 0
+
+# ----------------------------------------------------------------------------
+# Keybindings (cmux compatible - Ctrl+Cmd+key format)
+# ----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+# Pane Navigation - performable: でNeovimとシームレス連携を試みる
+# performable: = アクションが実行可能なら実行、不可能ならキーをパススルー
+#
+# 動作:
+# - Ghosttyに隣接ペインがある → ペイン移動
+# - Ghosttyに隣接ペインがない → キーをアプリ（Neovim等）にパススルー
+#
+# 注意: GhosttyのGUI設定でCtrl+H/J/K/Lが設定されている場合は
+#       GUI設定を削除してください（GUI設定が優先されるため）
+# ----------------------------------------------------------------------------
+keybind = performable:ctrl+h=goto_split:left
+keybind = performable:ctrl+j=goto_split:bottom
+keybind = performable:ctrl+k=goto_split:top
+keybind = performable:ctrl+l=goto_split:right
+
+# ----------------------------------------------------------------------------
+# Split Management
+# ----------------------------------------------------------------------------
+keybind = ctrl+cmd+slash=new_split:right
+keybind = ctrl+cmd+minus=new_split:down
+keybind = ctrl+cmd+q=close_surface
+keybind = ctrl+cmd+e=equalize_splits
+
+# ----------------------------------------------------------------------------
+# Tab/Surface Management
+# ----------------------------------------------------------------------------
+keybind = ctrl+cmd+w=close_surface
+
+# ----------------------------------------------------------------------------
+# Clipboard
+# ----------------------------------------------------------------------------
+# copy-on-select = clipboard を下記で有効化
+keybind = ctrl+cmd+v=paste_from_clipboard
+
+# ----------------------------------------------------------------------------
+# Scrolling & Navigation
+# ----------------------------------------------------------------------------
+keybind = ctrl+cmd+up=jump_to_prompt:-1
+keybind = ctrl+cmd+down=jump_to_prompt:1
+
+# ----------------------------------------------------------------------------
+# Font Size
+# ----------------------------------------------------------------------------
+keybind = ctrl+cmd+equal=increase_font_size:1
+keybind = ctrl+cmd+semicolon=decrease_font_size:1
+keybind = ctrl+cmd+zero=reset_font_size
+
+# ----------------------------------------------------------------------------
+# Utility
+# ----------------------------------------------------------------------------
+keybind = ctrl+cmd+a=text:\x01
+keybind = ctrl+cmd+p=toggle_quick_terminal
+keybind = shift+enter=text:\x0a
+
+# ----------------------------------------------------------------------------
+# Copy on Select (マウス選択で自動コピー)
+# ----------------------------------------------------------------------------
+copy-on-select = clipboard

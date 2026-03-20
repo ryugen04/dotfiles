@@ -78,7 +78,7 @@ return {
       -- 除外するLSPサーバーのリスト
       local excluded_servers = {
         ["jdtls"] = true, -- null-lsから起動するため除外
-        -- kotlin-lspはkotlin.luaから起動（Homebrew経由でインストール）
+        -- kotlin-lspはkotlin.nvimから起動（Homebrew cask経由でインストール）
       }
 
       local ok, mason_lspconfig = pcall(require, 'mason-lspconfig')

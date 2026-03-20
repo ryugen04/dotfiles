@@ -116,7 +116,17 @@ See `processData` in `src/worker.ts:45`.
 
 ### 4. Deliver
 
-**Output location:** Write to `~/.agent/diagrams/`. Use a descriptive filename based on content: `modem-architecture.md`, `pipeline-flow.md`, `schema-overview.md`, `diff-review-auth-refactor.md`. The directory persists across sessions.
+**Output location:**
+- If a plan context exists (e.g., working on a specific plan file like `.claude/plans/YYYYMMDD-*.md`), write to `.claude/work/plans/{plan-name}/` where `{plan-name}` matches the plan filename without extension.
+- Otherwise, write to `.claude/work/diagrams/`.
+
+Use a descriptive filename based on content: `architecture.md`, `diff-review.md`, `flow.md`, `schema.md`.
+
+Example paths:
+- With plan context: `.claude/work/plans/20260218-review-rosai-diff/diff-review.md`
+- Without plan context: `.claude/work/diagrams/auth-architecture.md`
+
+Ensure the directory exists before writing (create if needed).
 
 **Tell the user** the file path so they can open or share it.
 
