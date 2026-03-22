@@ -23,11 +23,13 @@
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{
-          "type": "command",
-          "command": "bash \"$HOME/.claude/hooks/block_destructive.sh\"",
-          "timeout": 5000
-        }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/block_destructive.sh\"",
+            "timeout": 5000
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -40,55 +42,53 @@
             "timeout": 15000
           }
         ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/capture_error.sh\"",
-            "timeout": 5000
-          }
-        ]
       }
     ],
     "Notification": [
       {
         "matcher": "*",
-        "hooks": [{
-          "type": "command",
-          "command": "bash \"$HOME/.claude/hooks/kitty_tab_color.sh\" alert",
-          "timeout": 5000
-        }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/kitty_tab_color.sh\" alert",
+            "timeout": 5000
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
       {
         "matcher": "*",
-        "hooks": [{
-          "type": "command",
-          "command": "bash \"$HOME/.claude/hooks/kitty_tab_color.sh\" reset",
-          "timeout": 5000
-        }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/kitty_tab_color.sh\" reset",
+            "timeout": 5000
+          }
+        ]
       }
     ],
     "PreCompact": [
       {
         "matcher": "manual",
-        "hooks": [{
-          "type": "command",
-          "command": "bash \"$HOME/.claude/hooks/compact_log.sh\"",
-          "timeout": 15000
-        }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/compact_log.sh\"",
+            "timeout": 15000
+          }
+        ]
       }
     ],
     "SessionEnd": [
       {
-        "hooks": [{
-          "type": "command",
-          "command": "bash \"$HOME/.claude/hooks/record_usage.sh\"",
-          "timeout": 30000
-        }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/record_usage.sh\"",
+            "timeout": 30000
+          }
+        ]
       }
     ]
   },
@@ -100,7 +100,16 @@
     "example-skills@anthropic-agent-skills": true,
     "pr-review-toolkit@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
-    "kotlin-lsp@claude-plugins-official": true
+    "kotlin-lsp@claude-plugins-official": true,
+    "sherpa@sherpa": true
+  },
+  "extraKnownMarketplaces": {
+    "sherpa": {
+      "source": {
+        "source": "directory",
+        "path": "/home/glaucus03/dev/projects/sherpa"
+      }
+    }
   },
   "alwaysThinkingEnabled": true,
   "skipDangerousModePermissionPrompt": true,
