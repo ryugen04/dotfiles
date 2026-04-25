@@ -1,6 +1,12 @@
 ---
 name: reviewing-code
-description: Use when executing /code:review-uncommited, /code:review-unpushed, or /code:review-pr commands. Triggers: code review request, PR review, uncommited changes review. Defines 12 parallel review agents covering security, performance, quality, consistency, and more.
+description: "Use when executing /code:review-uncommited, /code:review-unpushed, or /code:review-pr commands. Triggers: code review request, PR review, uncommited changes review. Defines 12 parallel review agents covering security, performance, quality, consistency, and more."
+when_to_use: |
+  triggered by "レビューして", "review", "PR review", "PR を確認", "差分をチェック", "/code:review-uncommited", "/code:review-unpushed", "/code:review-pr"
+paths:
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.kt"
 ---
 
 # Reviewing Code

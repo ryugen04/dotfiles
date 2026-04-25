@@ -6,7 +6,8 @@ description: |
   Use when: 定型実装、CRUD、テスト生成などDelegateレベルのタスク。
 model: haiku
 color: green
-allowed-tools:
+skills: knowledge/codex
+tools:
   - Bash
   - Read
   - Glob
@@ -87,7 +88,7 @@ codex exec --full-auto -m gpt-5.3-codex "$PROMPT"
 |-------------|--------|---------|------|
 | `implement` | gpt-5.3-codex | workspace-write | 標準実装 |
 | `fast` | gpt-5.1-codex-mini | workspace-write | 高速実装 |
-| `review` | gpt-5.3-codex | workspace-read | レビュー |
+| `review` | gpt-5.3-codex | read-only | レビュー |
 
 ## 3. 結果確認
 

@@ -1,0 +1,66 @@
+# Codex common base rules
+# This file is source-of-truth in dotfiles and is merged with project-specific rules.
+
+prefix_rule(
+    pattern = ["git", "fetch"],
+    decision = "allow",
+    justification = "Fetching remote refs is a routine read-oriented action.",
+    match = ["git fetch origin main"],
+    not_match = ["git pull origin main"],
+)
+
+prefix_rule(
+    pattern = ["pnpm"],
+    decision = "allow",
+    justification = "Routine frontend commands should run autonomously; risky operations remain constrained by sandbox and hooks.",
+    match = ["pnpm test", "pnpm build", "pnpm lint"],
+)
+
+prefix_rule(
+    pattern = ["claude-plan-review"],
+    decision = "allow",
+    justification = "Plan review must be executed through the managed wrapper.",
+    match = ["claude-plan-review .codex/plans/active/20260425-example.md"],
+)
+
+prefix_rule(
+    pattern = ["claude-code-review"],
+    decision = "allow",
+    justification = "Implementation review must be executed through the managed wrapper.",
+    match = ["claude-code-review --base main"],
+)
+
+prefix_rule(
+    pattern = ["claude-analysis"],
+    decision = "allow",
+    justification = "Claude analysis must be executed through the managed wrapper.",
+    match = ["claude-analysis \"why is this failing\""],
+)
+
+prefix_rule(
+    pattern = ["claude", "auth", "status"],
+    decision = "allow",
+    justification = "Claude auth status check is read-only and required for guard checks.",
+    match = ["claude auth status --json"],
+)
+
+prefix_rule(
+    pattern = ["claude", "-p"],
+    decision = "forbidden",
+    justification = "Direct claude -p is forbidden. Use claude-plan-review / claude-code-review / claude-analysis wrappers.",
+    match = ["claude -p \"plan file review\""],
+)
+
+prefix_rule(
+    pattern = ["env", "-u", "ANTHROPIC_API_KEY", "claude"],
+    decision = "forbidden",
+    justification = "Do not switch Claude authentication by overriding ANTHROPIC_API_KEY in commands.",
+    match = ["env -u ANTHROPIC_API_KEY claude -p \"review\""],
+)
+
+prefix_rule(
+    pattern = ["env", "-i"],
+    decision = "forbidden",
+    justification = "Do not execute commands with fully sanitized environment in this workflow.",
+    match = ["env -i claude -p \"review\"", "env -i HOME=$HOME PATH=$PATH claude auth status"],
+)

@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: claude-plan-review <plan-path-or-target> [additional-context]"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -lt 1 ]]; then
+  usage >&2
+  exit 2
+fi
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+"$SCRIPT_DIR/claude-guard-auth"
+
+target="$1"
+shift || true
+additional_context="$*"
+
+prompt=$(cat <<PROMPT
+/review:plan
+Target: ${target}
+Checklist:
+- Validate scope, completion criteria, risk, and test strategy.
+- Judge whether task size is appropriate for implementation throughput.
+- If split is needed, provide concrete split proposals.
+PROMPT
+)
+
+if [[ -n "$additional_context" ]]; then
+  prompt+=$'\n\nAdditional context:\n'
+  prompt+="$additional_context"
+fi
+
+exec claude -p "$prompt"

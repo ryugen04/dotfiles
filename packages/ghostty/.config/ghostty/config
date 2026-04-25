@@ -73,7 +73,7 @@ palette = 7=#C7C7C7
 palette = 15=#FEFFFF
 
 # Background opacity
-background-opacity = 0.6
+background-opacity = 1
 
 # ----------------------------------------------------------------------------
 # Shell Integration

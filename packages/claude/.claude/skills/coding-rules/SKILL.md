@@ -1,6 +1,12 @@
 ---
 name: coding-rules
-description: Project-specific coding rules and guidelines. Auto-loaded during code review.
+description: Project-specific coding rules and guidelines. Auto-loaded during code edits.
+when_to_use: |
+  triggered by "コーディング規約", "規約を確認", "ルールを確認", "coding rules", "スタイルガイド", "命名規則", "規約に沿って" (コードレビューの起動は `review` スキル側で担当)
+paths:
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.kt"
 ---
 
 # コーディングルール

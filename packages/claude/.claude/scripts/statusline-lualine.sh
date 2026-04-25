@@ -152,8 +152,14 @@ OUTPUT+="${BG_CTX}${FG_MODEL}${SEP_RIGHT}${RESET}"
 OUTPUT+="${BG_CTX}${FG_WHITE} Ctx:${CTX_PCT}% "
 
 # セグメント5: Usage（使用率で色が変わる、stdin JSONから取得）
-FIVE_HOUR_PCT=$(echo "$INPUT" | jq -r '.rate_limits["5h"].used_percentage // 0' | cut -d. -f1)
-SEVEN_DAY_PCT=$(echo "$INPUT" | jq -r '.rate_limits["7d"].used_percentage // 0' | cut -d. -f1)
+# macOS/Linuxでrate_limitsのキー名が異なる
+if [ "$(uname)" = "Darwin" ]; then
+    FIVE_HOUR_PCT=$(echo "$INPUT" | jq -r '.rate_limits.five_hour.used_percentage // 0' | cut -d. -f1)
+    SEVEN_DAY_PCT=$(echo "$INPUT" | jq -r '.rate_limits.seven_day.used_percentage // 0' | cut -d. -f1)
+else
+    FIVE_HOUR_PCT=$(echo "$INPUT" | jq -r '.rate_limits["5h"].used_percentage // 0' | cut -d. -f1)
+    SEVEN_DAY_PCT=$(echo "$INPUT" | jq -r '.rate_limits["7d"].used_percentage // 0' | cut -d. -f1)
+fi
 FIVE_HOUR_PCT=${FIVE_HOUR_PCT:-0}
 SEVEN_DAY_PCT=${SEVEN_DAY_PCT:-0}
 

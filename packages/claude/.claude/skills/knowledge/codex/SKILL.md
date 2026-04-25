@@ -3,6 +3,8 @@ name: codex
 description: |
   Codex CLIへの実装委託スキル。Claudeで作成したplanファイルをCodex CLIに渡して実装を依頼。
   Use when: 定型実装、CRUD、テスト生成などDelegateレベルのタスク。
+when_to_use: |
+  triggered by "Codexで実装", "実装を委託", "delegate to codex", "plan を渡して実装", "定型実装を任せたい", "CRUD 実装"
 prompts:
   - prompts/implement.md
 allowed-tools:

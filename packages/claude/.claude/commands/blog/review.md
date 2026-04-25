@@ -1,6 +1,7 @@
 ---
 description: "ブログレビュー: 文体チェッカー・正確性チェッカーの2エージェントで包括的にレビュー"
 argument-hint: "[ファイルパス]"
+context: fork
 allowed-tools:
   - Bash
   - Glob
