@@ -1,6 +1,8 @@
 ---
 name: plan-clarify
 description: Use before EnterPlanMode to clarify requirements, identify unknowns, and ensure high-quality planning input.
+when_to_use: |
+  triggered by "EnterPlanMode前", "要件を整理したい", "不明点を洗い出したい", "plan 作成前", "スコープ確認", "前提を揃えたい"
 allowed-tools:
   - Read
   - Grep

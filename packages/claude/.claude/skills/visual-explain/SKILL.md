@@ -1,6 +1,8 @@
 ---
 name: visual-explain
 description: Generate Markdown documents that visually explain systems, code changes, plans, and data using Mermaid diagrams and structured tables. Use when the user asks for a diagram, architecture overview, diff review, plan review, project recap, comparison table, or any visual explanation of technical concepts. Also use proactively when you are about to render a complex ASCII table (4+ rows or 3+ columns) — present it as a Markdown document instead.
+when_to_use: |
+  triggered by "図で説明して", "Mermaid", "アーキテクチャ図", "データフロー", "比較表", "visualize this", "diff を可視化", "複雑な表を見やすく"
 ---
 
 # Visual Explainer

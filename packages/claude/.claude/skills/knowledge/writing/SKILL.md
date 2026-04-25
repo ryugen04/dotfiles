@@ -1,6 +1,8 @@
 ---
 name: writing-guide
-description: Use when creating or reviewing technical documentation. Provides guidelines for natural, readable Japanese writing without AI-generated artifacts. Triggers: (1) creating technical documents or READMEs, (2) proofreading or reviewing existing documents, (3) writing blog posts or technical explanations.
+description: "Use when creating or reviewing technical documentation. Provides guidelines for natural, readable Japanese writing without AI-generated artifacts. Triggers: (1) creating technical documents or READMEs, (2) proofreading or reviewing existing documents, (3) writing blog posts or technical explanations."
+when_to_use: |
+  triggered by "ドキュメント作成", "README作成", "文章を校正して", "proofread", "技術記事を書く", "解説文を自然な日本語に"
 disable-model-invocation: true
 ---
 

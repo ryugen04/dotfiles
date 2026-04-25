@@ -8,6 +8,7 @@ CMUX="/Applications/cmux.app/Contents/Resources/bin/cmux"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DIFIT="${SCRIPT_DIR}/../node_modules/.bin/difit"
 PORT=4966
+BRIDGE_PORT=$((PORT + 1))
 
 # difitが見つからない場合はグローバルを試す
 if [[ ! -x "$DIFIT" ]]; then
@@ -60,8 +61,9 @@ else
   fi
 fi
 
-# 既存のdifitプロセスを停止
+# 既存のdifitプロセスと bridgeプロセスを停止
 pkill -f "difit.*$PORT" 2>/dev/null || true
+pkill -f "cmux-difit-bridge.*$BRIDGE_PORT" 2>/dev/null || true
 sleep 0.2
 
 # difitサーバー起動（バックグラウンド、ブラウザ自動起動を抑制）
@@ -73,7 +75,7 @@ else
 fi
 DIFIT_PID=$!
 
-# サーバー準備待ち
+# difitサーバー準備待ち
 for i in {1..30}; do
   if curl -s "http://localhost:${PORT}" > /dev/null 2>&1; then
     break
@@ -81,13 +83,33 @@ for i in {1..30}; do
   sleep 0.1
 done
 
+# bridgeサーバー起動（difit起動後）
+node "${SCRIPT_DIR}/cmux-difit-bridge.mjs" --difit-port "$PORT" --bridge-port "$BRIDGE_PORT" &
+BRIDGE_PID=$!
+
+# bridge準備待ち
+for i in {1..20}; do
+  if curl -s "http://localhost:${BRIDGE_PORT}" > /dev/null 2>&1; then
+    break
+  fi
+  sleep 0.1
+done
+
+# クリーンアップ関数
+cleanup() {
+  kill "$BRIDGE_PID" 2>/dev/null || true
+  kill "$DIFIT_PID" 2>/dev/null || true
+}
+trap cleanup EXIT
+
 # cmuxブラウザで開く
 if [[ -x "$CMUX" ]]; then
-  "$CMUX" browser open-split "http://localhost:${PORT}/" 2>/dev/null || \
-    echo "Open in browser: http://localhost:${PORT}"
+  "$CMUX" browser open-split "http://localhost:${BRIDGE_PORT}/" 2>/dev/null || \
+    echo "Open in browser: http://localhost:${BRIDGE_PORT}"
 else
-  echo "Open in browser: http://localhost:${PORT}"
+  echo "Open in browser: http://localhost:${BRIDGE_PORT}"
 fi
 
 # サーバーを維持
-wait $DIFIT_PID
+wait $DIFIT_PID 2>/dev/null || true
+wait $BRIDGE_PID 2>/dev/null || true

@@ -1,7 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING": "1",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"
   },
   "permissions": {
     "allow": [
@@ -23,11 +26,28 @@
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{
-          "type": "command",
-          "command": "bash \"$HOME/.claude/hooks/block_destructive.sh\"",
-          "timeout": 5000
-        }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/block_destructive.sh\"",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/validate_commit_msg.sh\"",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__plugin_slack_slack__slack_send_message|mcp__plugin_slack_slack__slack_send_message_draft|mcp__plugin_slack_slack__slack_schedule_message",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/slack_channel_guard.sh\"",
+            "timeout": 5000
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -38,6 +58,16 @@
             "type": "command",
             "command": "bash \"$HOME/.claude/hooks/auto_lint.sh\"",
             "timeout": 15000
+          },
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/cmux_plan_open.sh\"",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/plan_frontmatter_validator.sh\"",
+            "timeout": 5000
           }
         ]
       },
@@ -52,43 +82,38 @@
         ]
       }
     ],
-    "Notification": [
-      {
-        "matcher": "*",
-        "hooks": [{
-          "type": "command",
-          "command": "bash \"$HOME/.claude/hooks/kitty_tab_color.sh\" alert",
-          "timeout": 5000
-        }]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "*",
-        "hooks": [{
-          "type": "command",
-          "command": "bash \"$HOME/.claude/hooks/kitty_tab_color.sh\" reset",
-          "timeout": 5000
-        }]
-      }
-    ],
     "PreCompact": [
       {
         "matcher": "manual",
-        "hooks": [{
-          "type": "command",
-          "command": "bash \"$HOME/.claude/hooks/compact_log.sh\"",
-          "timeout": 15000
-        }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/compact_log.sh\"",
+            "timeout": 15000
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/cmux_session_start.sh\"",
+            "timeout": 3000
+          }
+        ]
       }
     ],
     "SessionEnd": [
       {
-        "hooks": [{
-          "type": "command",
-          "command": "bash \"$HOME/.claude/hooks/record_usage.sh\"",
-          "timeout": 30000
-        }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/record_usage.sh\"",
+            "timeout": 30000
+          }
+        ]
       }
     ]
   },
@@ -100,9 +125,14 @@
     "example-skills@anthropic-agent-skills": true,
     "pr-review-toolkit@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
-    "kotlin-lsp@claude-plugins-official": true
+    "kotlin-lsp@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "slack@claude-plugins-official": true
   },
   "alwaysThinkingEnabled": true,
+  "effortLevel": "high",
   "skipDangerousModePermissionPrompt": true,
-  "skipAutoPermissionPrompt": true
+  "skipAutoPermissionPrompt": true,
+  "theme": "dark-daltonized",
+  "editorMode": "vim"
 }

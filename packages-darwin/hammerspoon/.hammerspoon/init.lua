@@ -65,10 +65,11 @@ slack_bindings.start()
 -- keyBindingsを有効化する
 key_bindings.start()
 
+local originalReload = hs.reload
 hs.reload = function()
   slack_bindings.stop()
   key_bindings.stop()
-  hs.reload()
+  originalReload()
 end
 --
 -- window_managementのキーバインディングを有効化する

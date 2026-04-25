@@ -20,7 +20,7 @@ sandbox_mode = "workspace-write"
 # レビュー用: 読み取り専用
 model = "gpt-5.3-codex"
 model_reasoning_effort = "high"
-sandbox_mode = "workspace-read"
+sandbox_mode = "read-only"
 
 [profiles.fast]
 # 高速実装用: 軽量モデル
