@@ -93,3 +93,8 @@ luacheck packages/nvim/.config/nvim/
 
 - `packages/claude/.claude/CLAUDE.md` - Claude Code基本設定
 - `packages/claude/.claude/skills/coding-rules/` - 言語別コーディングルール
+
+## Common Claude Harness
+
+- 共通 wrapper/guard/ai-dlc 契約は `.codex/claude-harness/` を参照する。
+- 実行インターフェースは `claude-plan-review` / `claude-code-review` / `claude-analysis` を使う。

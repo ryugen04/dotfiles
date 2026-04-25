@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: claude-analysis <analysis-topic-or-question>"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -lt 1 ]]; then
+  usage >&2
+  exit 2
+fi
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+"$SCRIPT_DIR/claude-guard-auth"
+
+topic="$*"
+
+prompt=$(cat <<PROMPT
+/analysis
+Topic: ${topic}
+Requirements:
+- Summarize facts and assumptions separately.
+- State risks, alternatives, and trade-offs.
+- Avoid implementation changes unless explicitly requested.
+PROMPT
+)
+
+exec claude -p "$prompt"
