@@ -3,6 +3,7 @@
 
 sandbox_mode = "workspace-write"
 approval_policy = "on-request"
+approvals_reviewer = "guardian_subagent"
 
 [features]
 codex_hooks = true
@@ -25,7 +26,21 @@ sandbox_mode = "workspace-write"
 [projects."/home/glaucus03/dev/projects/dotfiles"]
 trust_level = "trusted"
 
+[projects."/home/glaucus03/dev/projects/harbor"]
+trust_level = "trusted"
+
+[projects."/home/glaucus03/dev/projects/harbor.nvim"]
+trust_level = "trusted"
+
+[projects."/home/glaucus03/dev/projects"]
+trust_level = "trusted"
+
 [guardrails]
 # 一般 repo でも controller を read/delegate のみに固定したい時に使う
 # project-local の .codex/config.toml でも同じ key を設定できる
 subagent_required = false
+bootstrap_extra_commands = [
+  "./install.sh codex",
+  "./install.sh agents",
+  "./install.sh codex agents",
+]

@@ -10,6 +10,13 @@ dotfiles と AI-DLC 配布リポジトリ。
 
 ## AI-DLC
 
+導入は 2 段階です。
+
+1. repo bootstrap: `./install.sh codex agents` / `ai-dlc install` / `ai-dlc doctor`
+2. workspace bootstrap: root-system repo で `ai-dlc init-project`、worktree で `ai-dlc init-workspace`
+
+controller-only 制約だけを入れたい repo では `ai-dlc init-project --project-kind controller-only` を使います。
+
 最短導入:
 
 ```bash
