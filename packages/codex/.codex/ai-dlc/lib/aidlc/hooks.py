@@ -16,20 +16,26 @@ EDIT_TOOLS = {"apply_patch", "Edit", "Write", "MultiEdit"}
 CONTROLLER_ALLOWED_PATHS = ["ai-dlc/plans/**", "ai-dlc/work-items/**", "ai-dlc/decisions/**", "ai-dlc/handoff/**", "ai-dlc/quality/**"]
 WRITE_LIKE_BASH_PATTERNS = ["sed -i", "perl -pi", "python -c", "python3 -c", "ruby -pi", "tee ", " cat > ", " > ", " >> "]
 AGENT_TOOLS = {"spawn_agent", "send_input"}
-READ_ONLY_BASH_PREFIXES = (
-    "ls",
-    "pwd",
-    "cat ",
-    "find ",
-    "rg ",
-    "ai-dlc status",
-    "ai-dlc validate",
-    "ai-dlc validate-overlay",
-    "ai-dlc overlay-status",
-    "ai-dlc deadlock-check",
-    "ai-dlc clean-state-check",
-)
+READ_ONLY_BASH_COMMANDS = {"ls", "pwd", "cat", "find", "rg", "sed", "head", "tail", "wc", "sort", "uniq", "cut"}
+READ_ONLY_AIDLC_COMMANDS = {
+    ("ai-dlc", "doctor"),
+    ("ai-dlc", "status"),
+    ("ai-dlc", "validate"),
+    ("ai-dlc", "validate-overlay"),
+    ("ai-dlc", "overlay-status"),
+    ("ai-dlc", "deadlock-check"),
+    ("ai-dlc", "clean-state-check"),
+}
+BOOTSTRAP_AIDLC_COMMANDS = {
+    ("ai-dlc", "install"),
+    ("ai-dlc", "init-project"),
+    ("ai-dlc", "init-workspace"),
+    ("ai-dlc", "install-project-hooks"),
+}
 READ_ONLY_GIT_SUBCOMMANDS = {"status", "diff", "rev-parse", "log", "show", "branch", "ls-files", "worktree"}
+DISALLOWED_SHELL_FRAGMENTS = ("`", "$(", "\n", "\r", ";", "&&", "||")
+DISALLOWED_SHELL_TOKENS = {"|", "&", ">", ">>", "<", "<<", "<<<"}
+READ_ONLY_FIND_FORBIDDEN_PREFIXES = ("-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprintf", "-fls")
 
 
 def _find_workspace(start: Path) -> Path | None:
@@ -220,6 +226,25 @@ def _find_codex_config(start: Path) -> Path | None:
     return None
 
 
+def _parse_guardrail_value(value: str) -> Any:
+    lowered = value.lower()
+    if lowered == "true":
+        return True
+    if lowered == "false":
+        return False
+    if value.startswith("[") and value.endswith("]"):
+        inner = value[1:-1].strip()
+        if not inner:
+            return []
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return value.strip("\"'")
+        if isinstance(parsed, list):
+            return [item for item in parsed if isinstance(item, str)]
+    return value.strip("\"'")
+
+
 def _load_guardrails(start: Path) -> dict[str, Any]:
     config_path = _find_codex_config(start)
     if config_path is None:
@@ -240,12 +265,7 @@ def _load_guardrails(start: Path) -> dict[str, Any]:
         if not in_guardrails or "=" not in line:
             continue
         key, value = [part.strip() for part in line.split("=", 1)]
-        if value.lower() == "true":
-            guardrails[key] = True
-        elif value.lower() == "false":
-            guardrails[key] = False
-        else:
-            guardrails[key] = value.strip("\"'")
+        guardrails[key] = _parse_guardrail_value(value)
     return guardrails
 
 
@@ -253,17 +273,66 @@ def _subagent_required_outside_workspace(start: Path) -> bool:
     return bool(_load_guardrails(start).get("subagent_required"))
 
 
+def _bootstrap_extra_commands(start: Path) -> list[str]:
+    value = _load_guardrails(start).get("bootstrap_extra_commands")
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str) and item.strip()]
+    return []
+
+
+def _is_read_only_sed(tokens: list[str]) -> bool:
+    quiet = False
+    for token in tokens[1:]:
+        if token == "--in-place" or token.startswith("--in-place="):
+            return False
+        if token.startswith("--"):
+            if token in {"--quiet", "--silent"}:
+                quiet = True
+            continue
+        if token.startswith("-") and token != "-":
+            flags = token[1:]
+            if "i" in flags:
+                return False
+            if "n" in flags:
+                quiet = True
+    return quiet
+
+
+def _is_read_only_find(tokens: list[str]) -> bool:
+    return not any(token.startswith(READ_ONLY_FIND_FORBIDDEN_PREFIXES) for token in tokens[1:])
+
+
+def _is_read_only_sort(tokens: list[str]) -> bool:
+    for token in tokens[1:]:
+        if token == "-o" or token == "--output" or token.startswith("-o") or token.startswith("--output="):
+            return False
+    return True
+
+
 def _is_read_only_bash(command: str) -> bool:
     normalized = command.strip()
     if not normalized:
         return True
-    if normalized.startswith(READ_ONLY_BASH_PREFIXES):
-        return True
+    if any(fragment in normalized for fragment in DISALLOWED_SHELL_FRAGMENTS):
+        return False
     try:
         tokens = shlex.split(normalized)
     except ValueError:
         return False
-    if not tokens or tokens[0] != "git":
+    if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
+        return False
+    if len(tokens) >= 2 and (tokens[0], tokens[1]) in READ_ONLY_AIDLC_COMMANDS:
+        return True
+    command_name = tokens[0]
+    if command_name in READ_ONLY_BASH_COMMANDS:
+        if command_name == "sed":
+            return _is_read_only_sed(tokens)
+        if command_name == "find":
+            return _is_read_only_find(tokens)
+        if command_name == "sort":
+            return _is_read_only_sort(tokens)
+        return True
+    if command_name != "git":
         return False
     if len(tokens) >= 4 and tokens[1] == "-C":
         subcommand = tokens[3]
@@ -274,6 +343,23 @@ def _is_read_only_bash(command: str) -> bool:
     if subcommand != "worktree":
         return subcommand in READ_ONLY_GIT_SUBCOMMANDS
     return len(tokens) >= 5 and tokens[4] == "list"
+
+
+def _is_allowed_bootstrap_command(command: str, cwd: Path) -> bool:
+    normalized = command.strip()
+    if not normalized:
+        return False
+    if any(fragment in normalized for fragment in DISALLOWED_SHELL_FRAGMENTS):
+        return False
+    try:
+        tokens = shlex.split(normalized)
+    except ValueError:
+        return False
+    if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
+        return False
+    if len(tokens) >= 2 and (tokens[0], tokens[1]) in BOOTSTRAP_AIDLC_COMMANDS:
+        return True
+    return normalized in _bootstrap_extra_commands(cwd)
 
 
 def _is_git_commit(command: str) -> bool:
@@ -344,7 +430,16 @@ def _session_start_context(workspace: Path | None) -> str:
 
 def _non_workspace_context(cwd: Path) -> str:
     if _subagent_required_outside_workspace(cwd):
-        return "Controller-only repo: 直接編集は禁止です。subagent に委譲してください。"
+        extras = _bootstrap_extra_commands(cwd)
+        if extras:
+            return (
+                "Controller-only bootstrap phase: 直接編集は禁止です。"
+                " 初期構築用コマンドと bootstrap_extra_commands のみ許可されます。"
+            )
+        return (
+            "Controller-only bootstrap phase: 直接編集は禁止です。"
+            " ai-dlc install/init-project/init-workspace/install-project-hooks と read-only コマンドのみ許可されます。"
+        )
     return "AI-DLC workspace ではありません。"
 
 
@@ -364,9 +459,9 @@ def dispatch(cwd: Path) -> dict[str, Any]:
             command = _extract_command(payload)
             if tool in EDIT_TOOLS:
                 return _block_hook(event_name, "Controller-only: direct edits are blocked outside AI-DLC; delegate to a subagent.")
-            if tool == "Bash" and not _is_read_only_bash(command):
+            if tool == "Bash" and not _is_read_only_bash(command) and not _is_allowed_bootstrap_command(command, cwd):
                 return _block_hook(event_name, "Controller-only: mutating Bash is blocked outside AI-DLC; delegate to a subagent.")
-            return _allow_hook(event_name, "controller-only non-workspace")
+            return _allow_hook(event_name, "controller-only bootstrap phase")
         return _allow_hook(event_name, "not an AI-DLC workspace")
 
     tool = _extract_tool(payload)

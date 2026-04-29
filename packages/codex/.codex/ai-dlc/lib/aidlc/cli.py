@@ -34,7 +34,7 @@ from .state import (
     workspace_status,
 )
 from .validators import assert_overlay, assert_workspace
-from .workspace import init_project, parse_keyed_args, parse_repo_args, scaffold_workspace
+from .workspace import init_project, init_workspace_prerequisite_errors, parse_keyed_args, parse_repo_args, scaffold_workspace
 
 
 def find_workspace_root(start: Path) -> Path:
@@ -72,7 +72,12 @@ def cmd_doctor(_: argparse.Namespace) -> int:
 def cmd_init_project(args: argparse.Namespace) -> int:
     repo_paths = parse_repo_args(args.repo) if args.repo else {}
     repo_urls = parse_keyed_args(args.repo_url) if args.repo_url else {}
-    init_project(Path(args.root_system).resolve(), repo_paths=repo_paths, repo_urls=repo_urls)
+    init_project(
+        Path(args.root_system).resolve(),
+        repo_paths=repo_paths,
+        repo_urls=repo_urls,
+        project_kind=args.project_kind,
+    )
     return 0
 
 
@@ -81,6 +86,21 @@ def cmd_init_workspace(args: argparse.Namespace) -> int:
     repos = parse_repo_args(args.repo)
     repo_urls = parse_keyed_args(args.repo_url) if args.repo_url else {}
     repo_base_refs = parse_keyed_args(args.repo_base_ref) if args.repo_base_ref else {}
+    errors, next_actions = init_workspace_prerequisite_errors(
+        root,
+        repos,
+        root_canonical_path=args.root_canonical_path,
+        root_canonical_url=args.root_canonical_url,
+        repo_urls=repo_urls,
+    )
+    if errors:
+        lines = ["init-workspace prerequisites are not met:"]
+        lines.extend(f"- {error}" for error in errors)
+        if next_actions:
+            lines.append("")
+            lines.append("Next actions:")
+            lines.extend(f"- {action}" for action in next_actions)
+        raise ValueError("\n".join(lines))
     scaffold_workspace(
         root,
         args.issue,
@@ -347,9 +367,6 @@ def cmd_git_shim_install(args: argparse.Namespace) -> int:
 def cmd_hook_dispatch(_: argparse.Namespace) -> int:
     result = dispatch(Path.cwd())
     print(json.dumps(result, ensure_ascii=False))
-    decision = result.get("decision")
-    if decision == "block":
-        return 1
     return 0
 
 
@@ -369,6 +386,7 @@ def build_parser() -> argparse.ArgumentParser:
     init_project_parser.add_argument("--root-system", default=".")
     init_project_parser.add_argument("--repo", action="append", default=[])
     init_project_parser.add_argument("--repo-url", action="append", default=[])
+    init_project_parser.add_argument("--project-kind", choices=["root-system", "controller-only"], default="root-system")
     init_project_parser.set_defaults(func=cmd_init_project)
 
     init_workspace_parser = sub.add_parser("init-workspace")
@@ -528,5 +546,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
-    return int(args.func(args))
+    try:
+        args = parser.parse_args(argv)
+        return int(args.func(args))
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2

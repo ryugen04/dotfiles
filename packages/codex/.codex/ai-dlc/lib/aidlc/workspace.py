@@ -98,6 +98,17 @@ Substantive work must be delegated to AI-DLC subagents.
 """
 
 
+def controller_only_agents_md() -> str:
+    return """# controller-only AGENTS.md
+
+This repository is not an AI-DLC workspace.
+
+The local Codex session is controller-only.
+Direct edits are blocked.
+Use delegation or approved bootstrap commands only.
+"""
+
+
 def project_codex_config() -> str:
     return """# root-system project config
 sandbox_mode = "workspace-write"
@@ -113,6 +124,20 @@ network_access = false
 """
 
 
+def controller_only_project_codex_config() -> str:
+    return """# controller-only project config
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+
+[features]
+codex_hooks = true
+shell_snapshot = true
+
+[guardrails]
+subagent_required = true
+"""
+
+
 def project_gitignore() -> str:
     return """ai-dlc/executions/
 ai-dlc/scratch/
@@ -124,6 +149,66 @@ tmp/
 .env.*
 !.env.example
 """
+
+
+def _write_text_if_missing(path: Path, text: str) -> None:
+    ensure_dir(path.parent)
+    if path.exists():
+        return
+    path.write_text(text, encoding="utf-8")
+
+
+def _git_ok(repo: Path, args: list[str]) -> bool:
+    return subprocess.run(["git", *args], cwd=repo, check=False, capture_output=True, text=True).returncode == 0
+
+
+def _has_remote_url(repo: Path, remote: str = "origin") -> bool:
+    result = subprocess.run(["git", "remote", "get-url", remote], cwd=repo, check=False, capture_output=True, text=True)
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def init_workspace_prerequisite_errors(
+    root: Path,
+    repos: dict[str, str],
+    *,
+    root_canonical_path: str | None = None,
+    root_canonical_url: str = "",
+    repo_urls: dict[str, str] | None = None,
+) -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    next_actions: list[str] = []
+    repo_urls = repo_urls or {}
+    root_repo = Path(root_canonical_path or root).expanduser().resolve()
+
+    if not _git_ok(root_repo, ["rev-parse", "--show-toplevel"]):
+        errors.append(f"root-system repo is not a git repository: {root_repo}")
+        next_actions.append(f"`git -C {root_repo} init -b main` などで root-system repo を初期化する")
+    else:
+        if not _git_ok(root_repo, ["rev-parse", "--verify", "HEAD"]):
+            errors.append(f"root-system repo does not have an initial commit yet: {root_repo}")
+            next_actions.append(f"`git -C {root_repo} add . && git -C {root_repo} commit -m init` で初回 commit を作る")
+        if not root_canonical_url and not _has_remote_url(root_repo):
+            errors.append(f"root-system canonical repo URL is unavailable for {root_repo}")
+            next_actions.append("root-system に `origin` remote を追加するか、`ai-dlc init-workspace --root-canonical-url ...` を指定する")
+
+    for name, raw_path in repos.items():
+        repo = Path(raw_path).expanduser().resolve()
+        if not repo.exists():
+            errors.append(f"repo path is missing for {name}: {repo}")
+            next_actions.append(f"`--repo {name}=...` に実在する path を指定する")
+            continue
+        if not _git_ok(repo, ["rev-parse", "--show-toplevel"]):
+            errors.append(f"child repo is not a git repository for {name}: {repo}")
+            next_actions.append(f"`git -C {repo} init -b main` などで {name} repo を初期化する")
+            continue
+        if not _git_ok(repo, ["rev-parse", "--verify", "HEAD"]):
+            errors.append(f"child repo does not have an initial commit for {name}: {repo}")
+            next_actions.append(f"`git -C {repo} add . && git -C {repo} commit -m init` で {name} の初回 commit を作る")
+        if not repo_urls.get(name) and not _has_remote_url(repo):
+            errors.append(f"canonical repo URL is unavailable for {name}: {repo}")
+            next_actions.append(f"{name} に `origin` remote を追加するか、`ai-dlc init-workspace --repo-url {name}=...` を指定する")
+
+    return errors, list(dict.fromkeys(next_actions))
 
 
 def default_plan_body(
@@ -324,11 +409,22 @@ def default_quality_body(workspace_id: str, issue_url: str) -> str:
 """
 
 
-def init_project(root_system: Path, repo_paths: dict[str, str] | None = None, repo_urls: dict[str, str] | None = None) -> None:
+def init_project(
+    root_system: Path,
+    repo_paths: dict[str, str] | None = None,
+    repo_urls: dict[str, str] | None = None,
+    *,
+    project_kind: str = "root-system",
+) -> None:
     ensure_dir(root_system / ".codex")
+    if project_kind == "controller-only":
+        write_text(root_system / "AGENTS.md", controller_only_agents_md())
+        _write_text_if_missing(root_system / ".codex" / "config.toml", controller_only_project_codex_config())
+        return
+
     ensure_dir(root_system / "ai-dlc")
     write_text(root_system / "AGENTS.md", project_agents_md())
-    write_text(root_system / ".codex" / "config.toml", project_codex_config())
+    _write_text_if_missing(root_system / ".codex" / "config.toml", project_codex_config())
     write_text(root_system / ".gitignore", project_gitignore())
     write_text(root_system / "ai-dlc" / ".gitkeep", "")
     if repo_paths or repo_urls:

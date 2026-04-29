@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -14,6 +16,7 @@ if str(LIB) not in sys.path:
     sys.path.insert(0, str(LIB))
 
 from aidlc import hooks
+from aidlc import cli
 from aidlc.git_hooks import install_project_hooks
 from aidlc.overlay import overlay_init, overlay_repair, root_export, validate_overlay
 from aidlc.state import (
@@ -118,6 +121,21 @@ class AidlcTest(unittest.TestCase):
         with patch("builtins.input", return_value=raw), patch.dict(os.environ, env, clear=True):
             return hooks.dispatch(root)
 
+    def run_hook_dispatch(self, cwd: Path, payload: dict, extra_env: dict[str, str] | None = None) -> tuple[int, dict]:
+        raw = json.dumps(payload)
+        env = os.environ.copy()
+        if extra_env:
+            env.update(extra_env)
+        stdout = io.StringIO()
+        with (
+            patch("builtins.input", return_value=raw),
+            patch.dict(os.environ, env, clear=True),
+            patch("aidlc.cli.Path.cwd", return_value=cwd),
+            contextlib.redirect_stdout(stdout),
+        ):
+            code = cli.main(["hook-dispatch"])
+        return code, json.loads(stdout.getvalue())
+
     def prepare_active_web_item(self, root: Path) -> None:
         work_items_path = root / "ai-dlc" / "work-items" / "LIN-123.yaml"
         work_items = read_yaml(work_items_path)
@@ -143,6 +161,31 @@ class AidlcTest(unittest.TestCase):
             self.assertTrue((root / ".codex" / "config.toml").exists())
             self.assertTrue((root / "ai-dlc" / ".gitkeep").exists())
             self.assertTrue((root / "ai-dlc" / "project-metadata.yaml").exists())
+
+    def test_init_project_preserves_existing_codex_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "root-system"
+            codex_dir = root / ".codex"
+            codex_dir.mkdir(parents=True)
+            config_path = codex_dir / "config.toml"
+            config_path.write_text("custom = true\n", encoding="utf-8")
+
+            init_project(root)
+
+            self.assertEqual(config_path.read_text(encoding="utf-8"), "custom = true\n")
+
+    def test_init_project_supports_controller_only_template(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "controller-only"
+            root.mkdir()
+
+            init_project(root, project_kind="controller-only")
+
+            self.assertTrue((root / "AGENTS.md").exists())
+            self.assertTrue((root / ".codex" / "config.toml").exists())
+            self.assertFalse((root / "ai-dlc").exists())
+            config = (root / ".codex" / "config.toml").read_text(encoding="utf-8")
+            self.assertIn("subagent_required = true", config)
 
     def test_workspace_scaffold_overlay_and_assignment(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -330,6 +373,89 @@ class AidlcTest(unittest.TestCase):
             )
             self.assertEqual(allowed_bash, {})
 
+    def test_hook_dispatch_allows_read_only_sed_and_related_bash_outside_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            codex_dir = repo / ".codex"
+            codex_dir.mkdir()
+            (codex_dir / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            commands = [
+                "sed -n '1,5p' README.md",
+                "head -n 5 README.md",
+                "tail -n 5 README.md",
+                "wc -l README.md",
+                "sort README.md",
+                "uniq README.md",
+                "cut -d: -f1 README.md",
+            ]
+            for command in commands:
+                with self.subTest(command=command):
+                    allowed = self.dispatch_with_payload(
+                        repo,
+                        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": command}},
+                    )
+                    self.assertEqual(allowed, {})
+
+    def test_hook_dispatch_returns_block_json_for_mutating_non_workspace_bash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            codex_dir = repo / ".codex"
+            codex_dir.mkdir()
+            (codex_dir / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            blocked = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "sed -i 's/x/y/' README.md"}},
+            )
+            self.assertEqual(blocked["decision"], "block")
+            self.assertIn("mutating Bash", blocked["reason"])
+
+    def test_hook_dispatch_cli_exits_successfully_on_block(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            codex_dir = repo / ".codex"
+            codex_dir.mkdir()
+            (codex_dir / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            code, output = self.run_hook_dispatch(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "mkdir -p scratch"}},
+            )
+            self.assertEqual(code, 0)
+            self.assertEqual(output["decision"], "block")
+            self.assertIn("mutating Bash", output["reason"])
+
+    def test_init_workspace_reports_prerequisites_with_next_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "root-system"
+            web = Path(tmp) / "web"
+            self.init_repo(root, "root\n")
+            self.init_repo(web, "web\n")
+            stderr = io.StringIO()
+            with patch("aidlc.cli.Path.cwd", return_value=root), contextlib.redirect_stderr(stderr):
+                code = cli.main([
+                    "init-workspace",
+                    "--issue",
+                    "LIN-123",
+                    "--issue-url",
+                    "https://linear.app/acme/issue/LIN-123",
+                    "--issue-title",
+                    "Bootstrap missing remotes",
+                    "--branch",
+                    "LIN-123-branch",
+                    "--repo",
+                    f"web={web}",
+                ])
+            output = stderr.getvalue()
+            self.assertEqual(code, 2)
+            self.assertIn("init-workspace prerequisites are not met", output)
+            self.assertIn("root-system canonical repo URL is unavailable", output)
+            self.assertIn("canonical repo URL is unavailable for web", output)
+            self.assertIn("Next actions:", output)
+            self.assertIn("--root-canonical-url", output)
+            self.assertIn("--repo-url web=...", output)
+
     def test_hook_dispatch_non_workspace_context_mentions_controller_only_when_enabled(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
@@ -340,7 +466,7 @@ class AidlcTest(unittest.TestCase):
             result = self.dispatch_with_payload(repo, {"hook_event_name": "SessionStart"})
             output = result["hookSpecificOutput"]
             self.assertEqual(output["hookEventName"], "SessionStart")
-            self.assertIn("Controller-only repo", output["additionalContext"])
+            self.assertIn("Controller-only bootstrap phase", output["additionalContext"])
 
     def test_control_plane_role_can_edit_assigned_ai_dlc_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
