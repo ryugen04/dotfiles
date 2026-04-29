@@ -1,3 +1,10 @@
+---
+name: workflow-start
+description: Use when starting or resuming an AI-DLC workspace and coordinating initial controller actions.
+metadata:
+  short-description: Start or resume workflow
+---
+
 # workflow-start
 
 AI-DLC workspace の開始または再開で使う。

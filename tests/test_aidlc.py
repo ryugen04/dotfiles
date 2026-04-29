@@ -282,8 +282,7 @@ class AidlcTest(unittest.TestCase):
                 outside,
                 {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "pwd"}},
             )
-            self.assertEqual(pretool["permissionDecision"], "allow")
-            self.assertEqual(pretool["permissionDecisionReason"], "not an AI-DLC workspace")
+            self.assertEqual(pretool, {})
 
             posttool = self.dispatch_with_payload(
                 outside,
@@ -293,6 +292,16 @@ class AidlcTest(unittest.TestCase):
 
             stop = self.dispatch_with_payload(outside, {"hook_event_name": "Stop"})
             self.assertEqual(stop, {})
+
+    def test_hook_dispatch_uses_env_event_name_when_payload_omits_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            outside = Path(tmp)
+            pretool = self.dispatch_with_payload(
+                outside,
+                {"tool_name": "Bash", "tool_input": {"cmd": "pwd"}},
+                {"CODEX_HOOK_EVENT_NAME": "PreToolUse"},
+            )
+            self.assertEqual(pretool, {})
 
     def test_control_plane_role_can_edit_assigned_ai_dlc_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

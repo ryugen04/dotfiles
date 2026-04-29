@@ -1,3 +1,10 @@
+---
+name: workflow-finish
+description: Use when preparing an AI-DLC session for completion and only approved Git operations should proceed.
+metadata:
+  short-description: Finish-stage workflow
+---
+
 # workflow-finish
 
 AI-DLC セッションを終了可能な状態へまとめ、承認済みの Git 操作だけを進めるときに使う。

@@ -1,3 +1,10 @@
+---
+name: workflow-repair
+description: Use when repairing local overlay, runtime, hook, or git pointer issues instead of source implementation changes.
+metadata:
+  short-description: Local repair workflow
+---
+
 # workflow-repair
 
 overlay、`.local`、hook、git pointer などの local 問題を直すときに使う。

@@ -1,3 +1,10 @@
+---
+name: workflow-review
+description: Use when progressing review, evidence collection, and handoff rather than implementation.
+metadata:
+  short-description: Review and handoff workflow
+---
+
 # workflow-review
 
 実装ではなく review / evidence / handoff を進めるときに使う。

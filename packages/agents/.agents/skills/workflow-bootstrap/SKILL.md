@@ -1,3 +1,10 @@
+---
+name: workflow-bootstrap
+description: Use when bootstrap or local readiness is incomplete and initialization or repair needs to be coordinated.
+metadata:
+  short-description: Bootstrap readiness workflow
+---
+
 # workflow-bootstrap
 
 bootstrap と local readiness が未完了のときに使う。

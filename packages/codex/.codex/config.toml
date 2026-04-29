@@ -21,3 +21,6 @@ sandbox_mode = "read-only"
 model_reasoning_effort = "low"
 approval_policy = "never"
 sandbox_mode = "workspace-write"
+
+[projects."/home/glaucus03/dev/projects/dotfiles"]
+trust_level = "trusted"
