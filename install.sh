@@ -48,6 +48,24 @@ log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+show_codex_conflict_help() {
+    local conflicts=()
+    local path
+    for path in "$HOME/.codex/AGENTS.md" "$HOME/.codex/config.toml" "$HOME/.codex/hooks.json"; do
+        if [[ -e "$path" && ! -L "$path" ]]; then
+            conflicts+=("$path")
+        fi
+    done
+
+    if [[ ${#conflicts[@]} -eq 0 ]]; then
+        return
+    fi
+
+    log_warn "codex package は既存 ~/.codex 実体ファイルと衝突しています:"
+    printf '  - %s\n' "${conflicts[@]}"
+    echo "  既存ファイルを退避または symlink 化した後に ./install.sh codex agents を再実行してください。"
+}
+
 check_stow() {
     if ! command -v stow &>/dev/null; then
         log_error "GNU Stow is not installed"
@@ -105,6 +123,9 @@ stow_package() {
         if stow "${stow_opts[@]}" "$pkg_name" 2>&1; then
             log_success "Installed: $pkg_name"
         else
+            if [[ "$pkg_name" == "codex" ]]; then
+                show_codex_conflict_help
+            fi
             log_warn "Failed to install: $pkg_name (skipping)"
         fi
     fi

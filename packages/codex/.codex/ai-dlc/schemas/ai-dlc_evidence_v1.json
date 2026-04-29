@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ai-dlc.evidence.v1",
+  "type": "object",
+  "required": ["schema", "workspace_id", "items", "diff_inspection", "clean_state"]
+}

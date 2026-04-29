@@ -1,0 +1,23 @@
+# Codex CLI Configuration
+# user-level AI-DLC standard profile
+
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+
+[features]
+codex_hooks = true
+shell_snapshot = true
+
+[profiles.implement]
+model_reasoning_effort = "high"
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+
+[profiles.review]
+model_reasoning_effort = "high"
+sandbox_mode = "read-only"
+
+[profiles.fast]
+model_reasoning_effort = "low"
+approval_policy = "never"
+sandbox_mode = "workspace-write"

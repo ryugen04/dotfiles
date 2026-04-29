@@ -94,7 +94,8 @@ luacheck packages/nvim/.config/nvim/
 - `packages/claude/.claude/CLAUDE.md` - Claude Code基本設定
 - `packages/claude/.claude/skills/coding-rules/` - 言語別コーディングルール
 
-## Common Claude Harness
+## AI-DLC Distribution
 
-- 共通 wrapper/guard/ai-dlc 契約は `.codex/claude-harness/` を参照する。
-- 実行インターフェースは `claude-plan-review` / `claude-code-review` / `claude-analysis` を使う。
+- ユーザー環境へ配る Codex / AI-DLC の正本は `packages/codex/.codex/` にある。
+- AI-DLC skills の正本は `packages/agents/.agents/skills/` にある。
+- この repo 直下の `.codex/` は dotfiles リポジトリ自身の plan / artifact / project-local config 用とみなす。
