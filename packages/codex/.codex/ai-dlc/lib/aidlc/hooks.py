@@ -74,6 +74,20 @@ def _extract_tool(payload: dict[str, Any]) -> str:
     return str(payload.get("tool_name") or payload.get("tool") or os.environ.get("CODEX_TOOL_NAME") or "")
 
 
+def _extract_event_name(payload: dict[str, Any]) -> str:
+    for key in ["hook_event_name", "hookEventName", "event", "event_name"]:
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return value
+    hook_event = payload.get("hook_event")
+    if isinstance(hook_event, dict):
+        for key in ["name", "event_name", "hookEventName"]:
+            value = hook_event.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return str(os.environ.get("CODEX_HOOK_EVENT_NAME") or "")
+
+
 def _relativize(workspace: Path, value: str) -> str | None:
     path = Path(value)
     if not path.is_absolute():
@@ -142,6 +156,35 @@ def _block(reason: str) -> dict[str, str]:
     return {"decision": "block", "reason": reason}
 
 
+def _noop() -> dict[str, Any]:
+    return {}
+
+
+def _hook_output(event_name: str, additional_context: str) -> dict[str, Any]:
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": event_name,
+            "additionalContext": additional_context,
+        }
+    }
+
+
+def _allow_hook(event_name: str, reason: str = "ok") -> dict[str, Any]:
+    if event_name in {"PreToolUse", "PermissionRequest"}:
+        return {"permissionDecision": "allow", "permissionDecisionReason": reason}
+    if event_name in {"PostToolUse", "Stop"}:
+        return _noop()
+    return _allow(reason)
+
+
+def _block_hook(event_name: str, reason: str) -> dict[str, Any]:
+    if event_name in {"PreToolUse", "PermissionRequest"}:
+        return {"permissionDecision": "deny", "permissionDecisionReason": reason}
+    if event_name in {"PostToolUse", "Stop"}:
+        return _noop()
+    return _block(reason)
+
+
 def _is_write_like_bash(command: str) -> bool:
     normalized = f" {command} "
     return any(pattern in normalized for pattern in WRITE_LIKE_BASH_PATTERNS)
@@ -203,74 +246,102 @@ def _claimed_repo_worker_exists(workspace: Path) -> bool:
     return False
 
 
-def dispatch(cwd: Path) -> dict[str, str]:
-    payload = _load_payload()
-    workspace = _find_workspace(cwd)
+def _session_start_context(workspace: Path | None) -> str:
     if workspace is None:
-        return _allow("not an AI-DLC workspace")
+        return "AI-DLC workspace ではありません。"
+
+    workspace_data = read_data(workspace / "workspace.yaml")
+    plan_meta, _ = read_frontmatter(workspace / workspace_data["paths"]["plan"])
+    lines = [
+        f"Workspace: {workspace.name}",
+        f"Plan status: {plan_meta.get('status', 'unknown')}",
+    ]
+    current = plan_meta.get("current") or {}
+    if isinstance(current, dict):
+        active_item = current.get("active_work_item")
+        next_agent = current.get("next_agent")
+        if active_item:
+            lines.append(f"Active work item: {active_item}")
+        if next_agent:
+            lines.append(f"Next agent: {next_agent}")
+    return "\n".join(lines)
+
+
+def dispatch(cwd: Path) -> dict[str, Any]:
+    payload = _load_payload()
+    event_name = _extract_event_name(payload)
+    workspace = _find_workspace(cwd)
+    if event_name == "SessionStart":
+        return _hook_output("SessionStart", _session_start_context(workspace))
+    if event_name == "UserPromptSubmit":
+        return _hook_output("UserPromptSubmit", _session_start_context(workspace))
+    if event_name in {"PostToolUse", "Stop"}:
+        return _noop()
+    if workspace is None:
+        return _allow_hook(event_name, "not an AI-DLC workspace")
 
     tool = _extract_tool(payload)
     command = _extract_command(payload)
     if any(pattern in command for pattern in DESTRUCTIVE_GIT):
-        return _block("AI-DLC: destructive git command requires explicit approval.")
+        return _block_hook(event_name, "AI-DLC: destructive git command requires explicit approval.")
 
     if tool == "Bash" and _is_write_like_bash(command) and os.environ.get("AI_DLC_ALLOW_CONTROLLER_EDIT") != "1":
-        return _block("AI-DLC: write-like Bash commands are blocked; use apply_patch/Edit with a claimed lease.")
+        return _block_hook(event_name, "AI-DLC: write-like Bash commands are blocked; use apply_patch/Edit with a claimed lease.")
     if tool == "Bash" and command and not command.startswith(READ_ONLY_BASH_PREFIXES):
         if "ai-dlc root-export" not in command and "ai-dlc overlay-cleanup" not in command and "git commit" not in command:
-            return _block("AI-DLC: unknown mutating Bash commands are denied by default in AI-DLC workspaces.")
+            return _block_hook(event_name, "AI-DLC: unknown mutating Bash commands are denied by default in AI-DLC workspaces.")
 
     if tool in EDIT_TOOLS:
         rel_paths = _extract_paths(payload, workspace)
         if not rel_paths:
-            return _block("AI-DLC: edited paths could not be determined.")
+            return _block_hook(event_name, "AI-DLC: edited paths could not be determined.")
 
         if os.environ.get("AI_DLC_ALLOW_CONTROLLER_EDIT") == "1":
-            return _allow("controller override enabled")
+            return _allow_hook(event_name, "controller override enabled")
 
         session_id = os.environ.get("CODEX_SESSION_ID")
         lease = load_lease(workspace, session_id)
         if lease is None:
             if _paths_match(rel_paths, CONTROLLER_ALLOWED_PATHS):
-                return _block("AI-DLC: controller must delegate tracked plan or handoff edits to a claimed subagent.")
-            return _block("AI-DLC: writable session requires a claimed lease.")
+                return _block_hook(event_name, "AI-DLC: controller must delegate tracked plan or handoff edits to a claimed subagent.")
+            return _block_hook(event_name, "AI-DLC: writable session requires a claimed lease.")
 
         assignment = load_assignment(workspace, lease["assignment_id"])
         if assignment.get("status") != "claimed":
-            return _block("AI-DLC: assignment must be claimed before editing.")
+            return _block_hook(event_name, "AI-DLC: assignment must be claimed before editing.")
 
         if lease.get("role") == "dlc_repo_worker":
             errors = bootstrap_gate_errors(workspace, lease)
             if errors:
-                return _block(f"AI-DLC: bootstrap gate failed: {'; '.join(errors)}")
+                return _block_hook(event_name, f"AI-DLC: bootstrap gate failed: {'; '.join(errors)}")
 
         errors = lease_path_errors(workspace, lease, rel_paths)
         if errors:
-            return _block(f"AI-DLC: lease violation: {'; '.join(errors)}")
+            return _block_hook(event_name, f"AI-DLC: lease violation: {'; '.join(errors)}")
 
     if tool == "Bash" and "git commit" in command and " -C " not in f" {command} " and "AI_DLC_ALLOW_OVERLAY_BASELINE" not in command:
         workspace_data = read_data(workspace / "workspace.yaml")
         embedded = [name for name in workspace_data["repos"] if name != "root-system"]
         if embedded:
-            return _block("AI-DLC: commit embedded repos from child repositories, not from root-system.")
+            return _block_hook(event_name, "AI-DLC: commit embedded repos from child repositories, not from root-system.")
 
     if tool == "Bash" and "ai-dlc root-export" in command:
         session_id = os.environ.get("CODEX_SESSION_ID")
         lease = load_lease(workspace, session_id)
         if lease is None or lease.get("role") != "dlc_git_operator":
-            return _block("AI-DLC: root-export requires a claimed git_operator lease.")
+            return _block_hook(event_name, "AI-DLC: root-export requires a claimed git_operator lease.")
 
     if tool == "Bash" and "ai-dlc overlay-cleanup" in command:
         session_id = os.environ.get("CODEX_SESSION_ID")
         lease = load_lease(workspace, session_id)
         if lease is None or lease.get("role") != "dlc_git_operator":
-            return _block("AI-DLC: overlay-cleanup requires a claimed git_operator lease.")
+            return _block_hook(event_name, "AI-DLC: overlay-cleanup requires a claimed git_operator lease.")
 
     if tool == "Bash" and "git -C " in command and " commit" in command:
         session_id = os.environ.get("CODEX_SESSION_ID")
         lease = load_lease(workspace, session_id)
         if lease is None or lease.get("role") != "dlc_git_operator":
-            return _block("AI-DLC: child repo commit requires a claimed git_operator lease.")
+            return _block_hook(event_name, "AI-DLC: child repo commit requires a claimed git_operator lease.")
 
     if tool == "Bash" and command.startswith("git -C "):
         session_id = os.environ.get("CODEX_SESSION_ID")
@@ -278,7 +349,7 @@ def dispatch(cwd: Path) -> dict[str, str]:
         if lease and lease.get("repo"):
             repo_prefix = f"git -C {lease['repo']}"
             if repo_prefix not in command:
-                return _block(f"AI-DLC: session lease only permits git -C {lease['repo']} commands.")
+                return _block_hook(event_name, f"AI-DLC: session lease only permits git -C {lease['repo']} commands.")
 
     if tool in AGENT_TOOLS:
         target_agent = _extract_agent_target(payload)
@@ -298,8 +369,8 @@ def dispatch(cwd: Path) -> dict[str, str]:
             if plan_meta.get("status") == "repairing" and target_agent == "dlc_repairer":
                 allowed = True
             if not allowed:
-                return _block(f"AI-DLC: next agent must be {expected} unless decisions explicitly allow {target_agent}.")
+                return _block_hook(event_name, f"AI-DLC: next agent must be {expected} unless decisions explicitly allow {target_agent}.")
             if target_agent == "dlc_verifier" and _claimed_repo_worker_exists(workspace):
-                return _block("AI-DLC: verifier must not run while a repo_worker assignment is still claimed.")
+                return _block_hook(event_name, "AI-DLC: verifier must not run while a repo_worker assignment is still claimed.")
 
-    return _allow()
+    return _allow_hook(event_name)

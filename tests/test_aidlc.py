@@ -256,6 +256,44 @@ class AidlcTest(unittest.TestCase):
             self.assertEqual(blocked_export["decision"], "block")
             self.assertIn("git_operator", blocked_export["reason"])
 
+    def test_hook_dispatch_session_start_returns_hook_specific_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            payload = {"hook_event_name": "SessionStart"}
+            result = self.dispatch_with_payload(root, payload)
+            output = result["hookSpecificOutput"]
+            self.assertEqual(output["hookEventName"], "SessionStart")
+            self.assertIn("Plan status:", output["additionalContext"])
+
+    def test_hook_dispatch_user_prompt_submit_returns_hook_specific_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            payload = {"hook_event_name": "UserPromptSubmit"}
+            result = self.dispatch_with_payload(root, payload)
+            output = result["hookSpecificOutput"]
+            self.assertEqual(output["hookEventName"], "UserPromptSubmit")
+            self.assertIn("Workspace:", output["additionalContext"])
+
+    def test_hook_dispatch_non_workspace_pret_tool_and_stop_are_schema_safe(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            outside = Path(tmp)
+
+            pretool = self.dispatch_with_payload(
+                outside,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "pwd"}},
+            )
+            self.assertEqual(pretool["permissionDecision"], "allow")
+            self.assertEqual(pretool["permissionDecisionReason"], "not an AI-DLC workspace")
+
+            posttool = self.dispatch_with_payload(
+                outside,
+                {"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_input": {"cmd": "pwd"}},
+            )
+            self.assertEqual(posttool, {})
+
+            stop = self.dispatch_with_payload(outside, {"hook_event_name": "Stop"})
+            self.assertEqual(stop, {})
+
     def test_control_plane_role_can_edit_assigned_ai_dlc_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root, _ = self.create_workspace(Path(tmp))
