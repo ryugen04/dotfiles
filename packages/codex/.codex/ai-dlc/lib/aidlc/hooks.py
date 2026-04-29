@@ -170,7 +170,9 @@ def _hook_output(event_name: str, additional_context: str) -> dict[str, Any]:
 
 
 def _allow_hook(event_name: str, reason: str = "ok") -> dict[str, Any]:
-    if event_name in {"PreToolUse", "PermissionRequest"}:
+    if event_name == "PreToolUse":
+        return _noop()
+    if event_name == "PermissionRequest":
         return {"permissionDecision": "allow", "permissionDecisionReason": reason}
     if event_name in {"PostToolUse", "Stop"}:
         return _noop()
@@ -178,7 +180,9 @@ def _allow_hook(event_name: str, reason: str = "ok") -> dict[str, Any]:
 
 
 def _block_hook(event_name: str, reason: str) -> dict[str, Any]:
-    if event_name in {"PreToolUse", "PermissionRequest"}:
+    if event_name == "PreToolUse":
+        return _block(reason)
+    if event_name == "PermissionRequest":
         return {"permissionDecision": "deny", "permissionDecisionReason": reason}
     if event_name in {"PostToolUse", "Stop"}:
         return _noop()

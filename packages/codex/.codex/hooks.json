@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\"",
+            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\" SessionStart",
             "timeout": 10000,
             "statusMessage": "Loading AI-DLC state"
           }
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\"",
+            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\" UserPromptSubmit",
             "timeout": 10000,
             "statusMessage": "Checking AI-DLC prompt"
           }
@@ -32,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\"",
+            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\" PreToolUse",
             "timeout": 10000,
             "statusMessage": "Checking AI-DLC gate"
           }
@@ -45,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\"",
+            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\" PostToolUse",
             "timeout": 20000,
             "statusMessage": "Validating AI-DLC side effects"
           }
@@ -58,7 +58,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\"",
+            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\" PermissionRequest",
             "timeout": 10000,
             "statusMessage": "Checking AI-DLC approval"
           }
@@ -71,7 +71,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\"",
+            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\" Stop",
             "timeout": 20000,
             "statusMessage": "Checking AI-DLC stop gate"
           }

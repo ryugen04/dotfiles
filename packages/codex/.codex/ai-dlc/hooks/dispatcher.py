@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -12,4 +13,6 @@ from aidlc.cli import main
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and "CODEX_HOOK_EVENT_NAME" not in os.environ:
+        os.environ["CODEX_HOOK_EVENT_NAME"] = sys.argv[1]
     raise SystemExit(main(["hook-dispatch"]))
