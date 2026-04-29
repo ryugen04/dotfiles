@@ -347,7 +347,10 @@ def cmd_git_shim_install(args: argparse.Namespace) -> int:
 def cmd_hook_dispatch(_: argparse.Namespace) -> int:
     result = dispatch(Path.cwd())
     print(json.dumps(result, ensure_ascii=False))
-    return 0 if result["decision"] == "allow" else 1
+    decision = result.get("decision")
+    if decision == "block":
+        return 1
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
