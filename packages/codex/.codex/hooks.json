@@ -1,0 +1,82 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\"",
+            "timeout": 10000,
+            "statusMessage": "Loading AI-DLC state"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\"",
+            "timeout": 10000,
+            "statusMessage": "Checking AI-DLC prompt"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\"",
+            "timeout": 10000,
+            "statusMessage": "Checking AI-DLC gate"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\"",
+            "timeout": 20000,
+            "statusMessage": "Validating AI-DLC side effects"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\"",
+            "timeout": 10000,
+            "statusMessage": "Checking AI-DLC approval"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\"",
+            "timeout": 20000,
+            "statusMessage": "Checking AI-DLC stop gate"
+          }
+        ]
+      }
+    ]
+  }
+}

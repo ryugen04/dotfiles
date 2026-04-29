@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ai-dlc.plan.v2",
+  "type": "object",
+  "required": ["schema", "id", "status", "workspace_ref"]
+}

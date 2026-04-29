@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if compgen -G "ai-dlc/overlay/*.yaml" >/dev/null; then
+  echo "AI-DLC: root-system overlay branch must not be pushed."
+  echo "Use ai-dlc root-export for root-system state, and commit child repos separately."
+  exit 1
+fi
+
+if git ls-files -- web backend | grep -q .; then
+  echo "AI-DLC: root-system tracks embedded repo paths. Push is forbidden."
+  exit 1
+fi
