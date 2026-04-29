@@ -1,7 +1,7 @@
 # Hooks And Safety
 
 - Codex hooks は `~/.codex/hooks.json` から `dispatcher.py` を呼ぶ。
-- `dispatcher.py` は AI-DLC workspace 外では no-op で `allow` を返す。
+- `dispatcher.py` は AI-DLC workspace 外では基本 `allow` だが、project-local `.codex/config.toml` の `[guardrails] subagent_required = true` がある repo では controller の直接編集を block する。
 - repo worker の書き込みは claimed lease と writable path 範囲が必要。
 - repo worker の書き込み前提は overlay valid / bootstrap ready / plan.status / active work item / repo lock の bootstrap gate で確認する。
 - root pre-commit は `web/**` と `backend/**` の commit を baseline 以外で拒否する。

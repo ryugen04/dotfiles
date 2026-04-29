@@ -27,3 +27,7 @@ sandbox_mode = "read-only"
 model_reasoning_effort = "low"
 approval_policy = "never"
 sandbox_mode = "workspace-write"
+
+[guardrails]
+# この repo では controller の直接実装を禁止し、委譲を必須化する
+subagent_required = true
