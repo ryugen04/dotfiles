@@ -24,3 +24,8 @@ sandbox_mode = "workspace-write"
 
 [projects."/home/glaucus03/dev/projects/dotfiles"]
 trust_level = "trusted"
+
+[guardrails]
+# 一般 repo でも controller を read/delegate のみに固定したい時に使う
+# project-local の .codex/config.toml でも同じ key を設定できる
+subagent_required = false

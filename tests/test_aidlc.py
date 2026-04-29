@@ -303,6 +303,45 @@ class AidlcTest(unittest.TestCase):
             )
             self.assertEqual(pretool, {})
 
+    def test_hook_dispatch_blocks_direct_edits_outside_workspace_when_project_requires_subagent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            codex_dir = repo / ".codex"
+            codex_dir.mkdir()
+            (codex_dir / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            blocked_edit = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": str(repo / "README.md")}},
+            )
+            self.assertEqual(blocked_edit["decision"], "block")
+            self.assertIn("delegate to a subagent", blocked_edit["reason"])
+
+            blocked_bash = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "mkdir -p scratch"}},
+            )
+            self.assertEqual(blocked_bash["decision"], "block")
+            self.assertIn("mutating Bash", blocked_bash["reason"])
+
+            allowed_bash = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "git status --short"}},
+            )
+            self.assertEqual(allowed_bash, {})
+
+    def test_hook_dispatch_non_workspace_context_mentions_controller_only_when_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            codex_dir = repo / ".codex"
+            codex_dir.mkdir()
+            (codex_dir / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            result = self.dispatch_with_payload(repo, {"hook_event_name": "SessionStart"})
+            output = result["hookSpecificOutput"]
+            self.assertEqual(output["hookEventName"], "SessionStart")
+            self.assertIn("Controller-only repo", output["additionalContext"])
+
     def test_control_plane_role_can_edit_assigned_ai_dlc_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root, _ = self.create_workspace(Path(tmp))

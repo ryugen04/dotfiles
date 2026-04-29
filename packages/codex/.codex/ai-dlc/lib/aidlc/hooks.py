@@ -4,6 +4,7 @@ import fnmatch
 import json
 import os
 import re
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -16,14 +17,6 @@ CONTROLLER_ALLOWED_PATHS = ["ai-dlc/plans/**", "ai-dlc/work-items/**", "ai-dlc/d
 WRITE_LIKE_BASH_PATTERNS = ["sed -i", "perl -pi", "python -c", "python3 -c", "ruby -pi", "tee ", " cat > ", " > ", " >> "]
 AGENT_TOOLS = {"spawn_agent", "send_input"}
 READ_ONLY_BASH_PREFIXES = (
-    "git status",
-    "git diff",
-    "git rev-parse",
-    "git log",
-    "git show",
-    "git branch",
-    "git ls-files",
-    "git -C ",
     "ls",
     "pwd",
     "cat ",
@@ -36,6 +29,7 @@ READ_ONLY_BASH_PREFIXES = (
     "ai-dlc deadlock-check",
     "ai-dlc clean-state-check",
 )
+READ_ONLY_GIT_SUBCOMMANDS = {"status", "diff", "rev-parse", "log", "show", "branch", "ls-files", "worktree"}
 
 
 def _find_workspace(start: Path) -> Path | None:
@@ -218,6 +212,83 @@ def _extract_agent_target(payload: dict[str, Any]) -> str:
     return ""
 
 
+def _find_codex_config(start: Path) -> Path | None:
+    for candidate in [start, *start.parents]:
+        config_path = candidate / ".codex" / "config.toml"
+        if config_path.exists():
+            return config_path
+    return None
+
+
+def _load_guardrails(start: Path) -> dict[str, Any]:
+    config_path = _find_codex_config(start)
+    if config_path is None:
+        return {}
+    try:
+        text = read_text(config_path)
+    except Exception:
+        return {}
+    in_guardrails = False
+    guardrails: dict[str, Any] = {}
+    for raw_line in text.splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            in_guardrails = line == "[guardrails]"
+            continue
+        if not in_guardrails or "=" not in line:
+            continue
+        key, value = [part.strip() for part in line.split("=", 1)]
+        if value.lower() == "true":
+            guardrails[key] = True
+        elif value.lower() == "false":
+            guardrails[key] = False
+        else:
+            guardrails[key] = value.strip("\"'")
+    return guardrails
+
+
+def _subagent_required_outside_workspace(start: Path) -> bool:
+    return bool(_load_guardrails(start).get("subagent_required"))
+
+
+def _is_read_only_bash(command: str) -> bool:
+    normalized = command.strip()
+    if not normalized:
+        return True
+    if normalized.startswith(READ_ONLY_BASH_PREFIXES):
+        return True
+    try:
+        tokens = shlex.split(normalized)
+    except ValueError:
+        return False
+    if not tokens or tokens[0] != "git":
+        return False
+    if len(tokens) >= 4 and tokens[1] == "-C":
+        subcommand = tokens[3]
+    elif len(tokens) >= 2:
+        subcommand = tokens[1]
+    else:
+        return False
+    if subcommand != "worktree":
+        return subcommand in READ_ONLY_GIT_SUBCOMMANDS
+    return len(tokens) >= 5 and tokens[4] == "list"
+
+
+def _is_git_commit(command: str) -> bool:
+    normalized = command.strip()
+    try:
+        tokens = shlex.split(normalized)
+    except ValueError:
+        return False
+    if not tokens or tokens[0] != "git":
+        return False
+    if len(tokens) >= 4 and tokens[1] == "-C":
+        return tokens[3] == "commit"
+    return len(tokens) >= 2 and tokens[1] == "commit"
+
+
 def _decision_allows_agent(workspace: Path, agent_name: str) -> bool:
     workspace_data = read_data(workspace / "workspace.yaml")
     path = workspace / workspace_data["paths"]["decisions"]
@@ -271,17 +342,31 @@ def _session_start_context(workspace: Path | None) -> str:
     return "\n".join(lines)
 
 
+def _non_workspace_context(cwd: Path) -> str:
+    if _subagent_required_outside_workspace(cwd):
+        return "Controller-only repo: 直接編集は禁止です。subagent に委譲してください。"
+    return "AI-DLC workspace ではありません。"
+
+
 def dispatch(cwd: Path) -> dict[str, Any]:
     payload = _load_payload()
     event_name = _extract_event_name(payload)
     workspace = _find_workspace(cwd)
     if event_name == "SessionStart":
-        return _hook_output("SessionStart", _session_start_context(workspace))
+        return _hook_output("SessionStart", _session_start_context(workspace) if workspace else _non_workspace_context(cwd))
     if event_name == "UserPromptSubmit":
-        return _hook_output("UserPromptSubmit", _session_start_context(workspace))
+        return _hook_output("UserPromptSubmit", _session_start_context(workspace) if workspace else _non_workspace_context(cwd))
     if event_name in {"PostToolUse", "Stop"}:
         return _noop()
     if workspace is None:
+        if _subagent_required_outside_workspace(cwd):
+            tool = _extract_tool(payload)
+            command = _extract_command(payload)
+            if tool in EDIT_TOOLS:
+                return _block_hook(event_name, "Controller-only: direct edits are blocked outside AI-DLC; delegate to a subagent.")
+            if tool == "Bash" and not _is_read_only_bash(command):
+                return _block_hook(event_name, "Controller-only: mutating Bash is blocked outside AI-DLC; delegate to a subagent.")
+            return _allow_hook(event_name, "controller-only non-workspace")
         return _allow_hook(event_name, "not an AI-DLC workspace")
 
     tool = _extract_tool(payload)
@@ -291,8 +376,8 @@ def dispatch(cwd: Path) -> dict[str, Any]:
 
     if tool == "Bash" and _is_write_like_bash(command) and os.environ.get("AI_DLC_ALLOW_CONTROLLER_EDIT") != "1":
         return _block_hook(event_name, "AI-DLC: write-like Bash commands are blocked; use apply_patch/Edit with a claimed lease.")
-    if tool == "Bash" and command and not command.startswith(READ_ONLY_BASH_PREFIXES):
-        if "ai-dlc root-export" not in command and "ai-dlc overlay-cleanup" not in command and "git commit" not in command:
+    if tool == "Bash" and command and not _is_read_only_bash(command):
+        if "ai-dlc root-export" not in command and "ai-dlc overlay-cleanup" not in command and not _is_git_commit(command):
             return _block_hook(event_name, "AI-DLC: unknown mutating Bash commands are denied by default in AI-DLC workspaces.")
 
     if tool in EDIT_TOOLS:
