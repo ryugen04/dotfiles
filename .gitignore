@@ -44,3 +44,8 @@
 **/.gemini/projects.json
 **/.gemini/trustedFolders.json
 !packages/gemini/.gemini/settings.json
+
+# Codex local planning artifacts
+.codex/artifacts/
+.codex/plans/
+plan.md
