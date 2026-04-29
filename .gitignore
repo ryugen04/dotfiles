@@ -49,3 +49,6 @@
 .codex/artifacts/
 .codex/plans/
 plan.md
+
+# Python cache
+**/__pycache__/

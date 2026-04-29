@@ -1,3 +1,8 @@
+---
+name: workflow-start
+description: AI-DLC workspace の開始または再開時に使う controller 向けワークフロー。
+---
+
 # workflow-start
 
 AI-DLC workspace の開始または再開で使う。

@@ -1,3 +1,8 @@
+---
+name: workflow-review
+description: review、evidence、handoff を進める AI-DLC controller 向けワークフロー。
+---
+
 # workflow-review
 
 実装ではなく review / evidence / handoff を進めるときに使う。

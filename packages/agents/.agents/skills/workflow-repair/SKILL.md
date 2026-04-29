@@ -1,3 +1,8 @@
+---
+name: workflow-repair
+description: overlay、.local、hook、git pointer などの local 問題を直す AI-DLC controller 向けワークフロー。
+---
+
 # workflow-repair
 
 overlay、`.local`、hook、git pointer などの local 問題を直すときに使う。

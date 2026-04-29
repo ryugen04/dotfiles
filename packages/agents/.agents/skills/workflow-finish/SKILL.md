@@ -1,3 +1,8 @@
+---
+name: workflow-finish
+description: AI-DLC セッションを終了可能な状態へまとめ、承認済みの Git 操作に進む controller 向けワークフロー。
+---
+
 # workflow-finish
 
 AI-DLC セッションを終了可能な状態へまとめ、承認済みの Git 操作だけを進めるときに使う。

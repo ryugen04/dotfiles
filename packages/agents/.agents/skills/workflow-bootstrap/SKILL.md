@@ -1,3 +1,8 @@
+---
+name: workflow-bootstrap
+description: bootstrap と local readiness が未完了のときに使う AI-DLC controller 向けワークフロー。
+---
+
 # workflow-bootstrap
 
 bootstrap と local readiness が未完了のときに使う。
