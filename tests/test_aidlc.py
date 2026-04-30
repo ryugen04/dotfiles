@@ -867,6 +867,32 @@ class AidlcTest(unittest.TestCase):
                 result = self.dispatch_with_payload(root, payload)
                 self.assertEqual(result, {}, f"Expected allow for: {cmd}")
 
+    def test_subagent_required_false_overrides_project_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "ai-dlc").mkdir()
+            (root / "ai-dlc" / "project-metadata.yaml").write_text("id: test\n", encoding="utf-8")
+            (root / ".codex").mkdir()
+            (root / ".codex" / "config.toml").write_text("[guardrails]\nsubagent_required = false\n", encoding="utf-8")
+
+            mutating_bash = self.dispatch_with_payload(
+                root,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "mkdir -p scratch"}},
+            )
+            self.assertEqual(mutating_bash, {}, "subagent_required=false should allow mutating bash")
+
+            edit = self.dispatch_with_payload(
+                root,
+                {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": str(root / "README.md")}},
+            )
+            self.assertEqual(edit, {}, "subagent_required=false should allow edits")
+
+            apply_patch = self.dispatch_with_payload(
+                root,
+                {"hook_event_name": "PreToolUse", "tool_name": "apply_patch", "tool_input": {"cmd": "*** Update File: ai-dlc/docs/report.md\nfoo"}},
+            )
+            self.assertEqual(apply_patch, {}, "subagent_required=false should allow apply_patch")
+
 
 class AidlcCliInstallTest(unittest.TestCase):
     def test_fake_home_install_and_doctor(self) -> None:

@@ -167,6 +167,10 @@ def _extract_paths(payload: dict[str, Any], workspace: Path) -> list[str]:
     elif isinstance(tool_input, str):
         raw_paths.extend(_extract_paths_from_patch(tool_input))
 
+    command_text = _extract_command(payload)
+    if command_text:
+        raw_paths.extend(_extract_paths_from_patch(command_text))
+
     result: list[str] = []
     for raw_path in raw_paths:
         relative = _relativize(workspace, raw_path)
@@ -301,7 +305,10 @@ def _load_guardrails(start: Path) -> dict[str, Any]:
 
 
 def _subagent_required_outside_workspace(start: Path) -> bool:
-    return bool(_load_guardrails(start).get("subagent_required") or _find_project_root(start) is not None)
+    guardrails = _load_guardrails(start)
+    if "subagent_required" in guardrails:
+        return bool(guardrails["subagent_required"])
+    return _find_project_root(start) is not None
 
 
 def _bootstrap_extra_commands(start: Path) -> list[str]:
