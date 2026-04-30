@@ -248,9 +248,11 @@ def validate_overlay(root: Path) -> list[str]:
             errors.append(f"{repo['name']}: tracked as gitlink 160000")
         if repo.get("recovery", {}).get("restore_required"):
             errors.append(f"{repo['name']}: recovery requires gitfile restore")
-    if not (root / ".git" / "hooks" / "pre-commit").exists():
+    from .git_hooks import _resolve_git_hooks_dir
+    root_hooks = _resolve_git_hooks_dir(root)
+    if not (root_hooks / "pre-commit").exists():
         errors.append("root pre-commit hook missing")
-    if not (root / ".git" / "hooks" / "pre-push").exists():
+    if not (root_hooks / "pre-push").exists():
         errors.append("root pre-push hook missing")
     return errors
 

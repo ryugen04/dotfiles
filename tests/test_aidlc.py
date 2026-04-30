@@ -398,9 +398,9 @@ class AidlcTest(unittest.TestCase):
             root.mkdir()
             init_project(root, repo_paths={"web": "/tmp/web"}, repo_urls={"web": "git@example.com:web.git"})
 
-            result = self.dispatch_with_payload(root, {"hook_event_name": "UserPromptSubmit"})
+            result = self.dispatch_with_payload(root, {"hook_event_name": "SessionStart"})
             output = result["hookSpecificOutput"]
-            self.assertEqual(output["hookEventName"], "UserPromptSubmit")
+            self.assertEqual(output["hookEventName"], "SessionStart")
             self.assertIn("AI-DLC root-system project", output["additionalContext"])
             self.assertNotIn("AI-DLC workspace ではありません", output["additionalContext"])
 
@@ -838,6 +838,34 @@ class AidlcTest(unittest.TestCase):
             self.assertIn("discard/restore is blocked", blocked_restore.stderr)
             allowed_status = run([str(shim_dir / "git"), "status", "--short"], root)
             self.assertIn("web/README.md", allowed_status.stdout)
+
+
+    def test_install_project_hooks_works_in_git_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            main_repo = tmp_path / "main-repo"
+            self.init_repo(main_repo, "main\n")
+            worktree_path = tmp_path / "worktree"
+            run(["git", "worktree", "add", str(worktree_path), "-b", "wt-branch"], main_repo)
+            git_entry = worktree_path / ".git"
+            self.assertTrue(git_entry.is_file(), ".git should be a file in a worktree")
+            install_project_hooks(worktree_path)
+            git_dir = run(["git", "rev-parse", "--git-dir"], worktree_path).stdout.strip()
+            resolved = (worktree_path / git_dir).resolve() if not os.path.isabs(git_dir) else Path(git_dir)
+            self.assertTrue((resolved / "hooks" / "pre-commit").exists())
+            self.assertTrue((resolved / "hooks" / "pre-push").exists())
+
+    def test_hook_allows_overlay_init_and_bootstrap_as_bootstrap_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "ai-dlc").mkdir()
+            (root / "ai-dlc" / "project-metadata.yaml").write_text("id: test\n", encoding="utf-8")
+            (root / ".codex").mkdir()
+            (root / ".codex" / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+            for cmd in ("ai-dlc overlay-init", "ai-dlc overlay-repair", "ai-dlc bootstrap"):
+                payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}}
+                result = self.dispatch_with_payload(root, payload)
+                self.assertEqual(result, {}, f"Expected allow for: {cmd}")
 
 
 class AidlcCliInstallTest(unittest.TestCase):
