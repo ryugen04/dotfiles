@@ -244,7 +244,7 @@ def validate_overlay(root: Path) -> list[str]:
         except subprocess.CalledProcessError:
             errors.append(f"{repo['name']}: git rev-parse failed")
         index_rows = git(["ls-files", "-s", "--", repo["path"]], root).splitlines()
-        if any(row.startswith("160000 ") for row in index_rows):
+        if any(row.startswith("160000 ") and row.rsplit("\t", 1)[-1] == repo["path"] for row in index_rows):
             errors.append(f"{repo['name']}: tracked as gitlink 160000")
         if repo.get("recovery", {}).get("restore_required"):
             errors.append(f"{repo['name']}: recovery requires gitfile restore")

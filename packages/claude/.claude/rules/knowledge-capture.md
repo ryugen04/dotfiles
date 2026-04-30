@@ -42,6 +42,8 @@ run_in_background: true
 | **ワークフロー手順** | `.claude/docs/guides/workflows/` | Git操作、DB調査手順 |
 | **プロジェクト固有知見** | `MEMORY.md` | エージェント使い分け、命名規則 |
 | **ドメイン知識** | `.claude/docs/reference/domain/` | ビジネスロジック仕様・業務フロー |
+| **サービス障害の対処手順** | `sango.yaml` の該当サービス `runbook:` | 起動エラー、通信エラー、認証エラー |
+| **環境チェック項目** | `sango.yaml` の `doctor.checks` | 新しい依存ツール、Docker設定 |
 | **セッション内知見** | `.claude/work/learnings/` | 調査中間成果物、試行錯誤ログ |
 | **一時的メモ** | `.claude/work/` | 調査中間成果物 |
 
@@ -88,6 +90,8 @@ run_in_background: true
 | DB操作 | `destructive-db-operations.md`, `multi-database.md` |
 | スキーマ変更 | `schemafile-integrity.md` |
 | ビルド | `build-error-handling.md` |
+| サービス障害 | `sango.yaml` の該当サービス `runbook:` / `troubleshoot:` |
+| 環境依存 | `sango.yaml` の `doctor.checks` |
 | 外部API連携 | 各プロジェクトの `rules/` 該当ファイル |
 
 ## 記録しない場合（例外）
@@ -122,4 +126,4 @@ run_in_background: true
 
 ---
 
-**最終更新**: 2026-03-20
+**最終更新**: 2026-05-01

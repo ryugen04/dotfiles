@@ -20,6 +20,27 @@
 - `ai-dlc/executions/**` と `ai-dlc/scratch/**` は commit しない。
 - `git reset --hard`、`git clean`、`git push`、`git worktree remove` は明示承認なしで実行しない。
 
+## sango CLI 活用（サービス障害・環境問題の自律対応）
+
+sango ワークスペース内で作業する場合、サービス障害や環境問題には以下の手順で対応する。
+
+### エラー遭遇時の診断手順
+
+推測で修正を始める前に、sango の診断機能を順に実行する:
+
+1. `sango runbook search "<エラーメッセージのキーワード>"` — 既知の問題と対処手順を検索
+2. `sango troubleshoot <サービス名>` — サービス固有の診断チェックを実行
+3. `sango doctor` — 環境全体の依存チェック
+4. `sango status` — 全サービスの起動状態・ポート・ヘルスを一覧
+
+### 知見の蓄積
+
+試行錯誤して解決したサービス障害は `sango.yaml` に記録する:
+
+- 繰り返し起きうるエラー → 該当サービスの `runbook:` にエントリ追加
+- 環境依存の新チェック項目 → `doctor.checks` にエントリ追加
+- サービス固有の診断コマンド → 該当サービスの `troubleshoot:` にエントリ追加
+
 ## Verification Discipline
 
 - hook、CLI、config の不具合は推測で直さない。まず「どの実装が」「どの設定を」「どの schema で」読んでいるかを確認する。

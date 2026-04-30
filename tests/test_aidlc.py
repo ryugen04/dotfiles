@@ -161,6 +161,8 @@ class AidlcTest(unittest.TestCase):
             self.assertTrue((root / ".codex" / "config.toml").exists())
             self.assertTrue((root / "ai-dlc" / ".gitkeep").exists())
             self.assertTrue((root / "ai-dlc" / "project-metadata.yaml").exists())
+            config = (root / ".codex" / "config.toml").read_text(encoding="utf-8")
+            self.assertIn("subagent_required = true", config)
 
     def test_init_project_preserves_existing_codex_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -242,6 +244,16 @@ class AidlcTest(unittest.TestCase):
             )
             errors = validate_overlay(root)
             self.assertTrue(any("repo path missing" in error for error in errors))
+
+    def test_validate_overlay_allows_nested_gitlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            nested_sha = run(["git", "-C", "web", "rev-parse", "HEAD"], root).stdout.strip()
+
+            run(["git", "update-index", "--add", "--cacheinfo", "160000", nested_sha, "web/vendor-api"], root)
+
+            errors = validate_overlay(root)
+            self.assertNotIn("web: tracked as gitlink 160000", errors)
 
     def test_hook_dispatch_blocks_without_claim_and_allows_claimed_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -380,6 +392,25 @@ class AidlcTest(unittest.TestCase):
             ctx = result["hookSpecificOutput"]["additionalContext"]
             self.assertTrue(ctx == "" or ctx.startswith("Next:"))
 
+    def test_hook_dispatch_root_system_project_context_is_explicit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "root-system"
+            root.mkdir()
+            init_project(root, repo_paths={"web": "/tmp/web"}, repo_urls={"web": "git@example.com:web.git"})
+
+            result = self.dispatch_with_payload(root, {"hook_event_name": "UserPromptSubmit"})
+            output = result["hookSpecificOutput"]
+            self.assertEqual(output["hookEventName"], "UserPromptSubmit")
+            self.assertIn("AI-DLC root-system project", output["additionalContext"])
+            self.assertNotIn("AI-DLC workspace ではありません", output["additionalContext"])
+
+            blocked_bash = self.dispatch_with_payload(
+                root,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "mkdir -p scratch"}},
+            )
+            self.assertEqual(blocked_bash["decision"], "block")
+            self.assertIn("mutating Bash", blocked_bash["reason"])
+
     def test_hook_dispatch_non_workspace_pret_tool_and_stop_are_schema_safe(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             outside = Path(tmp)
@@ -423,6 +454,24 @@ class AidlcTest(unittest.TestCase):
             self.assertEqual(blocked_edit["decision"], "block")
             self.assertIn("delegate to a subagent", blocked_edit["reason"])
 
+            allowed_config_edit = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": str(repo / ".codex" / "config.toml")}},
+            )
+            self.assertEqual(allowed_config_edit, {})
+
+            allowed_agents_edit = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": str(repo / "AGENTS.md")}},
+            )
+            self.assertEqual(allowed_agents_edit, {})
+
+            allowed_aidlc_edit = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": str(repo / "ai-dlc" / "lib" / "aidlc" / "hooks.py")}},
+            )
+            self.assertEqual(allowed_aidlc_edit, {})
+
             blocked_bash = self.dispatch_with_payload(
                 repo,
                 {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "mkdir -p scratch"}},
@@ -459,6 +508,58 @@ class AidlcTest(unittest.TestCase):
                         {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": command}},
                     )
                     self.assertEqual(allowed, {})
+
+    def test_hook_dispatch_allows_read_only_gh_commands_outside_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            codex_dir = repo / ".codex"
+            codex_dir.mkdir()
+            (codex_dir / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            read_only_commands = [
+                "gh pr view 123 --repo owner/repo --json title",
+                "gh pr list --repo owner/repo",
+                "gh pr diff 123",
+                "gh pr checks 123",
+                "gh pr status",
+                "gh issue view 456",
+                "gh issue list --repo owner/repo",
+                "gh issue status",
+                "gh run view 789",
+                "gh run list",
+                "gh release view v1.0",
+                "gh release list",
+                "gh repo view owner/repo",
+                "gh api repos/owner/repo/pulls/123/comments",
+            ]
+            for command in read_only_commands:
+                with self.subTest(command=command):
+                    allowed = self.dispatch_with_payload(
+                        repo,
+                        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": command}},
+                    )
+                    self.assertEqual(allowed, {}, f"Expected allow for: {command}")
+
+            mutating_commands = [
+                "gh pr merge 123",
+                "gh pr create --title test --body test",
+                "gh pr comment 123 --body test",
+                "gh pr review 123 --approve",
+                "gh pr close 123",
+                "gh pr checkout 123",
+                "gh issue create --title test",
+                "gh issue close 456",
+                "gh repo create test-repo",
+                "gh release create v2.0",
+            ]
+            for command in mutating_commands:
+                with self.subTest(command=command):
+                    blocked = self.dispatch_with_payload(
+                        repo,
+                        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": command}},
+                    )
+                    self.assertEqual(blocked["decision"], "block", f"Expected block for: {command}")
+                    self.assertIn("mutating Bash", blocked["reason"])
 
     def test_hook_dispatch_returns_block_json_for_mutating_non_workspace_bash(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
