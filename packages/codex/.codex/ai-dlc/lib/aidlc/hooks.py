@@ -11,7 +11,7 @@ from typing import Any
 from .io import read_data, read_frontmatter, read_text
 from .state import assignment_root, bootstrap_gate_errors, lease_path_errors, load_assignment, load_lease
 
-DESTRUCTIVE_GIT = ["git reset --hard", "git clean", "git push", "git merge", "git worktree remove", "rm -rf"]
+DESTRUCTIVE_GIT = ["git reset --hard", "git clean", "git push", "git merge", "git worktree remove", "rm -rf", "sango worktree remove"]
 EDIT_TOOLS = {"apply_patch", "Edit", "Write", "MultiEdit"}
 CONTROLLER_ALLOWED_PATHS = ["ai-dlc/plans/**", "ai-dlc/work-items/**", "ai-dlc/decisions/**", "ai-dlc/handoff/**", "ai-dlc/quality/**"]
 WRITE_LIKE_BASH_PATTERNS = ["sed -i", "perl -pi", "python -c", "python3 -c", "ruby -pi", "tee ", " cat > ", " > ", " >> "]
@@ -31,6 +31,10 @@ BOOTSTRAP_AIDLC_COMMANDS = {
     ("ai-dlc", "init-project"),
     ("ai-dlc", "init-workspace"),
     ("ai-dlc", "install-project-hooks"),
+    ("sango", "worktree"),
+    ("sango", "status"),
+    ("sango", "doctor"),
+    ("sango", "bootstrap"),
 }
 READ_ONLY_GIT_SUBCOMMANDS = {"status", "diff", "rev-parse", "log", "show", "branch", "ls-files", "worktree"}
 DISALLOWED_SHELL_FRAGMENTS = ("`", "$(", "\n", "\r", ";", "&&", "||")
@@ -280,6 +284,13 @@ def _bootstrap_extra_commands(start: Path) -> list[str]:
     return []
 
 
+def _bootstrap_edit_paths(start: Path) -> list[str]:
+    value = _load_guardrails(start).get("bootstrap_edit_paths")
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str) and item.strip()]
+    return []
+
+
 def _is_read_only_sed(tokens: list[str]) -> bool:
     quiet = False
     for token in tokens[1:]:
@@ -357,6 +368,8 @@ def _is_allowed_bootstrap_command(command: str, cwd: Path) -> bool:
         return False
     if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
         return False
+    if len(tokens) >= 3 and tokens[0] == "sango" and tokens[1] == "worktree":
+        return tokens[2] in {"create", "list", "status"}
     if len(tokens) >= 2 and (tokens[0], tokens[1]) in BOOTSTRAP_AIDLC_COMMANDS:
         return True
     return normalized in _bootstrap_extra_commands(cwd)
@@ -428,6 +441,24 @@ def _session_start_context(workspace: Path | None) -> str:
     return "\n".join(lines)
 
 
+def _prompt_delta_context(workspace: Path | None) -> str:
+    if workspace is None:
+        return ""
+
+    workspace_data = read_data(workspace / "workspace.yaml")
+    plan_meta, _ = read_frontmatter(workspace / workspace_data["paths"]["plan"])
+    current = plan_meta.get("current") or {}
+    if not isinstance(current, dict):
+        return ""
+
+    parts: list[str] = []
+    if current.get("active_work_item"):
+        parts.append(f"Active: {current['active_work_item']}")
+    if current.get("next_agent"):
+        parts.append(f"Next: {current['next_agent']}")
+    return " / ".join(parts)
+
+
 def _non_workspace_context(cwd: Path) -> str:
     if _subagent_required_outside_workspace(cwd):
         extras = _bootstrap_extra_commands(cwd)
@@ -450,7 +481,7 @@ def dispatch(cwd: Path) -> dict[str, Any]:
     if event_name == "SessionStart":
         return _hook_output("SessionStart", _session_start_context(workspace) if workspace else _non_workspace_context(cwd))
     if event_name == "UserPromptSubmit":
-        return _hook_output("UserPromptSubmit", _session_start_context(workspace) if workspace else _non_workspace_context(cwd))
+        return _hook_output("UserPromptSubmit", _prompt_delta_context(workspace))
     if event_name in {"PostToolUse", "Stop"}:
         return _noop()
     if workspace is None:
@@ -458,6 +489,9 @@ def dispatch(cwd: Path) -> dict[str, Any]:
             tool = _extract_tool(payload)
             command = _extract_command(payload)
             if tool in EDIT_TOOLS:
+                rel_paths = _extract_paths(payload, cwd)
+                if rel_paths and _paths_match(rel_paths, _bootstrap_edit_paths(cwd)):
+                    return _allow_hook(event_name, "controller bootstrap edit path")
                 return _block_hook(event_name, "Controller-only: direct edits are blocked outside AI-DLC; delegate to a subagent.")
             if tool == "Bash" and not _is_read_only_bash(command) and not _is_allowed_bootstrap_command(command, cwd):
                 return _block_hook(event_name, "Controller-only: mutating Bash is blocked outside AI-DLC; delegate to a subagent.")
@@ -472,7 +506,7 @@ def dispatch(cwd: Path) -> dict[str, Any]:
     if tool == "Bash" and _is_write_like_bash(command) and os.environ.get("AI_DLC_ALLOW_CONTROLLER_EDIT") != "1":
         return _block_hook(event_name, "AI-DLC: write-like Bash commands are blocked; use apply_patch/Edit with a claimed lease.")
     if tool == "Bash" and command and not _is_read_only_bash(command):
-        if "ai-dlc root-export" not in command and "ai-dlc overlay-cleanup" not in command and not _is_git_commit(command):
+        if "ai-dlc root-export" not in command and "ai-dlc overlay-cleanup" not in command and not _is_git_commit(command) and not _is_allowed_bootstrap_command(command, workspace):
             return _block_hook(event_name, "AI-DLC: unknown mutating Bash commands are denied by default in AI-DLC workspaces.")
 
     if tool in EDIT_TOOLS:

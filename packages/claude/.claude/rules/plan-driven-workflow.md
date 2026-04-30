@@ -12,6 +12,9 @@ NO PLAN WITHOUT WORKFLOW DEFINITION
 5. **ユーザーレビュー**: ExitPlanMode で承認を得る
 6. **実装開始**: Workflowに沿って実行
 
+> AI-DLC `docs-then-impl` / `autonomous-impl` モードでは、ExitPlanMode 承認 = impl 承認とみなす。
+> 承認後は commit/push 直前まで中間確認なし。scope を超えた変更が必要になった時のみ自発停止する。
+
 ## プランファイル必須項目
 
 | 項目 | 内容 |

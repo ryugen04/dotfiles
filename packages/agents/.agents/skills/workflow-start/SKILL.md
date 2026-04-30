@@ -35,3 +35,23 @@ AI-DLC workspace の開始または再開で使う。
 - evaluator は実装した repo worker と論理的に独立させる。
 - `dlc_git_operator` はここでは使わない。commit、push、root-export、overlay-cleanup は `workflow-finish` と明示承認が前提。
 - 既定順序の skip または reorder は `ai-dlc/decisions/<issue>.md` に根拠を残した場合だけ許可する。
+
+## Mode Classification
+
+着手前にユーザー指示文と現在地から、以下 4 モードを判定する。判定結果は
+`${workspace_or_root}/ai-dlc/decisions/<issue>.md` の frontmatter に `mode:` で記録する。
+
+- `docs-only-pure`: 調査専用。`ai-dlc/docs/**` へ出力し、worktree は作らない。
+- `docs-only-with-future-impl`: 調査中心 + 将来実装あり。plan 作成後に継続確認。
+- `docs-then-impl`: ExitPlanMode 承認後に実装まで連続実行。
+- `autonomous-impl`: ExitPlanMode 承認後に commit 直前まで無停止。
+
+判定後の挙動:
+- `docs-only-pure`: `dlc_docs_writer` を起動し Required Sequence は実行しない。
+- `docs-only-with-future-impl`: workflow-bootstrap 経由で worktree 作成後に plan を作成。
+- `docs-then-impl` / `autonomous-impl`: workflow-bootstrap → Required Sequence を連続実行。
+
+- ExitPlanMode 後の中間ユーザー確認は行わない。`docs-then-impl` と `autonomous-impl` では plan 承認 = impl 承認とみなす。
+- 例外として `dlc_git_operator` の起動（commit / push / root-export / overlay-cleanup）は明示承認必須。
+- plan に書いていないファイルを 3 つ以上変更しそうになったら自発停止し、ユーザーに状況報告する。
+- `docs-only-pure` モードでは sango worktree を作らず、root-system の `ai-dlc/docs/**` に直接書く。

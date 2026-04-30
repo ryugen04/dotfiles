@@ -29,3 +29,4 @@ AI-DLC セッションを終了可能な状態へまとめ、承認済みの Git
 - verifier と evaluator を飛ばして finish しない。
 - `dlc_git_operator` 以外の role は finish-stage Git 操作を行わない。
 - cleanup は approval boundary の外では行わない。
+- `docs-then-impl` / `autonomous-impl` モードでは、dlc_git_operator 起動前のユーザー承認のみが必須。実装フェーズの中間確認は行わない。
