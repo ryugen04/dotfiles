@@ -30,3 +30,10 @@ bootstrap と local readiness が未完了のときに使う。
 - `dlc_evaluator` は通常不要だが、bootstrap 判定に独立レビューが必要なときだけ使う。
 - `dlc_handoff_writer` は blocked または引き継ぎ記録が必要なときだけ使う。
 - `dlc_git_operator` は bootstrap では使わない。
+
+## Sango + AI-DLC Rules
+
+- `sango worktree create / list / status` は controller / dlc_initializer 双方が直接実行できる。
+- `sango worktree remove` は destructive 扱い。明示承認のもと dlc_git_operator または手動操作で実行する。
+
+> `docs-then-impl` / `autonomous-impl` モードでは、ExitPlanMode 承認後は step を連続実行し、`blocked` / `needs_decision` 時のみ差し戻す。

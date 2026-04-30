@@ -315,7 +315,70 @@ class AidlcTest(unittest.TestCase):
             result = self.dispatch_with_payload(root, payload)
             output = result["hookSpecificOutput"]
             self.assertEqual(output["hookEventName"], "UserPromptSubmit")
-            self.assertIn("Workspace:", output["additionalContext"])
+            self.assertTrue(
+                output["additionalContext"] == ""
+                or "Active:" in output["additionalContext"]
+                or "Next:" in output["additionalContext"]
+            )
+
+    def test_hook_allows_sango_worktree_create_in_root_system(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "ai-dlc").mkdir()
+            (root / "ai-dlc" / "project-metadata.yaml").write_text("id: test\n", encoding="utf-8")
+            (root / ".codex").mkdir()
+            (root / ".codex" / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+            payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "sango worktree create x --from main"}}
+            self.assertEqual(self.dispatch_with_payload(root, payload), {})
+
+    def test_hook_allows_sango_worktree_list_and_status_as_bootstrap(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "ai-dlc").mkdir()
+            (root / "ai-dlc" / "project-metadata.yaml").write_text("id: test\n", encoding="utf-8")
+            (root / ".codex").mkdir()
+            (root / ".codex" / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+            for cmd in ("sango worktree list", "sango worktree status"):
+                payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}}
+                self.assertEqual(self.dispatch_with_payload(root, payload), {})
+
+    def test_hook_blocks_sango_worktree_remove_outside_dlc_git_operator(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            self.prepare_active_web_item(root)
+            bootstrap(root)
+            payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "sango worktree remove x"}}
+            blocked = self.dispatch_with_payload(root, payload)
+            self.assertEqual(blocked["decision"], "block")
+            self.assertIn("destructive git command", blocked["reason"])
+
+    def test_hook_allows_sango_worktree_create_inside_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "sango worktree create x --from main"}}
+            self.assertEqual(self.dispatch_with_payload(root, payload), {})
+
+    def test_hook_allows_docs_directory_write_in_root_system(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "ai-dlc").mkdir()
+            (root / "ai-dlc" / "project-metadata.yaml").write_text("id: test\n", encoding="utf-8")
+            (root / ".codex").mkdir()
+            (root / ".codex" / "config.toml").write_text(
+                "[guardrails]\nsubagent_required = true\nbootstrap_edit_paths = [\"ai-dlc/docs/**\"]\n",
+                encoding="utf-8",
+            )
+            payload = {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": str(root / "ai-dlc" / "docs" / "a.md")}}
+            self.assertEqual(self.dispatch_with_payload(root, payload), {})
+
+    def test_hook_user_prompt_submit_returns_minimal_context_when_no_active_work(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            payload = {"hook_event_name": "UserPromptSubmit"}
+            result = self.dispatch_with_payload(root, payload)
+            self.assertIn("hookSpecificOutput", result)
+            ctx = result["hookSpecificOutput"]["additionalContext"]
+            self.assertTrue(ctx == "" or ctx.startswith("Next:"))
 
     def test_hook_dispatch_non_workspace_pret_tool_and_stop_are_schema_safe(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

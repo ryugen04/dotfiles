@@ -28,3 +28,12 @@
 - エラーメッセージがある場合は、その文字列を実装・ログ・実バイナリ内で検索し、受け手の期待形を特定してから修正する。
 - schema 修正時は、送信側だけでなく受信側の期待 key と許容値を確認する。
 - 修正後は、最小再現コマンド、関連テスト、実運用パスの 3 点で確認する。
+
+## Mode Policy
+
+controller はユーザー指示受領時に以下の 4 モードを `workflow-classify` で判定する:
+
+- `docs-only-pure`: 調査結果を root-system の ai-dlc/docs/** に書く。worktree を作らない。`dlc_docs_writer` を使う。
+- `docs-only-with-future-impl`: sango worktree を作って ai-dlc/plans/** に出力。impl 続行時にユーザー確認。
+- `docs-then-impl`: ExitPlanMode 承認 = impl 承認。commit 直前まで無停止。
+- `autonomous-impl`: ExitPlanMode 後は commit/push 確認のみ。

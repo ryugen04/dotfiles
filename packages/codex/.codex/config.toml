@@ -3,7 +3,6 @@
 
 sandbox_mode = "workspace-write"
 approval_policy = "on-request"
-approvals_reviewer = "guardian_subagent"
 
 [features]
 codex_hooks = true
@@ -20,6 +19,11 @@ sandbox_mode = "read-only"
 
 [profiles.fast]
 model_reasoning_effort = "low"
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+
+[profiles.autonomous]
+model_reasoning_effort = "high"
 approval_policy = "never"
 sandbox_mode = "workspace-write"
 
@@ -43,4 +47,14 @@ bootstrap_extra_commands = [
   "./install.sh codex",
   "./install.sh agents",
   "./install.sh codex agents",
+  "sango doctor",
+  "sango status",
+]
+bootstrap_edit_paths = [
+  ".codex/config.toml",
+  "AGENTS.md",
+  "ai-dlc/**",
+  "ai-dlc/docs/**",
+  "ai-dlc/plans/**",
+  "ai-dlc/decisions/**",
 ]
