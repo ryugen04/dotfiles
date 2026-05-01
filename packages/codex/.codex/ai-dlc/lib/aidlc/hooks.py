@@ -446,6 +446,82 @@ def _is_allowed_bootstrap_command(command: str, cwd: Path) -> bool:
     return normalized in _bootstrap_extra_commands(cwd)
 
 
+def _cwd_is_within(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _extract_effective_cwd(payload: dict[str, Any], fallback: Path) -> Path:
+    for key in ["workdir", "cwd", "working_dir"]:
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return Path(value)
+
+    tool_input = payload.get("tool_input") or payload.get("input") or {}
+    if isinstance(tool_input, dict):
+        for key in ["workdir", "cwd", "working_dir"]:
+            value = tool_input.get(key)
+            if isinstance(value, str) and value:
+                return Path(value)
+
+    return fallback
+
+
+def _is_allowed_verifier_gate_command(workspace: Path, cwd: Path, command: str) -> bool:
+    normalized = command.strip()
+    if not normalized:
+        return False
+    if any(fragment in normalized for fragment in DISALLOWED_SHELL_FRAGMENTS):
+        return False
+    try:
+        tokens = shlex.split(normalized)
+    except ValueError:
+        return False
+    if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
+        return False
+
+    session_id = os.environ.get("CODEX_SESSION_ID")
+    lease = load_lease(workspace, session_id)
+    if lease is None:
+        return False
+    if lease.get("role") not in {"dlc_verifier", "dlc_repo_worker"}:
+        return False
+
+    assignment = load_assignment(workspace, lease["assignment_id"])
+    if assignment.get("status") != "claimed":
+        return False
+
+    active_item_id = lease.get("active_item")
+    if not active_item_id:
+        return False
+
+    work_items_data = read_data(workspace / read_data(workspace / "workspace.yaml")["paths"]["work_items"])
+    target_item = next((item for item in work_items_data["items"] if item["id"] == active_item_id), None)
+    if target_item is None:
+        return False
+
+    verifier_gate = target_item.get("verifier_gate")
+    if not verifier_gate:
+        return False
+
+    for req in verifier_gate.get("required_commands", []):
+        req_cwd = req.get("cwd", ".")
+        expected_cwd = workspace / req_cwd if req_cwd != "." else workspace
+        if not (_cwd_is_within(cwd, expected_cwd) or cwd.resolve() == workspace.resolve()):
+            continue
+        try:
+            req_tokens = shlex.split(req.get("command", ""))
+        except ValueError:
+            continue
+        if tokens == req_tokens:
+            return True
+
+    return False
+
+
 def _is_git_commit(command: str) -> bool:
     normalized = command.strip()
     try:
@@ -586,6 +662,8 @@ def dispatch(cwd: Path) -> dict[str, Any]:
     if tool == "Bash" and _is_write_like_bash(command) and os.environ.get("AI_DLC_ALLOW_CONTROLLER_EDIT") != "1":
         return _block_hook(event_name, "AI-DLC: write-like Bash commands are blocked; use apply_patch/Edit with a claimed lease.")
     if tool == "Bash" and command and not _is_read_only_bash(command):
+        if _is_allowed_verifier_gate_command(workspace, _extract_effective_cwd(payload, cwd), command):
+            return _allow_hook(event_name, "AI-DLC: allowed verifier gate command from work-items")
         if "ai-dlc root-export" not in command and "ai-dlc overlay-cleanup" not in command and not _is_git_commit(command) and not _is_allowed_bootstrap_command(command, workspace):
             return _block_hook(event_name, "AI-DLC: unknown mutating Bash commands are denied by default in AI-DLC workspaces.")
 
