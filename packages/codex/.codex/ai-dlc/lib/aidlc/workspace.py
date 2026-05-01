@@ -121,6 +121,9 @@ shell_snapshot = true
 [sandbox_workspace_write]
 writable_roots = ["../.local"]
 network_access = false
+
+[guardrails]
+subagent_required = true
 """
 
 

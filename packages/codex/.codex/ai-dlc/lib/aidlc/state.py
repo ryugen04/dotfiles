@@ -241,13 +241,29 @@ def load_assignment(root: Path, assignment_id: str) -> dict[str, Any]:
 
 
 def load_lease(root: Path, session_id: str | None) -> dict[str, Any] | None:
-    if not session_id:
-        return None
     base = assignment_root(root)
-    path = base / "leases" / f"{session_id}.json"
-    if not path.exists():
+    if session_id:
+        path = base / "leases" / f"{session_id}.json"
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+    # session_id が未設定または一致しない場合、有効な claimed lease を探す
+    leases_dir = base / "leases"
+    if not leases_dir.exists():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    candidates: list[dict[str, Any]] = []
+    for lease_path in leases_dir.glob("*.json"):
+        try:
+            data = json.loads(lease_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if data.get("status") != "claimed":
+            continue
+        if _lease_expired(data):
+            continue
+        candidates.append(data)
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
 
 
 def _lock_path(base: Path, repo: str) -> Path:

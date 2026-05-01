@@ -220,8 +220,24 @@ def write_executable(path: Path, content: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
+def _resolve_git_hooks_dir(repo: Path) -> Path:
+    git_path = repo / ".git"
+    if git_path.is_file():
+        result = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--git-dir"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        resolved = result.stdout.strip()
+        if os.path.isabs(resolved):
+            return Path(resolved) / "hooks"
+        return (repo / resolved).resolve() / "hooks"
+    return git_path / "hooks"
+
+
 def install_project_hooks(root: Path, child_repos: list[Path] | None = None) -> None:
-    hooks_dir = ensure_dir(root / ".git" / "hooks")
+    hooks_dir = ensure_dir(_resolve_git_hooks_dir(root))
     write_executable(hooks_dir / "pre-commit", ROOT_PRE_COMMIT)
     write_executable(hooks_dir / "pre-push", ROOT_PRE_PUSH)
     for repo in child_repos or []:

@@ -244,13 +244,15 @@ def validate_overlay(root: Path) -> list[str]:
         except subprocess.CalledProcessError:
             errors.append(f"{repo['name']}: git rev-parse failed")
         index_rows = git(["ls-files", "-s", "--", repo["path"]], root).splitlines()
-        if any(row.startswith("160000 ") for row in index_rows):
+        if any(row.startswith("160000 ") and row.rsplit("\t", 1)[-1] == repo["path"] for row in index_rows):
             errors.append(f"{repo['name']}: tracked as gitlink 160000")
         if repo.get("recovery", {}).get("restore_required"):
             errors.append(f"{repo['name']}: recovery requires gitfile restore")
-    if not (root / ".git" / "hooks" / "pre-commit").exists():
+    from .git_hooks import _resolve_git_hooks_dir
+    root_hooks = _resolve_git_hooks_dir(root)
+    if not (root_hooks / "pre-commit").exists():
         errors.append("root pre-commit hook missing")
-    if not (root / ".git" / "hooks" / "pre-push").exists():
+    if not (root_hooks / "pre-push").exists():
         errors.append("root pre-push hook missing")
     return errors
 

@@ -14,6 +14,7 @@ from .state import assignment_root, bootstrap_gate_errors, lease_path_errors, lo
 DESTRUCTIVE_GIT = ["git reset --hard", "git clean", "git push", "git merge", "git worktree remove", "rm -rf", "sango worktree remove"]
 EDIT_TOOLS = {"apply_patch", "Edit", "Write", "MultiEdit"}
 CONTROLLER_ALLOWED_PATHS = ["ai-dlc/plans/**", "ai-dlc/work-items/**", "ai-dlc/decisions/**", "ai-dlc/handoff/**", "ai-dlc/quality/**"]
+DEFAULT_BOOTSTRAP_EDIT_PATHS = [".codex/config.toml", "AGENTS.md", "ai-dlc/**"]
 WRITE_LIKE_BASH_PATTERNS = ["sed -i", "perl -pi", "python -c", "python3 -c", "ruby -pi", "tee ", " cat > ", " > ", " >> "]
 AGENT_TOOLS = {"spawn_agent", "send_input"}
 READ_ONLY_BASH_COMMANDS = {"ls", "pwd", "cat", "find", "rg", "sed", "head", "tail", "wc", "sort", "uniq", "cut"}
@@ -31,12 +32,31 @@ BOOTSTRAP_AIDLC_COMMANDS = {
     ("ai-dlc", "init-project"),
     ("ai-dlc", "init-workspace"),
     ("ai-dlc", "install-project-hooks"),
+    ("ai-dlc", "overlay-init"),
+    ("ai-dlc", "overlay-repair"),
+    ("ai-dlc", "bootstrap"),
     ("sango", "worktree"),
     ("sango", "status"),
     ("sango", "doctor"),
     ("sango", "bootstrap"),
 }
 READ_ONLY_GIT_SUBCOMMANDS = {"status", "diff", "rev-parse", "log", "show", "branch", "ls-files", "worktree"}
+READ_ONLY_GH_SUBCOMMAND_PAIRS = {
+    ("pr", "view"),
+    ("pr", "list"),
+    ("pr", "diff"),
+    ("pr", "checks"),
+    ("pr", "status"),
+    ("issue", "view"),
+    ("issue", "list"),
+    ("issue", "status"),
+    ("run", "view"),
+    ("run", "list"),
+    ("release", "view"),
+    ("release", "list"),
+    ("repo", "view"),
+    ("api",),
+}
 DISALLOWED_SHELL_FRAGMENTS = ("`", "$(", "\n", "\r", ";", "&&", "||")
 DISALLOWED_SHELL_TOKENS = {"|", "&", ">", ">>", "<", "<<", "<<<"}
 READ_ONLY_FIND_FORBIDDEN_PREFIXES = ("-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprintf", "-fls")
@@ -45,6 +65,13 @@ READ_ONLY_FIND_FORBIDDEN_PREFIXES = ("-exec", "-execdir", "-ok", "-okdir", "-del
 def _find_workspace(start: Path) -> Path | None:
     for candidate in [start, *start.parents]:
         if (candidate / "workspace.yaml").exists():
+            return candidate
+    return None
+
+
+def _find_project_root(start: Path) -> Path | None:
+    for candidate in [start, *start.parents]:
+        if (candidate / "ai-dlc" / "project-metadata.yaml").exists():
             return candidate
     return None
 
@@ -139,6 +166,10 @@ def _extract_paths(payload: dict[str, Any], workspace: Path) -> list[str]:
             raw_paths.extend(_extract_paths_from_patch(tool_input["patch"]))
     elif isinstance(tool_input, str):
         raw_paths.extend(_extract_paths_from_patch(tool_input))
+
+    command_text = _extract_command(payload)
+    if command_text:
+        raw_paths.extend(_extract_paths_from_patch(command_text))
 
     result: list[str] = []
     for raw_path in raw_paths:
@@ -274,7 +305,10 @@ def _load_guardrails(start: Path) -> dict[str, Any]:
 
 
 def _subagent_required_outside_workspace(start: Path) -> bool:
-    return bool(_load_guardrails(start).get("subagent_required"))
+    guardrails = _load_guardrails(start)
+    if "subagent_required" in guardrails:
+        return bool(guardrails["subagent_required"])
+    return _find_project_root(start) is not None
 
 
 def _bootstrap_extra_commands(start: Path) -> list[str]:
@@ -287,8 +321,16 @@ def _bootstrap_extra_commands(start: Path) -> list[str]:
 def _bootstrap_edit_paths(start: Path) -> list[str]:
     value = _load_guardrails(start).get("bootstrap_edit_paths")
     if isinstance(value, list):
-        return [item for item in value if isinstance(item, str) and item.strip()]
-    return []
+        configured = [item for item in value if isinstance(item, str) and item.strip()]
+        if configured:
+            return configured
+    return list(DEFAULT_BOOTSTRAP_EDIT_PATHS)
+
+
+def _all_paths_match(paths: list[str], patterns: list[str]) -> bool:
+    if not paths:
+        return False
+    return all(any(fnmatch.fnmatch(path, pattern) for pattern in patterns) for path in paths)
 
 
 def _is_read_only_sed(tokens: list[str]) -> bool:
@@ -320,6 +362,31 @@ def _is_read_only_sort(tokens: list[str]) -> bool:
     return True
 
 
+def _is_read_only_gh(tokens: list[str]) -> bool:
+    # gh <subcommand> [<action>] の組み合わせで判定
+    if len(tokens) < 2:
+        return False
+    sub = tokens[1]
+    if (sub,) in READ_ONLY_GH_SUBCOMMAND_PAIRS:
+        return True
+    if len(tokens) >= 3 and (sub, tokens[2]) in READ_ONLY_GH_SUBCOMMAND_PAIRS:
+        return True
+    return False
+
+
+def _is_safe_aidlc_command(command: str) -> bool:
+    normalized = command.strip()
+    if any(fragment in normalized for fragment in DISALLOWED_SHELL_FRAGMENTS):
+        return False
+    try:
+        tokens = shlex.split(normalized)
+    except ValueError:
+        return False
+    if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
+        return False
+    return tokens[0] == "ai-dlc"
+
+
 def _is_read_only_bash(command: str) -> bool:
     normalized = command.strip()
     if not normalized:
@@ -332,7 +399,7 @@ def _is_read_only_bash(command: str) -> bool:
         return False
     if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
         return False
-    if len(tokens) >= 2 and (tokens[0], tokens[1]) in READ_ONLY_AIDLC_COMMANDS:
+    if tokens[0] == "ai-dlc":
         return True
     command_name = tokens[0]
     if command_name in READ_ONLY_BASH_COMMANDS:
@@ -343,6 +410,8 @@ def _is_read_only_bash(command: str) -> bool:
         if command_name == "sort":
             return _is_read_only_sort(tokens)
         return True
+    if command_name == "gh":
+        return _is_read_only_gh(tokens)
     if command_name != "git":
         return False
     if len(tokens) >= 4 and tokens[1] == "-C":
@@ -368,11 +437,89 @@ def _is_allowed_bootstrap_command(command: str, cwd: Path) -> bool:
         return False
     if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
         return False
+    if tokens[0] == "ai-dlc":
+        return True
     if len(tokens) >= 3 and tokens[0] == "sango" and tokens[1] == "worktree":
         return tokens[2] in {"create", "list", "status"}
     if len(tokens) >= 2 and (tokens[0], tokens[1]) in BOOTSTRAP_AIDLC_COMMANDS:
         return True
     return normalized in _bootstrap_extra_commands(cwd)
+
+
+def _cwd_is_within(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _extract_effective_cwd(payload: dict[str, Any], fallback: Path) -> Path:
+    for key in ["workdir", "cwd", "working_dir"]:
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return Path(value)
+
+    tool_input = payload.get("tool_input") or payload.get("input") or {}
+    if isinstance(tool_input, dict):
+        for key in ["workdir", "cwd", "working_dir"]:
+            value = tool_input.get(key)
+            if isinstance(value, str) and value:
+                return Path(value)
+
+    return fallback
+
+
+def _is_allowed_verifier_gate_command(workspace: Path, cwd: Path, command: str) -> bool:
+    normalized = command.strip()
+    if not normalized:
+        return False
+    if any(fragment in normalized for fragment in DISALLOWED_SHELL_FRAGMENTS):
+        return False
+    try:
+        tokens = shlex.split(normalized)
+    except ValueError:
+        return False
+    if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
+        return False
+
+    session_id = os.environ.get("CODEX_SESSION_ID")
+    lease = load_lease(workspace, session_id)
+    if lease is None:
+        return False
+    if lease.get("role") not in {"dlc_verifier", "dlc_repo_worker"}:
+        return False
+
+    assignment = load_assignment(workspace, lease["assignment_id"])
+    if assignment.get("status") != "claimed":
+        return False
+
+    active_item_id = lease.get("active_item")
+    if not active_item_id:
+        return False
+
+    work_items_data = read_data(workspace / read_data(workspace / "workspace.yaml")["paths"]["work_items"])
+    target_item = next((item for item in work_items_data["items"] if item["id"] == active_item_id), None)
+    if target_item is None:
+        return False
+
+    verifier_gate = target_item.get("verifier_gate")
+    if not verifier_gate:
+        return False
+
+    for req in verifier_gate.get("required_commands", []):
+        req_cwd = req.get("cwd", ".")
+        expected_cwd = workspace / req_cwd if req_cwd != "." else workspace
+        if not (_cwd_is_within(cwd, expected_cwd) or cwd.resolve() == workspace.resolve()):
+            continue
+        try:
+            req_tokens = shlex.split(req.get("command", ""))
+        except ValueError:
+            continue
+        if tokens == req_tokens:
+            return True
+
+    return False
 
 
 def _is_git_commit(command: str) -> bool:
@@ -460,6 +607,13 @@ def _prompt_delta_context(workspace: Path | None) -> str:
 
 
 def _non_workspace_context(cwd: Path) -> str:
+    project_root = _find_project_root(cwd)
+    if project_root is not None:
+        return (
+            "AI-DLC root-system projectです。task workspaceではありません。"
+            " 対象 worktree の workspace.yaml がある場所へ移動するか、workflow-bootstrap で既存 worktree を採用してください。"
+            " 直接編集は禁止です。"
+        )
     if _subagent_required_outside_workspace(cwd):
         extras = _bootstrap_extra_commands(cwd)
         if extras:
@@ -490,8 +644,10 @@ def dispatch(cwd: Path) -> dict[str, Any]:
             command = _extract_command(payload)
             if tool in EDIT_TOOLS:
                 rel_paths = _extract_paths(payload, cwd)
-                if rel_paths and _paths_match(rel_paths, _bootstrap_edit_paths(cwd)):
-                    return _allow_hook(event_name, "controller bootstrap edit path")
+                if not rel_paths:
+                    return _block_hook(event_name, "Controller-only: edited paths could not be determined; delegate to a subagent.")
+                if _all_paths_match(rel_paths, _bootstrap_edit_paths(cwd)):
+                    return _allow_hook(event_name, "controller-only bootstrap edit allowed")
                 return _block_hook(event_name, "Controller-only: direct edits are blocked outside AI-DLC; delegate to a subagent.")
             if tool == "Bash" and not _is_read_only_bash(command) and not _is_allowed_bootstrap_command(command, cwd):
                 return _block_hook(event_name, "Controller-only: mutating Bash is blocked outside AI-DLC; delegate to a subagent.")
@@ -506,6 +662,8 @@ def dispatch(cwd: Path) -> dict[str, Any]:
     if tool == "Bash" and _is_write_like_bash(command) and os.environ.get("AI_DLC_ALLOW_CONTROLLER_EDIT") != "1":
         return _block_hook(event_name, "AI-DLC: write-like Bash commands are blocked; use apply_patch/Edit with a claimed lease.")
     if tool == "Bash" and command and not _is_read_only_bash(command):
+        if _is_allowed_verifier_gate_command(workspace, _extract_effective_cwd(payload, cwd), command):
+            return _allow_hook(event_name, "AI-DLC: allowed verifier gate command from work-items")
         if "ai-dlc root-export" not in command and "ai-dlc overlay-cleanup" not in command and not _is_git_commit(command) and not _is_allowed_bootstrap_command(command, workspace):
             return _block_hook(event_name, "AI-DLC: unknown mutating Bash commands are denied by default in AI-DLC workspaces.")
 
