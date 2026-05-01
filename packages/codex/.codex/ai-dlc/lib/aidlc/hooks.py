@@ -374,6 +374,19 @@ def _is_read_only_gh(tokens: list[str]) -> bool:
     return False
 
 
+def _is_safe_aidlc_command(command: str) -> bool:
+    normalized = command.strip()
+    if any(fragment in normalized for fragment in DISALLOWED_SHELL_FRAGMENTS):
+        return False
+    try:
+        tokens = shlex.split(normalized)
+    except ValueError:
+        return False
+    if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
+        return False
+    return tokens[0] == "ai-dlc"
+
+
 def _is_read_only_bash(command: str) -> bool:
     normalized = command.strip()
     if not normalized:
@@ -386,7 +399,7 @@ def _is_read_only_bash(command: str) -> bool:
         return False
     if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
         return False
-    if len(tokens) >= 2 and (tokens[0], tokens[1]) in READ_ONLY_AIDLC_COMMANDS:
+    if tokens[0] == "ai-dlc":
         return True
     command_name = tokens[0]
     if command_name in READ_ONLY_BASH_COMMANDS:
@@ -424,6 +437,8 @@ def _is_allowed_bootstrap_command(command: str, cwd: Path) -> bool:
         return False
     if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
         return False
+    if tokens[0] == "ai-dlc":
+        return True
     if len(tokens) >= 3 and tokens[0] == "sango" and tokens[1] == "worktree":
         return tokens[2] in {"create", "list", "status"}
     if len(tokens) >= 2 and (tokens[0], tokens[1]) in BOOTSTRAP_AIDLC_COMMANDS:

