@@ -33,7 +33,7 @@ alias cdpd='cd ~/dev/projects/dotfiles'
 alias yolo='claude --dangerously-skip-permissions'
 alias yolor='claude --dangerously-skip-permissions --resume'
 
-alias yoco='codex --full-auto'
+alias cx='codex'
 # 環境変数
 export LANG=en_US.UTF-8
 export EDITOR="nvim"
