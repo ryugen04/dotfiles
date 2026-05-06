@@ -1026,6 +1026,32 @@ def _prompt_safety_context(payload: dict[str, Any]) -> str:
     return ""
 
 
+def _prompt_workspace_less_assignment_context(cwd: Path, payload: dict[str, Any], workspace: Path | None) -> str:
+    if workspace is not None:
+        return ""
+    prompt = _extract_prompt(payload)
+    match = re.search(r"\bA\d{3}\b", prompt)
+    if not match:
+        return ""
+    assignment_id = match.group(0)
+    try:
+        assignment = load_assignment(cwd, assignment_id)
+    except Exception:
+        return ""
+    if not assignment.get("workspace_less") or assignment.get("role") != "dlc_repo_worker":
+        return ""
+    session_id = _extract_session_id(payload) or "$CODEX_SESSION_ID"
+    writable = ", ".join(str(path) for path in assignment.get("writable", [])) or "(none)"
+    forbidden = ", ".join(str(path) for path in assignment.get("forbidden", [])) or "(none)"
+    return (
+        f"Workspace-less dlc_repo_worker assignment: {assignment_id}\n"
+        f"Claim first: ai-dlc agent-claim --assignment {assignment_id} --session-id {session_id}\n"
+        f"After claim, lease-scoped edits are allowed only for writable paths: {writable}\n"
+        f"Forbidden paths: {forbidden}\n"
+        "The controller-only direct edit ban applies before claim and to controller sessions, not to a claimed dlc_repo_worker lease."
+    )
+
+
 def _non_workspace_context(cwd: Path) -> str:
     project_root = _find_project_root(cwd)
     if project_root is not None:
@@ -1038,18 +1064,65 @@ def _non_workspace_context(cwd: Path) -> str:
         extras = _bootstrap_extra_commands(cwd)
         if extras:
             return (
-                "Controller-only bootstrap phase: 直接編集は禁止です。"
+                "Controller-only bootstrap phase: controller の直接編集は禁止です。"
                 " 初期構築用コマンド、bootstrap_extra_commands、bootstrap_edit_paths の編集のみ許可されます。"
+                " dlc_repo_worker は assignment claim 後に lease-scoped paths だけ編集できます。"
             )
         return (
-            "Controller-only bootstrap phase: 直接編集は禁止です。"
+            "Controller-only bootstrap phase: controller の直接編集は禁止です。"
             " ai-dlc install/init-project/init-workspace/install-project-hooks、bootstrap_edit_paths の編集、read-only コマンドのみ許可されます。"
+            " dlc_repo_worker は assignment claim 後に lease-scoped paths だけ編集できます。"
         )
     return (
         "AI-DLC workspace ではありません。"
         " Project-local AI-DLC 設定を推奨します。"
         " 未設定のまま進める場合は Codex user-local fallback として `ai-dlc ensure-context` を使えます。"
     )
+
+
+def _extract_session_id(payload: dict[str, Any]) -> str:
+    for key in ["session_id", "sessionId"]:
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return os.environ.get("CODEX_SESSION_ID") or ""
+
+
+def _workspace_less_worker_lease(cwd: Path, payload: dict[str, Any]) -> dict[str, Any] | None:
+    session_id = _extract_session_id(payload)
+    if not session_id:
+        return None
+    try:
+        lease = load_lease(cwd, session_id)
+    except Exception:
+        return None
+    if not lease or not lease.get("workspace_less"):
+        return None
+    if lease.get("role") != "dlc_repo_worker":
+        return None
+    return lease
+
+
+def _workspace_less_edit_block(cwd: Path, payload: dict[str, Any], event_name: str, tool: str, command: str, rel_paths: list[str]) -> dict[str, Any] | None:
+    lease = _workspace_less_worker_lease(cwd, payload)
+    if lease is None:
+        return None
+    try:
+        assignment = load_assignment(cwd, lease["assignment_id"])
+    except Exception as exc:
+        reason = f"Controller-only: workspace-less assignment could not be loaded: {exc}"
+        return _block_hook(event_name, reason, diagnose_block(cwd, event_name, tool, command, reason))
+    if assignment.get("status") != "claimed":
+        reason = "Controller-only: workspace-less assignment must be claimed before editing."
+        return _block_hook(event_name, reason, diagnose_block(cwd, event_name, tool, command, reason))
+    if lease.get("plan_status") != "executing":
+        reason = "Controller-only: workspace-less repo worker lease requires executing phase."
+        return _block_hook(event_name, reason, diagnose_block(cwd, event_name, tool, command, reason))
+    errors = lease_path_errors(cwd, lease, rel_paths)
+    if errors:
+        reason = f"Controller-only: workspace-less lease violation: {'; '.join(errors)}"
+        return _block_hook(event_name, reason, diagnose_block(cwd, event_name, tool, command, reason))
+    return _allow_hook(event_name, "controller-only workspace-less repo worker lease")
 
 
 def dispatch(cwd: Path) -> dict[str, Any]:
@@ -1059,7 +1132,15 @@ def dispatch(cwd: Path) -> dict[str, Any]:
     if event_name == "SessionStart":
         return _hook_output("SessionStart", _session_start_context(workspace) if workspace else _non_workspace_context(cwd))
     if event_name == "UserPromptSubmit":
-        context_parts = [part for part in [_prompt_delta_context(workspace), _prompt_safety_context(payload)] if part]
+        context_parts = [
+            part
+            for part in [
+                _prompt_delta_context(workspace),
+                _prompt_safety_context(payload),
+                _prompt_workspace_less_assignment_context(cwd, payload, workspace),
+            ]
+            if part
+        ]
         return _hook_output("UserPromptSubmit", "\n".join(context_parts))
     if event_name == "PostToolUse":
         return _noop()
@@ -1085,6 +1166,9 @@ def dispatch(cwd: Path) -> dict[str, Any]:
                     return _block_hook(event_name, reason, diagnose_block(cwd, event_name, tool, command, reason))
                 if _all_paths_match(rel_paths, _bootstrap_edit_paths(cwd)):
                     return _allow_hook(event_name, "controller-only bootstrap edit allowed")
+                lease_decision = _workspace_less_edit_block(cwd, payload, event_name, tool, command, rel_paths)
+                if lease_decision is not None:
+                    return lease_decision
                 reason = "Controller-only: direct edits are blocked outside AI-DLC; delegate to a subagent."
                 return _block_hook(event_name, reason, diagnose_block(cwd, event_name, tool, command, reason))
             if tool == "Bash" and not _is_read_only_bash(command) and not _is_allowed_bootstrap_command(command, cwd):

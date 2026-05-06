@@ -72,7 +72,19 @@ def ai_dlc_context(start: Path, *, ensure_user_local: bool = False) -> dict:
 
     user_root = codex_user_workspace_root(current)
     if ensure_user_local:
-        for name in ["plans", "decisions", "docs", "evidence", "handoff", "quality", "logs"]:
+        for name in [
+            "plans",
+            "decisions",
+            "docs",
+            "evidence",
+            "handoff",
+            "quality",
+            "logs",
+            "assignments",
+            "leases",
+            "locks",
+            "reports",
+        ]:
             ensure_dir(user_root / name)
         context_path = user_root / "context.yaml"
         if not context_path.exists():
