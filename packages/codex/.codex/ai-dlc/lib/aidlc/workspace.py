@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -44,6 +45,31 @@ def stable_project_id(path: Path) -> str:
 
 def codex_user_workspace_root(path: Path) -> Path:
     return Path.home() / ".codex" / "ai-dlc" / "user-workspaces" / stable_project_id(path)
+
+
+def cleanup_user_context(start: Path) -> dict:
+    current = start.expanduser().resolve()
+    context = ai_dlc_context(current)
+    if context.get("control_plane_scope") != "user_local":
+        return {
+            "status": "skipped",
+            "reason": "not using Codex user-local fallback state",
+            "mode": context.get("mode", "unknown"),
+            "root": context.get("root", ""),
+        }
+
+    target = Path(context["root"]).expanduser()
+    base = Path.home() / ".codex" / "ai-dlc" / "user-workspaces"
+    try:
+        target.resolve().relative_to(base.resolve())
+    except ValueError as exc:
+        raise ValueError(f"refusing to remove context outside user-workspaces: {target}") from exc
+
+    if not target.exists():
+        return {"status": "absent", "root": str(target)}
+
+    shutil.rmtree(target)
+    return {"status": "deleted", "root": str(target)}
 
 
 def ai_dlc_context(start: Path, *, ensure_user_local: bool = False) -> dict:
