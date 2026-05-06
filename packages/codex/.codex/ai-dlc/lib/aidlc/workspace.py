@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import re
 import subprocess
 from pathlib import Path
 
@@ -24,6 +26,80 @@ def parse_repo_args(values: list[str]) -> dict[str, str]:
 
 def _abs(value: str | Path) -> str:
     return str(Path(value).expanduser().resolve())
+
+
+def _ancestor_with(start: Path, relative: str) -> Path | None:
+    for candidate in [start, *start.parents]:
+        if (candidate / relative).exists():
+            return candidate
+    return None
+
+
+def stable_project_id(path: Path) -> str:
+    resolved = path.expanduser().resolve()
+    slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", resolved.name).strip("-._").lower() or "project"
+    digest = hashlib.sha256(str(resolved).encode("utf-8")).hexdigest()[:12]
+    return f"{slug}-{digest}"
+
+
+def codex_user_workspace_root(path: Path) -> Path:
+    return Path.home() / ".codex" / "ai-dlc" / "user-workspaces" / stable_project_id(path)
+
+
+def ai_dlc_context(start: Path, *, ensure_user_local: bool = False) -> dict:
+    current = start.expanduser().resolve()
+    workspace_root = _ancestor_with(current, "workspace.yaml")
+    if workspace_root is not None:
+        return {
+            "mode": "task_workspace",
+            "control_plane_scope": "project",
+            "root": str(workspace_root),
+            "user_local_root": "",
+            "recommendation": "Use the existing AI-DLC task workspace.",
+        }
+
+    project_root = _ancestor_with(current, "ai-dlc/project-metadata.yaml")
+    if project_root is None:
+        project_root = _ancestor_with(current, "sango.yaml")
+    if project_root is not None:
+        return {
+            "mode": "project_root",
+            "control_plane_scope": "project",
+            "root": str(project_root),
+            "user_local_root": "",
+            "recommendation": "Use the existing project-local AI-DLC control-plane.",
+        }
+
+    user_root = codex_user_workspace_root(current)
+    if ensure_user_local:
+        for name in ["plans", "decisions", "docs", "evidence", "handoff", "quality", "logs"]:
+            ensure_dir(user_root / name)
+        context_path = user_root / "context.yaml"
+        if not context_path.exists():
+            write_data(
+                context_path,
+                {
+                    "schema": "ai-dlc.user_context.v1",
+                    "project_id": stable_project_id(current),
+                    "source_path": str(current),
+                    "control_plane_scope": "user_local",
+                    "created_at": now_iso(),
+                    "recommendation": "Project-local AI-DLC is recommended for durable team workflows; this user-local context is Codex-owned fallback state.",
+                },
+            )
+
+    exists = user_root.exists()
+    return {
+        "mode": "user_local_available" if exists else "none",
+        "control_plane_scope": "user_local" if exists else "none",
+        "root": str(user_root) if exists else "",
+        "user_local_root": str(user_root),
+        "recommendation": (
+            "Project-local AI-DLC is recommended. Use `ai-dlc ensure-context` to create Codex user-local fallback state."
+            if not exists
+            else "Using Codex user-local AI-DLC fallback. Consider `ai-dlc init-project` when this should become project-local."
+        ),
+    }
 
 
 def _repo_metadata(
@@ -262,6 +338,8 @@ def default_plan_body(
 - Child repo edits require assignments and leases.
 - verifier evidence must precede evaluator verdict.
 - finish-stage Git operations require `dlc_git_operator`.
+- Workflow type is `plan_implementation` unless the plan frontmatter explicitly states otherwise.
+- Controller remains orchestrator-only; phase work is delegated to the phase owner subagent.
 
 ## Work items
 
@@ -346,8 +424,8 @@ def default_handoff_body(
 
 ## Next best action
 
-- next_agent: dlc_scope_manager
-- next_action: create work items, verifier gates, and assignments
+- next_agent: dlc_plan_writer
+- next_action: complete the workflow plan, checkpoints, and approval gates
 
 ## Do not touch
 
@@ -683,12 +761,129 @@ def scaffold_workspace(
         "root_export": workspace["branch"]["root_export"],
         "target_repos": repo_names,
         "controller": {"no_direct_edits": True, "substantive_work_requires_subagent": True},
+        "paths": {
+            "plan": paths["plan"],
+            "decisions": paths["decisions"],
+            "work_items": paths["work_items"],
+            "evidence": paths["evidence"],
+            "handoff": paths["handoff"],
+            "quality": paths["quality"],
+        },
+        "targets": {
+            "repos": repo_names,
+            "worktrees": [workspace_root],
+            "writable": ["ai-dlc/plans/**", "ai-dlc/work-items/**", "ai-dlc/evidence/**", "ai-dlc/handoff/**", "ai-dlc/quality/**", *[f"{name}/**" for name in repo_names]],
+            "forbidden": ["workspace.yaml", ".codex/**"],
+        },
+        "phases": [
+            {
+                "name": "planning",
+                "owner": "dlc_plan_writer",
+                "checkpoints": ["goal/scope/out-of-scope recorded", "workflow axes recorded", "approval boundary recorded"],
+                "outputs": [paths["plan"], paths["decisions"]],
+                "verification": ["ai-dlc validate"],
+            },
+            {
+                "name": "plan_ready",
+                "owner": "dlc_scope_manager",
+                "checkpoints": ["work items map to plan", "WIP limit remains 1"],
+                "outputs": [paths["work_items"]],
+                "verification": ["ai-dlc validate"],
+            },
+            {
+                "name": "assigning",
+                "owner": "dlc_scope_manager",
+                "checkpoints": ["active item selected", "assignment writable/forbidden scopes recorded"],
+                "outputs": [paths["work_items"], "../.local/ai-dlc/assignments"],
+                "verification": ["ai-dlc validate"],
+            },
+            {
+                "name": "executing",
+                "owner": "dlc_repo_worker",
+                "checkpoints": ["repo worker assignment claimed", "worker report recorded"],
+                "outputs": ["../.local/ai-dlc/reports"],
+                "verification": ["active work item verifier gate"],
+            },
+            {
+                "name": "verifying",
+                "owner": "dlc_verifier",
+                "checkpoints": ["required commands run", "evidence_ref recorded"],
+                "outputs": [paths["evidence"], "../.local/ai-dlc/logs"],
+                "verification": ["ai-dlc validate"],
+            },
+            {
+                "name": "evaluating",
+                "owner": "dlc_evaluator",
+                "checkpoints": ["independent review recorded", "residual risk listed"],
+                "outputs": [paths["evidence"], paths["quality"]],
+                "verification": ["ai-dlc validate"],
+            },
+            {
+                "name": "handoff_ready",
+                "owner": "dlc_handoff_writer",
+                "checkpoints": ["handoff refreshed", "pending obligations listed"],
+                "outputs": [paths["handoff"]],
+                "verification": ["ai-dlc validate"],
+            },
+            {
+                "name": "ready_to_finish",
+                "owner": "dlc_git_operator",
+                "checkpoints": ["user approval exists for git boundary", "commit/export/push boundary recorded"],
+                "outputs": [paths["handoff"], paths["evidence"]],
+                "verification": ["ai-dlc validate", "ai-dlc clean-state-check"],
+            },
+        ],
+        "approval_boundary": {
+            "allowed_without_user": ["read-only inspection", "plan/work-item/evidence validation", "assigned lease-scoped edits"],
+            "requires_user_approval": ["dependency download", "git commit", "git push", "PR create", "root-export", "overlay-cleanup", "destructive cleanup"],
+        },
+        "rollback": {
+            "commands_or_steps": [
+                "stop and record blocker in decisions",
+                "release owned assignment leases",
+                "do not discard local changes without explicit user approval",
+            ]
+        },
+        "workflow": {
+            "origin_mode": "new_workspace_from_plan",
+            "execution_intent": "docs_then_impl",
+            "safety_domain": "source_change",
+            "workflow_type": "plan_implementation",
+            "config_edit_stage": None,
+        },
+        "orchestration": {
+            "controller_mode": "orchestrate_only",
+            "controller_allowed_actions": ["inspect", "classify", "assign", "spawn", "integrate", "transition", "report"],
+            "controller_forbidden_actions": ["source_edit", "evidence_substitution", "evaluator_substitution", "git_finish"],
+            "phase_ownership": {
+                "planning": "dlc_plan_writer",
+                "plan_ready": "dlc_scope_manager",
+                "assigning": "dlc_scope_manager",
+                "executing": "dlc_repo_worker",
+                "verifying": "dlc_verifier",
+                "evaluating": "dlc_evaluator",
+                "handoff_ready": "dlc_handoff_writer",
+                "ready_to_finish": "dlc_git_operator",
+            },
+        },
+        "hook_contract": {
+            "PreToolUse": "enforce lease, writable scope, workflow type, and break-glass scope",
+            "PermissionRequest": "gate escalation against approval boundary",
+            "PostToolUse": "record drift and evidence obligations",
+            "Stop": "block missing phase deliverables without creating deadlocks",
+        },
+        "evidence_contract": {
+            "requires_phase_owner_report": True,
+            "requires_verifier_before_evaluator": True,
+            "requires_handoff_before_finish": True,
+        },
         "current": {
             "active_item": None,
+            "phase": "planning",
             "next_action_type": "delegate",
-            "next_agent": "dlc_scope_manager",
-            "next_action": "Create initial work items, verifier gates, and assignments.",
-            "stop_condition": "Plan, work-items, bootstrap, and hardening are ready for repo workers.",
+            "next_agent": "dlc_plan_writer",
+            "next_action": "Complete initial plan, workflow classification, checkpoints, and approval gates.",
+            "stop_condition": "dlc_plan_writer report for planning is recorded.",
         },
         "deadlock_policy": {
             "max_same_failure_attempts": 2,

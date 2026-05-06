@@ -2,5 +2,28 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ai-dlc.assignment.v1",
   "type": "object",
-  "required": ["schema", "id", "role", "status"]
+  "required": [
+    "schema",
+    "id",
+    "workspace_id",
+    "role",
+    "agent",
+    "phase",
+    "workflow_type",
+    "phase_owner",
+    "controller_mode",
+    "lock_scope",
+    "writable",
+    "forbidden",
+    "deliverables",
+    "status",
+    "issue",
+    "branch",
+    "result_ref"
+  ],
+  "properties": {
+    "writable": {"type": "array"},
+    "forbidden": {"type": "array"},
+    "deliverables": {"type": "array"}
+  }
 }

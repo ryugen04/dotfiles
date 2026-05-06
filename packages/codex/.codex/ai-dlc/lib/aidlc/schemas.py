@@ -10,9 +10,58 @@ SCHEMA_REQUIREMENTS = {
     "ai-dlc.bootstrap.v1": ["workspace_id", "status", "readiness", "overlay", "repos"],
     "ai-dlc.work_items.v1": ["workspace_id", "wip_limit", "active_item", "items"],
     "ai-dlc.evidence.v1": ["workspace_id", "items", "diff_inspection", "clean_state"],
-    "ai-dlc.assignment.v1": ["id", "workspace_id", "role", "status", "issue", "branch", "result_ref"],
-    "ai-dlc.lease.v1": ["session_id", "assignment_id", "role", "status", "writable", "forbidden", "expires_at"],
-    "ai-dlc.plan.v2": ["id", "status", "issue", "workspace_ref", "overlay_ref", "bootstrap_ref", "work_items_ref", "evidence_ref", "handoff_ref", "root_export", "current"],
+    "ai-dlc.assignment.v1": [
+        "id",
+        "workspace_id",
+        "role",
+        "agent",
+        "phase",
+        "workflow_type",
+        "phase_owner",
+        "controller_mode",
+        "lock_scope",
+        "writable",
+        "forbidden",
+        "deliverables",
+        "status",
+        "issue",
+        "branch",
+        "result_ref",
+    ],
+    "ai-dlc.lease.v1": [
+        "session_id",
+        "assignment_id",
+        "role",
+        "status",
+        "plan_status",
+        "lock_scope",
+        "issue",
+        "branch",
+        "writable",
+        "forbidden",
+        "created_at",
+        "expires_at",
+    ],
+    "ai-dlc.plan.v2": [
+        "id",
+        "status",
+        "issue",
+        "workspace_ref",
+        "overlay_ref",
+        "bootstrap_ref",
+        "work_items_ref",
+        "evidence_ref",
+        "handoff_ref",
+        "root_export",
+        "current",
+        "workflow",
+        "orchestration",
+        "paths",
+        "targets",
+        "phases",
+        "approval_boundary",
+        "rollback",
+    ],
 }
 
 SCHEMA_NONEMPTY_PATHS = {
@@ -73,3 +122,11 @@ def validate_required(data: dict) -> None:
         for key in ["head_sha", "tree_clean", "artifact_refs", "command", "expected_outcome", "actual_result", "log_ref", "verdict"]:
             if key not in template:
                 raise ValueError(f"{schema_name}: entry_template missing {key}")
+    if schema_name == "ai-dlc.assignment.v1":
+        for key in ["writable", "forbidden", "deliverables"]:
+            if not isinstance(data.get(key), list):
+                raise ValueError(f"{schema_name}: {key} must be list")
+    if schema_name == "ai-dlc.lease.v1":
+        for key in ["writable", "forbidden"]:
+            if not isinstance(data.get(key), list):
+                raise ValueError(f"{schema_name}: {key} must be list")

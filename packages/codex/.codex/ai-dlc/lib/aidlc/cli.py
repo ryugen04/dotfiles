@@ -8,7 +8,7 @@ from pathlib import Path
 
 from . import __version__
 from .git_hooks import install_project_hooks
-from .hooks import dispatch
+from .hooks import diagnose_block, dispatch
 from .overlay import overlay_cleanup, overlay_init, overlay_repair, overlay_status, root_export, validate_overlay
 from .state import (
     agent_claim,
@@ -34,7 +34,7 @@ from .state import (
     workspace_status,
 )
 from .validators import assert_overlay, assert_workspace
-from .workspace import init_project, init_workspace_prerequisite_errors, parse_keyed_args, parse_repo_args, scaffold_workspace
+from .workspace import ai_dlc_context, init_project, init_workspace_prerequisite_errors, parse_keyed_args, parse_repo_args, scaffold_workspace
 
 
 def find_workspace_root(start: Path) -> Path:
@@ -370,6 +370,25 @@ def cmd_hook_dispatch(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_block_diagnose(args: argparse.Namespace) -> int:
+    cwd = Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd()
+    result = diagnose_block(cwd, args.event, args.tool, args.command, args.message)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_context(args: argparse.Namespace) -> int:
+    cwd = Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd()
+    print(json.dumps(ai_dlc_context(cwd), indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_ensure_context(args: argparse.Namespace) -> int:
+    cwd = Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd()
+    print(json.dumps(ai_dlc_context(cwd, ensure_user_local=True), indent=2, ensure_ascii=False))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ai-dlc")
     parser.set_defaults(func=lambda _: parser.print_help() or 0)
@@ -541,6 +560,22 @@ def build_parser() -> argparse.ArgumentParser:
     hook_dispatch = sub.add_parser("hook-dispatch")
     hook_dispatch.set_defaults(func=cmd_hook_dispatch)
 
+    block_diagnose = sub.add_parser("block-diagnose")
+    block_diagnose.add_argument("--cwd", default="")
+    block_diagnose.add_argument("--event", default="")
+    block_diagnose.add_argument("--tool", default="")
+    block_diagnose.add_argument("--command", default="")
+    block_diagnose.add_argument("--message", default="")
+    block_diagnose.set_defaults(func=cmd_block_diagnose)
+
+    context_parser = sub.add_parser("context")
+    context_parser.add_argument("--cwd", default="")
+    context_parser.set_defaults(func=cmd_context)
+
+    ensure_context = sub.add_parser("ensure-context")
+    ensure_context.add_argument("--cwd", default="")
+    ensure_context.set_defaults(func=cmd_ensure_context)
+
     return parser
 
 
@@ -549,6 +584,6 @@ def main(argv: list[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
         return int(args.func(args))
-    except ValueError as exc:
+    except (FileNotFoundError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2

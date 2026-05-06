@@ -11,20 +11,14 @@ from typing import Any
 from .io import now_iso, read_data, read_frontmatter, write_data, write_frontmatter
 from .overlay import git, validate_overlay
 from .schemas import validate_required
-
-PLAN_TRANSITIONS = {
-    "intake": {"initializing", "needs_decision", "repairing", "blocked", "abandoned"},
-    "initializing": {"planning", "needs_decision", "repairing", "blocked", "abandoned"},
-    "planning": {"plan_ready", "needs_decision", "repairing", "blocked", "abandoned"},
-    "plan_ready": {"assigning", "needs_decision", "repairing", "blocked", "abandoned"},
-    "assigning": {"executing", "needs_decision", "repairing", "blocked", "abandoned"},
-    "executing": {"verifying", "needs_decision", "repairing", "blocked", "abandoned"},
-    "verifying": {"evaluating", "needs_decision", "repairing", "blocked", "abandoned"},
-    "evaluating": {"executing", "verifying", "handoff_ready", "needs_decision", "repairing", "blocked", "abandoned"},
-    "handoff_ready": {"ready_to_finish", "needs_decision", "repairing", "blocked", "abandoned"},
-    "ready_to_finish": {"done", "needs_decision", "repairing", "blocked", "abandoned"},
-    "done": set(),
-}
+from .workflow_contracts import (
+    apply_transition_side_effects,
+    next_agent_for_status,
+    role_allowed_for_phase,
+    validate_transition,
+    validate_workflow,
+    workflow_type,
+)
 
 WORK_ITEM_TRANSITIONS = {
     "not_started": {"active", "blocked", "cancelled"},
@@ -34,7 +28,7 @@ WORK_ITEM_TRANSITIONS = {
     "cancelled": set(),
 }
 
-EXECUTION_PLAN_STATUSES = {"plan_ready", "assigning", "executing"}
+EXECUTION_PLAN_STATUSES = {"executing"}
 CONTROL_PLANE_ROLE_WRITABLE = {
     "dlc_initializer": ["ai-dlc/bootstrap/**", "ai-dlc/overlay/**", "../.local/**"],
     "dlc_plan_writer": ["ai-dlc/plans/**", "ai-dlc/decisions/**"],
@@ -42,6 +36,8 @@ CONTROL_PLANE_ROLE_WRITABLE = {
     "dlc_verifier": ["ai-dlc/evidence/**", "../.local/ai-dlc/logs/**"],
     "dlc_evaluator": ["ai-dlc/evidence/**", "ai-dlc/quality/**", "../.local/ai-dlc/logs/**"],
     "dlc_handoff_writer": ["ai-dlc/handoff/**"],
+    "dlc_docs_writer": ["ai-dlc/docs/**"],
+    "dlc_git_operator": ["ai-dlc/evidence/**", "ai-dlc/handoff/**", "ai-dlc/quality/**", "../.local/**"],
     "dlc_repairer": ["ai-dlc/bootstrap/**", "ai-dlc/overlay/**", "ai-dlc/decisions/**", "../.local/**"],
 }
 CONTROL_PLANE_LOCKS = {
@@ -50,6 +46,8 @@ CONTROL_PLANE_LOCKS = {
     "dlc_verifier": "evidence.lock",
     "dlc_evaluator": "evidence.lock",
     "dlc_handoff_writer": "handoff.lock",
+    "dlc_docs_writer": "docs.lock",
+    "dlc_git_operator": "git.lock",
     "dlc_initializer": "bootstrap.lock",
     "dlc_repairer": "bootstrap.lock",
 }
@@ -79,12 +77,47 @@ def save_plan(path: Path, meta: dict[str, Any], body: str) -> None:
 
 def transition(root: Path, status: str) -> dict[str, Any]:
     path, meta, body = load_plan(root)
-    current = meta.get("status")
-    if status not in PLAN_TRANSITIONS.get(current, set()):
-        raise ValueError(f"invalid plan transition: {current} -> {status}")
+    workflow_errors = validate_transition(meta, status)
+    workflow_errors.extend(_phase_completion_errors(root, meta, status))
+    if workflow_errors:
+        raise ValueError("\n".join(workflow_errors))
     meta["status"] = status
+    apply_transition_side_effects(meta, status)
     save_plan(path, meta, body)
     return meta
+
+
+def _phase_completion_errors(root: Path, meta: dict[str, Any], target_status: str) -> list[str]:
+    current_status = str(meta.get("status"))
+    if target_status in {"needs_decision", "repairing", "blocked", "abandoned"}:
+        return []
+    if current_status in {"intake", "initializing", "done"}:
+        return []
+    expected_role = next_agent_for_status(current_status, workflow_type(meta))
+    if not expected_role:
+        return []
+    if _phase_report_exists(root, current_status, expected_role):
+        return []
+    return [f"phase {current_status} requires {expected_role} report before transition to {target_status}"]
+
+
+def _phase_report_exists(root: Path, phase: str, role: str) -> bool:
+    reports_dir = assignment_root(root) / "reports"
+    if not reports_dir.exists():
+        return False
+    for path in reports_dir.glob("A*.json"):
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if report.get("role") != role:
+            continue
+        if report.get("phase") != phase:
+            continue
+        if report.get("status") in {"blocked", "failed", "cancelled"}:
+            continue
+        return True
+    return False
 
 
 def validate(root: Path) -> list[str]:
@@ -98,6 +131,7 @@ def validate(root: Path) -> list[str]:
     _, plan_meta, _ = load_plan(root)
     if plan_meta.get("schema") != "ai-dlc.plan.v2":
         errors.append("plan schema must be ai-dlc.plan.v2")
+    errors.extend(validate_workflow(plan_meta))
     for key in ["next_agent", "next_action"]:
         if not (plan_meta.get("current") or {}).get(key):
             errors.append(f"plan.current.{key} is required")
@@ -318,7 +352,7 @@ def bootstrap_gate_errors(root: Path, lease: dict[str, Any] | None = None) -> li
 
     _, plan_meta, _ = load_plan(root)
     if plan_meta.get("status") not in EXECUTION_PLAN_STATUSES:
-        errors.append("plan.status must be one of plan_ready, assigning, executing")
+        errors.append("plan.status must be executing")
 
     work_items = read_data(paths["work_items"])
     active_items = _active_items(work_items)
@@ -518,6 +552,11 @@ def _next_assignment_id(assignments_dir: Path) -> str:
 
 def assignment_create(root: Path, role: str, repo: str | None, writable: list[str], work_item: str | None) -> dict[str, Any]:
     workspace, paths = workspace_paths(root)
+    _, plan_meta, _ = load_plan(root)
+    plan_status = plan_meta.get("status")
+    phase_owner = next_agent_for_status(str(plan_status), workflow_type(plan_meta))
+    if not role_allowed_for_phase(plan_meta, role):
+        raise ValueError(f"assignment role {role} is not allowed during {workflow_type(plan_meta)} phase {plan_status}; expected {phase_owner}")
     base = assignment_root(root)
     assignments_dir = base / "assignments"
     assignments_dir.mkdir(parents=True, exist_ok=True)
@@ -537,13 +576,16 @@ def assignment_create(root: Path, role: str, repo: str | None, writable: list[st
         "workspace_id": workspace["id"],
         "role": role,
         "agent": role,
-        "phase": load_plan(root)[1].get("status"),
+        "phase": plan_status,
+        "workflow_type": workflow_type(plan_meta),
+        "phase_owner": phase_owner,
+        "controller_mode": (plan_meta.get("orchestration") or {}).get("controller_mode", "orchestrate_only"),
         "repo": repo,
         "lock_scope": f"repo:{repo}" if repo else CONTROL_PLANE_LOCKS.get(role),
         "work_item": work_item,
         "writable": resolved_writable,
         "forbidden": forbidden,
-        "deliverables": ["worker_report"] if role == "dlc_repo_worker" else [],
+        "deliverables": _role_deliverables(role),
         "issue": workspace.get("issue", {}),
         "branch": {
             "issue": workspace["branch"]["issue"],
@@ -561,6 +603,21 @@ def assignment_create(root: Path, role: str, repo: str | None, writable: list[st
                 break
     write_data(assignments_dir / f"{assignment_id}.yaml", payload)
     return payload
+
+
+def _role_deliverables(role: str) -> list[str]:
+    return {
+        "dlc_plan_writer": ["plan_delta"],
+        "dlc_scope_manager": ["work_items_delta"],
+        "dlc_repo_worker": ["worker_report"],
+        "dlc_verifier": ["evidence_ref"],
+        "dlc_evaluator": ["evaluator_verdict"],
+        "dlc_handoff_writer": ["handoff_ref"],
+        "dlc_docs_writer": ["docs_ref"],
+        "dlc_git_operator": ["git_result_ref"],
+        "dlc_initializer": ["bootstrap_readiness"],
+        "dlc_repairer": ["repair_report"],
+    }.get(role, ["report"])
 
 
 def assignment_list(root: Path) -> list[dict[str, Any]]:
@@ -652,6 +709,9 @@ def agent_report(root: Path, assignment_id: str, status: str, report_file: str |
         "status": status,
         "repo": assignment.get("repo"),
         "work_item": assignment.get("work_item"),
+        "workflow_type": assignment.get("workflow_type"),
+        "phase": assignment.get("phase"),
+        "deliverables": assignment.get("deliverables", []),
         "issue": assignment.get("issue", {}),
         "branch": assignment.get("branch", {}),
         "reported_at": now_iso(),
