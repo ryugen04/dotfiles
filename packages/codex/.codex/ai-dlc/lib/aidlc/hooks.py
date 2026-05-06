@@ -1090,10 +1090,8 @@ def _extract_session_id(payload: dict[str, Any]) -> str:
 
 def _workspace_less_worker_lease(cwd: Path, payload: dict[str, Any]) -> dict[str, Any] | None:
     session_id = _extract_session_id(payload)
-    if not session_id:
-        return None
     try:
-        lease = load_lease(cwd, session_id)
+        lease = load_lease(cwd, session_id or None)
     except Exception:
         return None
     if not lease or not lease.get("workspace_less"):
