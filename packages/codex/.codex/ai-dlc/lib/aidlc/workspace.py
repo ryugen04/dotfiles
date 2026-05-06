@@ -36,6 +36,24 @@ def _ancestor_with(start: Path, relative: str) -> Path | None:
     return None
 
 
+def _project_local_hook_warning(project_root: Path) -> str:
+    hook_config = project_root / ".codex" / "hooks.json"
+    hook_dir = project_root / ".codex" / "hooks"
+    hook_files = sorted(path.name for path in hook_dir.glob("*.py")) if hook_dir.exists() else []
+    if not hook_config.exists() and not hook_files:
+        return ""
+    parts: list[str] = []
+    if hook_config.exists():
+        parts.append(".codex/hooks.json")
+    if hook_files:
+        parts.append(".codex/hooks/*.py")
+    detected = ", ".join(parts)
+    return (
+        f"Project-local hooks detected ({detected}). "
+        "Keep only project-specific hook behavior here; move generic Codex guardrails to dotfiles-managed user hooks."
+    )
+
+
 def stable_project_id(path: Path) -> str:
     resolved = path.expanduser().resolve()
     slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", resolved.name).strip("-._").lower() or "project"
@@ -88,12 +106,17 @@ def ai_dlc_context(start: Path, *, ensure_user_local: bool = False) -> dict:
     if project_root is None:
         project_root = _ancestor_with(current, "sango.yaml")
     if project_root is not None:
+        warning = _project_local_hook_warning(project_root)
+        recommendation = "Use the existing project-local AI-DLC control-plane."
+        if warning:
+            recommendation = f"{recommendation} {warning}"
         return {
             "mode": "project_root",
             "control_plane_scope": "project",
             "root": str(project_root),
             "user_local_root": "",
-            "recommendation": "Use the existing project-local AI-DLC control-plane.",
+            "recommendation": recommendation,
+            "warnings": [warning] if warning else [],
         }
 
     user_root = codex_user_workspace_root(current)
