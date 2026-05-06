@@ -3,7 +3,7 @@
 
 sandbox_mode = "workspace-write"
 approval_policy = "on-request"
-approvals_reviewer = "guardian_subagent"
+approvals_reviewer = "auto_review"
 model = "gpt-5.5"
 model_reasoning_effort = "xhigh"
 
@@ -14,6 +14,11 @@ shell_snapshot = true
 [profiles.implement]
 model_reasoning_effort = "high"
 approval_policy = "never"
+sandbox_mode = "workspace-write"
+
+[profiles.codex-config-edit]
+model_reasoning_effort = "high"
+approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 
 [profiles.review]
@@ -43,6 +48,40 @@ bootstrap_extra_commands = [
 ]
 bootstrap_edit_paths = [
   ".codex/config.toml",
+  ".codex/plans/**",
   "AGENTS.md",
   "ai-dlc/**",
+  "packages/codex/.codex/AGENTS.md",
+  "packages/codex/.codex/config.toml",
+  "packages/codex/.codex/hooks.json",
+  "packages/codex/.codex/rules/**",
+  "packages/codex/.codex/ai-dlc/lib/aidlc/hooks.py",
+  "packages/codex/.codex/ai-dlc/lib/aidlc/state.py",
+  "packages/codex/.codex/ai-dlc/lib/aidlc/workspace.py",
+  "packages/codex/.codex/ai-dlc/lib/aidlc/schemas.py",
+  "packages/codex/.codex/ai-dlc/lib/aidlc/workflow_contracts.py",
+  "packages/codex/.codex/ai-dlc/schemas/ai-dlc_plan_v2.json",
+  "tests/test_aidlc.py",
+  "packages/agents/.agents/skills/codex-agents-md-authoring/**",
+  "packages/agents/.agents/skills/codex-rules-authoring/**",
+  "packages/agents/.agents/skills/codex-subagents-authoring/**",
+  "packages/agents/.agents/skills/codex-plan-authoring/**",
+  "packages/agents/.agents/skills/codex-hooks-authoring/**",
+  "packages/agents/.agents/skills/codex-config-authoring/**",
+  "packages/agents/.agents/skills/codex-skill-authoring/**",
+  "packages/agents/.agents/skills/codex-runtime-probing/**",
+  "packages/agents/.agents/skills/workflow-start/SKILL.md",
+  "packages/agents/.agents/skills/workflow-classify/SKILL.md",
 ]
+
+[projects."/home/glaucus03/dev/projects/dotfiles"]
+trust_level = "trusted"
+
+[projects."/home/glaucus03/dev/projects"]
+trust_level = "trusted"
+
+[projects."/home/glaucus03/dev/projects/study-product-ready-graphql"]
+trust_level = "trusted"
+
+[projects."/home/glaucus03/dev/projects/kagent"]
+trust_level = "trusted"

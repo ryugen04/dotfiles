@@ -34,6 +34,7 @@ alias yolo='claude --dangerously-skip-permissions'
 alias yolor='claude --dangerously-skip-permissions --resume'
 
 alias cx='codex'
+alias ch='codex --profile codex-config-edit'
 # 環境変数
 export LANG=en_US.UTF-8
 export EDITOR="nvim"

@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\" SessionStart",
-            "timeout": 10000,
+            "timeout": 30,
             "statusMessage": "Loading AI-DLC state"
           }
         ]
@@ -20,7 +20,7 @@
           {
             "type": "command",
             "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\" UserPromptSubmit",
-            "timeout": 10000,
+            "timeout": 30,
             "statusMessage": "Checking AI-DLC prompt"
           }
         ]
@@ -33,7 +33,7 @@
           {
             "type": "command",
             "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\" PreToolUse",
-            "timeout": 10000,
+            "timeout": 30,
             "statusMessage": "Checking AI-DLC gate"
           }
         ]
@@ -46,7 +46,7 @@
           {
             "type": "command",
             "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\" PostToolUse",
-            "timeout": 20000,
+            "timeout": 60,
             "statusMessage": "Validating AI-DLC side effects"
           }
         ]
@@ -59,7 +59,7 @@
           {
             "type": "command",
             "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\" PermissionRequest",
-            "timeout": 10000,
+            "timeout": 30,
             "statusMessage": "Checking AI-DLC approval"
           }
         ]
@@ -72,7 +72,7 @@
           {
             "type": "command",
             "command": "/usr/bin/python3 \"$HOME/.codex/ai-dlc/hooks/dispatcher.py\" Stop",
-            "timeout": 20000,
+            "timeout": 60,
             "statusMessage": "Checking AI-DLC stop gate"
           }
         ]

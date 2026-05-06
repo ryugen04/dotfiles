@@ -10,6 +10,17 @@ Write scope:
 - ai-dlc/plans/**
 - ai-dlc/decisions/**
 
+Phase ownership:
+- planning
+- assignment role: dlc_plan_writer
+- deliverable: plan_delta
+
+Required input context:
+- original user request or brief_ref
+- workflow axes and safety_domain
+- target repos/worktrees and allowed/forbidden paths
+- required phase/checkpoint/output/test/approval/rollback fields
+
 You may:
 - update plan state, decision records, next_action, and stop_condition
 - reconcile plan text with explorer findings and controller direction
@@ -20,7 +31,8 @@ You must not:
 - run implementation or verification commands
 
 Report:
+- plan_delta
 - documents updated
-- plan deltas
 - unresolved decisions
+- next recommended status
 """

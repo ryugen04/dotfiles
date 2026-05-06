@@ -1,60 +1,53 @@
-# Codex AI-DLC Instructions
+# Codex Base Policy
 
 ## Language
 
-- 対話は日本語
-- 変数名と識別子は英語
-- コメントは必要最小限の日本語
+- 対話は日本語。
+- 変数名と識別子は英語。
+- コメントは必要最小限の日本語。
 
-## AI-DLC Core
+## Instruction Scope
 
-- `root-system` は control-plane であり、通常の実装 repo として扱わない。
-- `literal_worktree_overlay` では `web/` や `backend/` は root diff に見えるが、commit は child repo で行う。
-- root controller session は基本的に controller-only とし、実作業は AI-DLC subagent に委譲する。
-- `ai-dlc validate-overlay` と `ai-dlc validate` を通る状態を保つ。
-- `root-system` overlay branch は push しない。root 側の成果物反映は `ai-dlc root-export` を使う。
+- `AGENTS.md` は常時ロードされる全体方針だけを書く。
+- 長い手順、分類表、調査手順は skills に置く。
+- sandbox 外コマンド policy は `.codex/rules/*.rules` に置く。
+- 強制したい実行時制約は hooks で扱う。
+
+## Mandatory Planning
+
+非自明な調査、設計、実装、config/hooks/skills 変更では、作業前に `.codex/plans/YYYYMMDDHH-{planname}.md` を作成または更新する。
+
+plan には最低限、original request、workflow axes、target root、allowed/forbidden paths、phases/checkpoints、subagents、outputs、test plan、approval gates、rollback/status を含める。hooks を扱う場合は hook event matrix と validation plan も含める。
+
+大きい plan は 1 ファイルに圧縮しない。parent plan に child plan paths を明記し、各 child plan は parent plan path を記載する。`.codex/plans/**` は local working state として git 対象外でもよいが、durable なルールは skills、schemas、hooks、validators、tests に反映する。
+
+## Workflow Classification
+
+着手前に `workflow-classify` で 3 軸を判定する。
+
+- `origin_mode`: `new_workspace_from_plan` / `from_remote_ref` / `resume_existing_workspace` / `docs_only_no_workspace`
+- `execution_intent`: `docs_only` / `plan_then_stop` / `docs_then_impl` / `autonomous_until_git_boundary`
+- `safety_domain`: `source_change` / `codex_config_edit` / `docs_report` / `git_finish`
+
+`AI_DLC_SAFETY_DOMAIN=codex_config_edit`、または Codex config/hooks/skills/subagents/schema/sandbox/approval を扱う作業では `codex_config_edit` を優先する。`-c` は Codex runtime override であり workflow mode ではない。
+
+## Block Recovery
+
+hook / permission / tool block を観測した時は最初の block で停止せず、`workflow-start` の Block Recovery と `workflow-classify` の block 分類に従って、許可された代替経路、subagent 委譲、plan/repair、検証、報告へ進む。
 
 ## Safety
 
-- `web/**` / `backend/**` を root-system から commit しない。
-- `ai-dlc/executions/**` と `ai-dlc/scratch/**` は commit しない。
-- `git reset --hard`、`git clean`、`git push`、`git worktree remove` は明示承認なしで実行しない。
+- `git reset --hard`、`git clean`、`git push`、`git worktree remove`、破壊的 `rm` は明示承認なしで実行しない。
+- user または他者の既存変更を revert しない。
+- secrets、tokens、credentials を出力・保存しない。
+- commit、push、root-export、cleanup は明示承認ゲートとする。
 
-## sango CLI 活用（サービス障害・環境問題の自律対応）
+## Verification
 
-sango ワークスペース内で作業する場合、サービス障害や環境問題には以下の手順で対応する。
+hooks/config/skills/schema を変更する時は、active version、読み込まれる config layer、schema、runtime path を確認してから修正する。エラー文字列がある場合は実装、設定、実バイナリまたは一次情報で受け手の期待形を確認する。
 
-### エラー遭遇時の診断手順
+修正後は、最小再現コマンド、関連テスト、実運用パスの 3 点で確認する。確認できない項目は final report に残す。
 
-推測で修正を始める前に、sango の診断機能を順に実行する:
+## AI-DLC Workspaces
 
-1. `sango runbook search "<エラーメッセージのキーワード>"` — 既知の問題と対処手順を検索
-2. `sango troubleshoot <サービス名>` — サービス固有の診断チェックを実行
-3. `sango doctor` — 環境全体の依存チェック
-4. `sango status` — 全サービスの起動状態・ポート・ヘルスを一覧
-
-### 知見の蓄積
-
-試行錯誤して解決したサービス障害は `sango.yaml` に記録する:
-
-- 繰り返し起きうるエラー → 該当サービスの `runbook:` にエントリ追加
-- 環境依存の新チェック項目 → `doctor.checks` にエントリ追加
-- サービス固有の診断コマンド → 該当サービスの `troubleshoot:` にエントリ追加
-
-## Verification Discipline
-
-- hook、CLI、config の不具合は推測で直さない。まず「どの実装が」「どの設定を」「どの schema で」読んでいるかを確認する。
-- Codex hook の修正では、実際に使われている Codex version と実バイナリの期待出力を一次情報として確認する。
-- `~/.codex/` と project-local `.codex/` のどちらが読まれているかを切り分けてから変更する。
-- エラーメッセージがある場合は、その文字列を実装・ログ・実バイナリ内で検索し、受け手の期待形を特定してから修正する。
-- schema 修正時は、送信側だけでなく受信側の期待 key と許容値を確認する。
-- 修正後は、最小再現コマンド、関連テスト、実運用パスの 3 点で確認する。
-
-## Mode Policy
-
-controller はユーザー指示受領時に以下の 4 モードを `workflow-classify` で判定する:
-
-- `docs-only-pure`: 調査結果を root-system の ai-dlc/docs/** に書く。worktree を作らない。`dlc_docs_writer` を使う。
-- `docs-only-with-future-impl`: sango worktree を作って ai-dlc/plans/** に出力。impl 続行時にユーザー確認。
-- `docs-then-impl`: ExitPlanMode 承認 = impl 承認。commit 直前まで無停止。
-- `autonomous-impl`: ExitPlanMode 後は commit/push 確認のみ。
+`workspace.yaml` がある場所は AI-DLC task workspace として扱う。root-system は control-plane であり、通常の実装 repo として扱わない。`literal_worktree_overlay` では child repo の変更を root から commit しない。
