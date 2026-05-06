@@ -6,6 +6,7 @@ Reject the design or diff when any item applies:
 - `timeout` treated as milliseconds.
 - `PermissionRequest` using `permissionDecision`.
 - Hook gates that can deadlock without an explicit user-instructed break-glass decision marker.
+- Project-local hook designs that duplicate generic user-level guardrails or block plan/learnings self-repair paths.
 - `Stop` hooks that continue forever instead of naming the exact missing decision or evidence.
 - `PreToolUse` design depending on allow.
 - `Stop` plain stdout.

@@ -48,6 +48,7 @@
 # Codex local planning artifacts
 .codex/artifacts/
 .codex/plans/
+packages/codex/.codex/ai-dlc/user-workspaces/
 plan.md
 
 # Python cache

@@ -17,9 +17,10 @@ approval_policy = "never"
 sandbox_mode = "workspace-write"
 
 [profiles.codex-config-edit]
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
+model = "gpt-5.4"
 
 [profiles.review]
 model_reasoning_effort = "high"
@@ -85,3 +86,9 @@ trust_level = "trusted"
 
 [projects."/home/glaucus03/dev/projects/kagent"]
 trust_level = "trusted"
+
+[projects."/home/glaucus03/dev/projects/sango"]
+trust_level = "trusted"
+
+[notice.model_migrations]
+"gpt-5.3-codex" = "gpt-5.4"

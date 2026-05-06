@@ -1128,6 +1128,22 @@ class AidlcTest(unittest.TestCase):
             self.assertEqual(project_context["control_plane_scope"], "project")
             self.assertEqual(project_context["root"], str(project.resolve()))
 
+    def test_context_warns_when_project_local_generic_hooks_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "plain-project"
+            (project / "ai-dlc").mkdir(parents=True)
+            (project / "ai-dlc" / "project-metadata.yaml").write_text("id: plain\n", encoding="utf-8")
+            (project / ".codex" / "hooks").mkdir(parents=True)
+            (project / ".codex" / "hooks.json").write_text("{}\n", encoding="utf-8")
+            (project / ".codex" / "hooks" / "pre_tool_use.py").write_text("# stale\n", encoding="utf-8")
+
+            project_context = ai_dlc_context(project)
+
+            self.assertEqual(project_context["mode"], "project_root")
+            self.assertTrue(project_context["warnings"])
+            self.assertIn("Project-local hooks detected", project_context["warnings"][0])
+            self.assertIn(".codex/hooks.json", project_context["recommendation"])
+
     def test_context_uses_codex_user_local_fallback_when_project_is_unconfigured(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fake_home = Path(tmp) / "home"
