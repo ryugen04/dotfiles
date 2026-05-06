@@ -1,0 +1,97 @@
+# Common read-only commands may run without sandbox escalation prompts.
+
+prefix_rule(
+    pattern = ["pwd"],
+    decision = "allow",
+    justification = "Prints the current directory only.",
+    match = ["pwd"],
+    not_match = ["ls"],
+)
+
+prefix_rule(
+    pattern = ["ls"],
+    decision = "allow",
+    justification = "Lists files without modifying the workspace.",
+    match = ["ls", "ls -la packages"],
+    not_match = ["pwd"],
+)
+
+prefix_rule(
+    pattern = ["rg"],
+    decision = "allow",
+    justification = "Searches text without modifying the workspace.",
+    match = ["rg hooks.py", "rg -n PermissionRequest packages"],
+    not_match = ["sed -n '1,5p' README.md"],
+)
+
+prefix_rule(
+    pattern = ["find"],
+    decision = "allow",
+    justification = "Read-only file discovery is allowed; mutating find actions are hook-checked separately.",
+    match = ["find . -maxdepth 2 -type f", "find packages -name '*.py'"],
+    not_match = ["rg README"],
+)
+
+prefix_rule(
+    pattern = ["sed"],
+    decision = "allow",
+    justification = "Read-only sed printing is allowed; in-place edits are hook-checked separately.",
+    match = ["sed -n '1,80p' AGENTS.md"],
+    not_match = ["find . -maxdepth 1 -type f"],
+)
+
+prefix_rule(
+    pattern = ["git", "status"],
+    decision = "allow",
+    justification = "Reads worktree status.",
+    match = ["git status --short"],
+    not_match = ["git diff"],
+)
+
+prefix_rule(
+    pattern = ["git", "diff"],
+    decision = "allow",
+    justification = "Reads git diffs.",
+    match = ["git diff", "git diff --stat"],
+    not_match = ["git status --short"],
+)
+
+prefix_rule(
+    pattern = ["git", "show"],
+    decision = "allow",
+    justification = "Reads git objects.",
+    match = ["git show HEAD:README.md", "git show --stat HEAD"],
+    not_match = ["git log --oneline"],
+)
+
+prefix_rule(
+    pattern = ["git", "log"],
+    decision = "allow",
+    justification = "Reads commit history.",
+    match = ["git log --oneline -5"],
+    not_match = ["git show HEAD"],
+)
+
+prefix_rule(
+    pattern = ["git", "rev-parse"],
+    decision = "allow",
+    justification = "Reads git refs and paths.",
+    match = ["git rev-parse --show-toplevel"],
+    not_match = ["git branch --show-current"],
+)
+
+prefix_rule(
+    pattern = ["git", "branch"],
+    decision = "allow",
+    justification = "Reads branch state by default.",
+    match = ["git branch --show-current", "git branch --list"],
+    not_match = ["git rev-parse --show-toplevel"],
+)
+
+prefix_rule(
+    pattern = ["git", "ls-files"],
+    decision = "allow",
+    justification = "Lists tracked files.",
+    match = ["git ls-files", "git ls-files packages"],
+    not_match = ["git status --short"],
+)
