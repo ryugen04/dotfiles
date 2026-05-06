@@ -34,7 +34,7 @@ from .state import (
     workspace_status,
 )
 from .validators import assert_overlay, assert_workspace
-from .workspace import ai_dlc_context, init_project, init_workspace_prerequisite_errors, parse_keyed_args, parse_repo_args, scaffold_workspace
+from .workspace import ai_dlc_context, cleanup_user_context, init_project, init_workspace_prerequisite_errors, parse_keyed_args, parse_repo_args, scaffold_workspace
 
 
 def find_workspace_root(start: Path) -> Path:
@@ -396,6 +396,12 @@ def cmd_ensure_context(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_close_context(args: argparse.Namespace) -> int:
+    cwd = Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd()
+    print(json.dumps(cleanup_user_context(cwd), indent=2, ensure_ascii=False))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ai-dlc")
     parser.set_defaults(func=lambda _: parser.print_help() or 0)
@@ -582,6 +588,10 @@ def build_parser() -> argparse.ArgumentParser:
     ensure_context = sub.add_parser("ensure-context")
     ensure_context.add_argument("--cwd", default="")
     ensure_context.set_defaults(func=cmd_ensure_context)
+
+    close_context = sub.add_parser("close-context")
+    close_context.add_argument("--cwd", default="")
+    close_context.set_defaults(func=cmd_close_context)
 
     return parser
 

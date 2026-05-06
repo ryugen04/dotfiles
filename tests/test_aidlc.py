@@ -38,7 +38,7 @@ from aidlc.state import (
     work_item_cancel,
     workspace_status,
 )
-from aidlc.workspace import ai_dlc_context, init_project, scaffold_workspace
+from aidlc.workspace import ai_dlc_context, cleanup_user_context, init_project, scaffold_workspace
 
 
 def git_env() -> dict[str, str]:
@@ -1170,6 +1170,50 @@ class AidlcTest(unittest.TestCase):
                 ensured = json.loads(stdout.getvalue())
                 self.assertEqual(ensured["mode"], "user_local_available")
                 self.assertTrue(Path(ensured["root"]).is_dir())
+
+    def test_close_context_removes_only_user_local_fallback_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_home = Path(tmp) / "home"
+            repo = Path(tmp) / "unconfigured"
+            repo.mkdir()
+            with patch.dict(os.environ, {"HOME": str(fake_home)}):
+                ensured = ai_dlc_context(repo, ensure_user_local=True)
+                user_root = Path(ensured["root"])
+                (user_root / "assignments" / "A001.yaml").write_text("id: A001\n", encoding="utf-8")
+
+                cleaned = cleanup_user_context(repo)
+
+                self.assertEqual(cleaned["status"], "deleted")
+                self.assertFalse(user_root.exists())
+                after = ai_dlc_context(repo)
+                self.assertEqual(after["mode"], "none")
+
+    def test_close_context_skips_project_local_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "plain-project"
+            (project / "ai-dlc").mkdir(parents=True)
+            metadata = project / "ai-dlc" / "project-metadata.yaml"
+            metadata.write_text("id: plain\n", encoding="utf-8")
+
+            result = cleanup_user_context(project)
+
+            self.assertEqual(result["status"], "skipped")
+            self.assertTrue(metadata.exists())
+
+    def test_close_context_cli_removes_codex_user_local_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_home = Path(tmp) / "home"
+            repo = Path(tmp) / "unconfigured"
+            repo.mkdir()
+            with patch.dict(os.environ, {"HOME": str(fake_home)}), patch("aidlc.cli.Path.cwd", return_value=repo):
+                ai_dlc_context(repo, ensure_user_local=True)
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    self.assertEqual(cli.main(["close-context"]), 0)
+
+                result = json.loads(stdout.getvalue())
+                self.assertEqual(result["status"], "deleted")
+                self.assertFalse(Path(result["root"]).exists())
 
     def test_hook_dispatch_non_workspace_context_mentions_controller_only_when_enabled(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
