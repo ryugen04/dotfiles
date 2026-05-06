@@ -36,24 +36,6 @@ def _ancestor_with(start: Path, relative: str) -> Path | None:
     return None
 
 
-def _project_local_hook_warning(project_root: Path) -> str:
-    hook_config = project_root / ".codex" / "hooks.json"
-    hook_dir = project_root / ".codex" / "hooks"
-    hook_files = sorted(path.name for path in hook_dir.glob("*.py")) if hook_dir.exists() else []
-    if not hook_config.exists() and not hook_files:
-        return ""
-    parts: list[str] = []
-    if hook_config.exists():
-        parts.append(".codex/hooks.json")
-    if hook_files:
-        parts.append(".codex/hooks/*.py")
-    detected = ", ".join(parts)
-    return (
-        f"Project-local hooks detected ({detected}). "
-        "Keep only project-specific hook behavior here; move generic Codex guardrails to dotfiles-managed user hooks."
-    )
-
-
 def stable_project_id(path: Path) -> str:
     resolved = path.expanduser().resolve()
     slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", resolved.name).strip("-._").lower() or "project"
@@ -106,17 +88,12 @@ def ai_dlc_context(start: Path, *, ensure_user_local: bool = False) -> dict:
     if project_root is None:
         project_root = _ancestor_with(current, "sango.yaml")
     if project_root is not None:
-        warning = _project_local_hook_warning(project_root)
-        recommendation = "Use the existing project-local AI-DLC control-plane."
-        if warning:
-            recommendation = f"{recommendation} {warning}"
         return {
             "mode": "project_root",
             "control_plane_scope": "project",
             "root": str(project_root),
             "user_local_root": "",
-            "recommendation": recommendation,
-            "warnings": [warning] if warning else [],
+            "recommendation": "Use the existing project-local AI-DLC control-plane.",
         }
 
     user_root = codex_user_workspace_root(current)
@@ -145,7 +122,12 @@ def ai_dlc_context(start: Path, *, ensure_user_local: bool = False) -> dict:
                     "source_path": str(current),
                     "control_plane_scope": "user_local",
                     "created_at": now_iso(),
-                    "recommendation": "Project-local AI-DLC is recommended for durable team workflows; this user-local context is Codex-owned fallback state.",
+                    "recommendation": (
+                        "Project-local AI-DLC is recommended for durable team workflows; "
+                        "plan-driven repos should add .codex/config.toml with codex_hooks enabled "
+                        "and guardrails.subagent_required=true before source edits. "
+                        "This user-local context is Codex-owned fallback state."
+                    ),
                 },
             )
 
@@ -156,9 +138,13 @@ def ai_dlc_context(start: Path, *, ensure_user_local: bool = False) -> dict:
         "root": str(user_root) if exists else "",
         "user_local_root": str(user_root),
         "recommendation": (
-            "Project-local AI-DLC is recommended. Use `ai-dlc ensure-context` to create Codex user-local fallback state."
+            "Project-local AI-DLC is recommended. For plan-driven work, add `.codex/config.toml` with "
+            "`codex_hooks = true` and `guardrails.subagent_required = true`; use `ai-dlc ensure-context` "
+            "only as Codex user-local fallback state."
             if not exists
-            else "Using Codex user-local AI-DLC fallback. Consider `ai-dlc init-project` when this should become project-local."
+            else "Using Codex user-local AI-DLC fallback. Add project-local `.codex/config.toml` with "
+            "`guardrails.subagent_required = true` before source edits, or consider `ai-dlc init-project` "
+            "when this should become project-local."
         ),
     }
 

@@ -35,16 +35,17 @@ bootstrap と local readiness が未完了のときに使う。AI-DLC task works
 
 1. 現在地を分類する。`workspace.yaml` がなければ root-system、sango root、既存 worktree、child repo のどれかを判定する。
 2. user-level install が疑わしい場合だけ dotfiles 更新、`ai-dlc install`、`ai-dlc doctor` を確認する。
-3. root-system が未初期化なら `ai-dlc init-project` と sango bootstrap/doctor を行う。
-4. task worktree がなければ `sango worktree create` で作る。既存 worktree があるなら作り直さず採用する。
-5. task worktree root が git repo でない場合は初期 commit を作り、child repo の branch/base ref を確認する。
-6. `ai-dlc init-workspace` を実行する。repo key/path と repo base ref を実 child repo に一致させる。
-7. `ai-dlc validate-overlay`、`ai-dlc bootstrap`、`ai-dlc overlay-status`、必要なら `ai-dlc validate` を実行する。
-8. initializer assignment を作成し、`dlc_initializer` を起動する。既に bootstrap 済みなら evidence 更新だけにする。
-9. initializer が `.local`、git controller、child `.git` pointer、nested submodule、sango state の破損を報告した場合だけ `dlc_repairer` を起動する。
-10. repair report の後で readiness コマンドを再実行し、`bootstrap.status=ready` と active work item 条件を確認する。
-11. readiness が曖昧、または再確認が必要なら `dlc_verifier` を起動して bootstrap evidence を残す。
-12. `plan_ready`、`blocked`、`needs_decision` のいずれかに遷移する。
+3. plan-driven に進める通常 repo で `workspace.yaml` / `ai-dlc/project-metadata.yaml` がまだない場合は、source 編集前に project-local `.codex/config.toml` を作成し、`[features].codex_hooks = true` と `[guardrails].subagent_required = true` を設定する。bootstrap 中に controller が直接編集してよい path は `.codex/config.toml`、`.codex/plans/**`、`AGENTS.md` など初期構築に限る。
+4. root-system が未初期化なら `ai-dlc init-project` と sango bootstrap/doctor を行う。
+5. task worktree がなければ `sango worktree create` で作る。既存 worktree があるなら作り直さず採用する。
+6. task worktree root が git repo でない場合は初期 commit を作り、child repo の branch/base ref を確認する。
+7. `ai-dlc init-workspace` を実行する。repo key/path と repo base ref を実 child repo に一致させる。
+8. `ai-dlc validate-overlay`、`ai-dlc bootstrap`、`ai-dlc overlay-status`、必要なら `ai-dlc validate` を実行する。
+9. initializer assignment を作成し、`dlc_initializer` を起動する。既に bootstrap 済みなら evidence 更新だけにする。
+10. initializer が `.local`、git controller、child `.git` pointer、nested submodule、sango state の破損を報告した場合だけ `dlc_repairer` を起動する。
+11. repair report の後で readiness コマンドを再実行し、`bootstrap.status=ready` と active work item 条件を確認する。
+12. readiness が曖昧、または再確認が必要なら `dlc_verifier` を起動して bootstrap evidence を残す。
+13. `plan_ready`、`blocked`、`needs_decision` のいずれかに遷移する。
 
 ## Boundaries
 
