@@ -3,6 +3,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import os
+import subprocess
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any
 from .io import now_iso, read_data, read_frontmatter, write_data, write_frontmatter
 from .overlay import git, validate_overlay
 from .schemas import validate_required
+from .workspace import ai_dlc_context
 from .workflow_contracts import (
     apply_transition_side_effects,
     next_agent_for_status,
@@ -51,6 +53,29 @@ CONTROL_PLANE_LOCKS = {
     "dlc_initializer": "bootstrap.lock",
     "dlc_repairer": "bootstrap.lock",
 }
+
+
+def _has_workspace(root: Path) -> bool:
+    return (root / "workspace.yaml").exists()
+
+
+def _workspace_less_context(root: Path) -> dict[str, Any]:
+    context = ai_dlc_context(root, ensure_user_local=True)
+    if context.get("control_plane_scope") != "user_local" or not context.get("root"):
+        raise FileNotFoundError("workspace.yaml not found")
+    return context
+
+
+def _workspace_less_project_id(root: Path) -> str:
+    context_path = assignment_root(root) / "context.yaml"
+    context = read_data(context_path)
+    return str(context.get("project_id") or Path(root).resolve().name)
+
+
+def _workspace_less_branch(root: Path) -> str:
+    result = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root, capture_output=True, text=True, check=False)
+    branch = result.stdout.strip()
+    return branch if result.returncode == 0 and branch else "workspace-less"
 
 
 def workspace_paths(root: Path) -> tuple[dict[str, Any], dict[str, Path]]:
@@ -403,7 +428,7 @@ def lease_path_errors(root: Path, lease: dict[str, Any], rel_paths: list[str]) -
             continue
         if writable and not path_is_allowed(rel_path, writable):
             errors.append(f"path is outside writable lease: {rel_path}")
-    if lease.get("repo"):
+    if lease.get("repo") and not lease.get("workspace_less"):
         repo_prefix = f"{lease['repo']}/"
         for rel_path in rel_paths:
             if not rel_path.startswith(repo_prefix):
@@ -488,7 +513,7 @@ def lock_release(root: Path, lock_name: str, session_id: str | None = None) -> N
     lock = _read_lock(path) or {}
     session_id = session_id or os.environ.get("CODEX_SESSION_ID")
     if lock.get("session_id") and session_id and lock.get("session_id") != session_id:
-        if not (_lease_expired(lock) and _decision_allows(root, f"allow-stale-lock-release: {lock_name}")):
+        if not (_lease_expired(lock) and _has_workspace(root) and _decision_allows(root, f"allow-stale-lock-release: {lock_name}")):
             raise ValueError("lock is owned by a different session")
     path.unlink()
 
@@ -536,6 +561,8 @@ def finish(root: Path) -> dict[str, Any]:
 
 
 def assignment_root(root: Path) -> Path:
+    if not _has_workspace(root):
+        return Path(_workspace_less_context(root)["root"])
     workspace = read_data(root / "workspace.yaml")
     return (root / workspace["paths"]["local"]).resolve() / "ai-dlc"
 
@@ -551,6 +578,9 @@ def _next_assignment_id(assignments_dir: Path) -> str:
 
 
 def assignment_create(root: Path, role: str, repo: str | None, writable: list[str], work_item: str | None) -> dict[str, Any]:
+    if not _has_workspace(root):
+        return _workspace_less_assignment_create(root, role, repo, writable, work_item)
+
     workspace, paths = workspace_paths(root)
     _, plan_meta, _ = load_plan(root)
     plan_status = plan_meta.get("status")
@@ -601,6 +631,50 @@ def assignment_create(root: Path, role: str, repo: str | None, writable: list[st
             if item["id"] == work_item:
                 payload["next_recommendation"] = item.get("verifier_gate", {"phase": "executing", "assignment_role": role})
                 break
+    write_data(assignments_dir / f"{assignment_id}.yaml", payload)
+    return payload
+
+
+def _workspace_less_assignment_create(root: Path, role: str, repo: str | None, writable: list[str], work_item: str | None) -> dict[str, Any]:
+    if role != "dlc_repo_worker":
+        raise ValueError("workspace-less source_change assignments currently require role dlc_repo_worker")
+    if not writable:
+        raise ValueError("workspace-less dlc_repo_worker assignment requires at least one --writable path")
+
+    root = root.expanduser().resolve()
+    base = assignment_root(root)
+    assignments_dir = base / "assignments"
+    assignments_dir.mkdir(parents=True, exist_ok=True)
+    assignment_id = _next_assignment_id(assignments_dir)
+    repo_name = repo or "source"
+    project_id = _workspace_less_project_id(root)
+    branch = _workspace_less_branch(root)
+    forbidden = [".codex/**", ".git/**", "ai-dlc/**", "workspace.yaml"]
+    payload = {
+        "schema": "ai-dlc.assignment.v1",
+        "id": assignment_id,
+        "workspace_id": project_id,
+        "workspace_less": True,
+        "source_root": str(root),
+        "role": role,
+        "agent": role,
+        "phase": "executing",
+        "workflow_type": "plan_implementation",
+        "phase_owner": "dlc_repo_worker",
+        "controller_mode": "orchestrate_only",
+        "repo": repo_name,
+        "lock_scope": f"repo:{repo_name}",
+        "work_item": work_item,
+        "writable": writable,
+        "forbidden": forbidden,
+        "deliverables": _role_deliverables(role),
+        "issue": {"tracker": "workspace-less", "id": project_id, "url": ""},
+        "branch": {"issue": branch, "base_ref": ""},
+        "result_ref": f"reports/{assignment_id}.json",
+        "status": "created",
+        "created_at": now_iso(),
+        "next_recommendation": {"phase": "verifying", "assignment_role": "dlc_verifier"},
+    }
     write_data(assignments_dir / f"{assignment_id}.yaml", payload)
     return payload
 
@@ -673,10 +747,12 @@ def agent_claim(root: Path, assignment_id: str, session_id: str | None = None) -
         "assignment_id": assignment_id,
         "role": assignment["role"],
         "status": "claimed",
-        "plan_status": load_plan(root)[1].get("status"),
+        "plan_status": assignment.get("phase") if assignment.get("workspace_less") else load_plan(root)[1].get("status"),
         "active_item": assignment.get("work_item"),
         "repo": assignment.get("repo"),
         "lock_scope": assignment.get("lock_scope"),
+        "workspace_less": bool(assignment.get("workspace_less")),
+        "source_root": assignment.get("source_root"),
         "issue": assignment.get("issue", {}),
         "branch": assignment.get("branch", {}),
         "writable": assignment.get("writable", []),
@@ -720,7 +796,7 @@ def agent_report(root: Path, assignment_id: str, status: str, report_file: str |
     if report_file:
         payload["source"] = report_file
     report_path.write_text(json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
-    if assignment.get("role") in {"dlc_verifier", "dlc_evaluator"}:
+    if assignment.get("role") in {"dlc_verifier", "dlc_evaluator"} and not assignment.get("workspace_less"):
         _, paths = workspace_paths(root)
         evidence = read_data(paths["evidence"])
         evidence["items"][f"assignment:{assignment_id}"] = {

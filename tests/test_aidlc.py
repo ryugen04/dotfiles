@@ -844,6 +844,127 @@ class AidlcTest(unittest.TestCase):
             )
             self.assertEqual(allowed_bash, {})
 
+    def test_workspace_less_repo_worker_assignment_claim_and_hook_edit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            repo = tmp_path / "repo"
+            self.init_repo(repo, "workspace-less\n")
+            (repo / ".codex").mkdir()
+            (repo / ".codex" / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            env = {"HOME": str(fake_home)}
+            payload = {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": str(repo / "README.md")}}
+            blocked = self.dispatch_with_payload(repo, payload, env)
+            self.assertEqual(blocked["decision"], "block")
+            self.assertIn("delegate to a subagent", blocked["reason"])
+
+            with patch.dict(os.environ, env):
+                assignment = assignment_create(repo, "dlc_repo_worker", "source", ["README.md"], "WI-001")
+                validate_required(assignment)
+                self.assertTrue(assignment["workspace_less"])
+                lease = agent_claim(repo, assignment["id"], session_id="sess-source")
+                validate_required(lease)
+                self.assertTrue(lease["workspace_less"])
+
+            allowed = self.dispatch_with_payload(repo, payload, {**env, "CODEX_SESSION_ID": "sess-source"})
+            self.assertEqual(allowed, {})
+
+            payload_session = {
+                "session_id": "sess-source",
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Edit",
+                "tool_input": {"file_path": str(repo / "README.md")},
+            }
+            allowed_from_payload_session = self.dispatch_with_payload(repo, payload_session, env)
+            self.assertEqual(allowed_from_payload_session, {})
+
+            forbidden_path = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": str(repo / ".git" / "config")}},
+                {**env, "CODEX_SESSION_ID": "sess-source"},
+            )
+            self.assertEqual(forbidden_path["decision"], "block")
+            self.assertIn("workspace-less lease violation", forbidden_path["reason"])
+
+            outside_writable = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": str(repo / "notes.md")}},
+                {**env, "CODEX_SESSION_ID": "sess-source"},
+            )
+            self.assertEqual(outside_writable["decision"], "block")
+            self.assertIn("workspace-less lease violation", outside_writable["reason"])
+
+    def test_workspace_less_assignment_cli_create_and_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            repo = tmp_path / "repo"
+            self.init_repo(repo, "workspace-less cli\n")
+
+            with patch.dict(os.environ, {"HOME": str(fake_home)}), patch("aidlc.cli.Path.cwd", return_value=repo):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    self.assertEqual(
+                        cli.main([
+                            "assignment",
+                            "create",
+                            "--role",
+                            "dlc_repo_worker",
+                            "--repo",
+                            "source",
+                            "--work-item",
+                            "WI-001",
+                            "--writable",
+                            "README.md",
+                        ]),
+                        0,
+                    )
+                assignment = json.loads(stdout.getvalue())
+                self.assertEqual(assignment["role"], "dlc_repo_worker")
+                self.assertTrue(assignment["workspace_less"])
+
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    self.assertEqual(cli.main(["agent-claim", "--assignment", assignment["id"], "--session-id", "sess-cli"]), 0)
+                lease = json.loads(stdout.getvalue())
+                self.assertEqual(lease["assignment_id"], assignment["id"])
+                self.assertTrue(lease["workspace_less"])
+
+    def test_workspace_less_assignment_prompt_context_guides_repo_worker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            repo = tmp_path / "repo"
+            self.init_repo(repo, "workspace-less prompt\n")
+            (repo / ".codex").mkdir()
+            (repo / ".codex" / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            env = {"HOME": str(fake_home)}
+            with patch.dict(os.environ, env):
+                assignment = assignment_create(repo, "dlc_repo_worker", "source", ["README.md"], "WI-001")
+
+            session = self.dispatch_with_payload(repo, {"hook_event_name": "SessionStart"}, env)
+            session_context = session["hookSpecificOutput"]["additionalContext"]
+            self.assertIn("Controller-only bootstrap phase", session_context)
+            self.assertIn("dlc_repo_worker", session_context)
+            self.assertIn("lease-scoped paths", session_context)
+
+            prompt = self.dispatch_with_payload(
+                repo,
+                {
+                    "session_id": "sess-worker",
+                    "hook_event_name": "UserPromptSubmit",
+                    "prompt": f"Use assignment {assignment['id']} to edit README.md",
+                },
+                env,
+            )
+            prompt_context = prompt["hookSpecificOutput"]["additionalContext"]
+            self.assertIn(f"Workspace-less dlc_repo_worker assignment: {assignment['id']}", prompt_context)
+            self.assertIn(f"ai-dlc agent-claim --assignment {assignment['id']} --session-id sess-worker", prompt_context)
+            self.assertIn("README.md", prompt_context)
+            self.assertIn("controller-only direct edit ban applies before claim", prompt_context)
+
     def test_hook_dispatch_allows_read_only_sed_and_related_bash_outside_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)

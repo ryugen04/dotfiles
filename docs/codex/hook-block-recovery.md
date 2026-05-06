@@ -44,7 +44,7 @@ ai-dlc block-diagnose \
 
 - `read_only_false_positive`: read-only 操作が誤って mutating と判定された。
 - `bootstrap_config_gap`: `bootstrap_edit_paths` や `bootstrap_extra_commands` が不足している。
-- `needs_assignment`: controller ではなく subagent assignment が必要。
+- `needs_assignment`: controller ではなく subagent assignment が必要。feature/source 実装では、委譲を回避するために `bootstrap_edit_paths` を広げない。
 - `wrong_next_agent`: 現在 phase と起動 agent が一致していない。
 - `missing_workspace`: workspace または control-plane が見つからない。
 - `approval_required`: 非破壊だが明示承認が必要。

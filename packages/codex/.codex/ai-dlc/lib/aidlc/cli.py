@@ -44,6 +44,13 @@ def find_workspace_root(start: Path) -> Path:
     raise FileNotFoundError("workspace.yaml not found")
 
 
+def find_assignment_context_root(start: Path) -> Path:
+    try:
+        return find_workspace_root(start)
+    except FileNotFoundError:
+        return start
+
+
 def cmd_install(_: argparse.Namespace) -> int:
     home = Path.home()
     status = {
@@ -248,38 +255,38 @@ def cmd_invalidate(args: argparse.Namespace) -> int:
 
 
 def cmd_assignment_create(args: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = find_assignment_context_root(Path.cwd())
     payload = assignment_create(root, args.role, args.repo, args.writable, args.work_item)
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_assignment_list(_: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = find_assignment_context_root(Path.cwd())
     print(json.dumps(assignment_list(root), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_assignment_status(args: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = find_assignment_context_root(Path.cwd())
     print(json.dumps(assignment_update_status(root, args.assignment, args.status), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_agent_claim(args: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = find_assignment_context_root(Path.cwd())
     print(json.dumps(agent_claim(root, args.assignment, args.session_id), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_agent_report(args: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = find_assignment_context_root(Path.cwd())
     print(json.dumps(agent_report(root, args.assignment, args.status, args.report), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_agent_release(args: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = find_assignment_context_root(Path.cwd())
     agent_release(root, args.assignment, args.session_id)
     return 0
 
@@ -303,13 +310,13 @@ def cmd_deadlock_check(_: argparse.Namespace) -> int:
 
 
 def cmd_lock_list(_: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = find_assignment_context_root(Path.cwd())
     print(json.dumps(lock_list(root), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_lock_release(args: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = find_assignment_context_root(Path.cwd())
     lock_release(root, args.lock_name, args.session_id)
     return 0
 
