@@ -51,6 +51,22 @@ ai-dlc block-diagnose \
 - `destructive_forbidden`: reset、clean、push、破壊的 rm など。
 - `hook_schema_error`: hook payload / output schema の不整合。
 
+## install 承認
+
+`install.sh` の本実行は user home を変更するため、dry-run 以外は既定で block する。
+
+許可する場合は、対象 command が `bootstrap_extra_commands` に登録済みであることを確認し、ユーザー承認後に明示マーカー付きで再実行する。
+
+```bash
+AI_DLC_INSTALL_APPROVED=1 ./install.sh codex agents
+```
+
+dry-run は承認なしで確認できる。
+
+```bash
+./install.sh --dry-run codex agents
+```
+
 ## 重要な制約
 
 - PreToolUse は unsupported allow/update field に依存しない。

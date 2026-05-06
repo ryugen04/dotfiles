@@ -1422,7 +1422,7 @@ class AidlcTest(unittest.TestCase):
                 result = self.dispatch_with_payload(root, payload)
                 self.assertEqual(result, {}, f"Expected allow for: {cmd}")
 
-    def test_hook_allows_install_sh_dry_run_but_not_normal_install(self) -> None:
+    def test_hook_allows_install_sh_dry_run_but_requires_approval_for_normal_install(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             fake_home = root / "home"
@@ -1457,8 +1457,39 @@ class AidlcTest(unittest.TestCase):
                     {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "./install.sh codex"}},
                     {"HOME": str(fake_home)},
                 )
+                approved_install = self.dispatch_with_payload(
+                    repo_root,
+                    {
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Bash",
+                        "tool_input": {"cmd": "AI_DLC_INSTALL_APPROVED=1 ./install.sh codex"},
+                    },
+                    {"HOME": str(fake_home)},
+                )
+                approved_absolute_install = self.dispatch_with_payload(
+                    repo_root,
+                    {
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Bash",
+                        "tool_input": {"cmd": f"AI_DLC_INSTALL_APPROVED=1 {repo_root / 'install.sh'} codex"},
+                    },
+                    {"HOME": str(fake_home)},
+                )
+                unconfigured_install = self.dispatch_with_payload(
+                    repo_root,
+                    {
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Bash",
+                        "tool_input": {"cmd": "AI_DLC_INSTALL_APPROVED=1 ./install.sh agents"},
+                    },
+                    {"HOME": str(fake_home)},
+                )
             self.assertEqual(normal_install["decision"], "block")
             self.assertIn("mutating Bash", normal_install["reason"])
+            self.assertEqual(approved_install, {})
+            self.assertEqual(approved_absolute_install, {})
+            self.assertEqual(unconfigured_install["decision"], "block")
+            self.assertIn("mutating Bash", unconfigured_install["reason"])
 
     def test_subagent_required_false_overrides_project_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

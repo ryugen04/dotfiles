@@ -67,6 +67,7 @@ READ_ONLY_GH_SUBCOMMAND_PAIRS = {
 }
 GIT_FINISH_GIT_SUBCOMMANDS = {"add", "commit", "switch", "checkout", "push"}
 GIT_FINISH_GH_SUBCOMMAND_PAIRS = {("pr", "create"), ("pr", "view"), ("pr", "status")}
+INSTALL_APPROVAL_ENV = "AI_DLC_INSTALL_APPROVED"
 DISALLOWED_SHELL_FRAGMENTS = ("`", "$(", "\n", "\r", ";", "&&", "||")
 DISALLOWED_SHELL_TOKENS = {"|", "&", ">", ">>", "<", "<<", "<<<"}
 READ_ONLY_FIND_FORBIDDEN_PREFIXES = ("-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprintf", "-fls")
@@ -465,7 +466,7 @@ def diagnose_block(cwd: Path, event_name: str = "", tool: str = "", command: str
             return _block_diagnosis(
                 "approval_required",
                 "request_approval",
-                ["use_dry_run", "request_user_approval"],
+                ["use_dry_run", "request_user_approval", f"retry_with_{INSTALL_APPROVAL_ENV}=1"],
                 reason,
                 requires_user_approval=True,
             )
@@ -770,6 +771,28 @@ def _is_install_sh_dry_run(tokens: list[str], cwd: Path) -> bool:
     return dry_run
 
 
+def _canonical_bootstrap_tokens(tokens: list[str], cwd: Path) -> list[str]:
+    if _is_install_sh_command(tokens, cwd):
+        return [str(_repo_install_script().resolve()), *tokens[1:]]
+    return tokens
+
+
+def _matches_bootstrap_extra_command(tokens: list[str], cwd: Path) -> bool:
+    expected = _canonical_bootstrap_tokens(tokens, cwd)
+    for configured in _bootstrap_extra_commands(cwd):
+        if any(fragment in configured for fragment in DISALLOWED_SHELL_FRAGMENTS):
+            continue
+        try:
+            configured_tokens = shlex.split(configured.strip())
+        except ValueError:
+            continue
+        if not configured_tokens or any(token in DISALLOWED_SHELL_TOKENS for token in configured_tokens):
+            continue
+        if _canonical_bootstrap_tokens(configured_tokens, cwd) == expected:
+            return True
+    return False
+
+
 def _is_read_only_bash(command: str) -> bool:
     normalized = command.strip()
     if not normalized:
@@ -818,18 +841,21 @@ def _is_allowed_bootstrap_command(command: str, cwd: Path) -> bool:
         tokens = shlex.split(normalized)
     except ValueError:
         return False
-    if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
+    env, command_tokens = _strip_leading_env(tokens)
+    if not command_tokens or any(token in DISALLOWED_SHELL_TOKENS for token in command_tokens):
         return False
-    if tokens[0] == "ai-dlc":
+    if command_tokens[0] == "ai-dlc":
         return True
-    if len(tokens) >= 3 and tokens[0] == "sango" and tokens[1] == "worktree":
-        return tokens[2] in {"create", "list", "status"}
-    if len(tokens) >= 2 and (tokens[0], tokens[1]) in BOOTSTRAP_AIDLC_COMMANDS:
+    if len(command_tokens) >= 3 and command_tokens[0] == "sango" and command_tokens[1] == "worktree":
+        return command_tokens[2] in {"create", "list", "status"}
+    if len(command_tokens) >= 2 and (command_tokens[0], command_tokens[1]) in BOOTSTRAP_AIDLC_COMMANDS:
         return True
-    if _is_install_sh_dry_run(tokens, cwd):
+    if _is_install_sh_dry_run(command_tokens, cwd):
         return True
-    if normalized in _bootstrap_extra_commands(cwd):
-        return not _is_install_sh_command(tokens, cwd)
+    if _matches_bootstrap_extra_command(command_tokens, cwd):
+        if _is_install_sh_command(command_tokens, cwd):
+            return env.get(INSTALL_APPROVAL_ENV) == "1"
+        return True
     return False
 
 
