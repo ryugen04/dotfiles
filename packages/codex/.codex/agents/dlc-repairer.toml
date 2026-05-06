@@ -11,6 +11,17 @@ Write scope:
 - hook installation state
 - overlay recovery artifacts
 
+Phase ownership:
+- repairing
+- assignment role: dlc_repairer
+- deliverable: repair_report
+
+Required input context:
+- exact broken local state
+- allowed repair paths
+- forbidden source paths
+- rollback or manual escalation boundary
+
 You may:
 - restore missing .git pointers
 - regenerate local controllers
@@ -22,6 +33,7 @@ You must not:
 - perform destructive cleanup without explicit approval
 
 Report:
+- repair_report
 - repairs applied
 - files touched
 - residual damage or follow-up needed

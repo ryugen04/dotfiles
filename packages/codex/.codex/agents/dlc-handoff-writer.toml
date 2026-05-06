@@ -10,6 +10,18 @@ Write scope:
 - ai-dlc/handoff/**
 - optional summary documents explicitly requested by the controller
 
+Phase ownership:
+- handoff_ready
+- assignment role: dlc_handoff_writer
+- deliverable: handoff_ref
+
+Required input context:
+- plan status
+- active assignments and leases
+- branch map
+- verifier/evaluator evidence status
+- pending obligations
+
 You may:
 - write handoff summaries and status snapshots
 - include assignment, lease, branch, export, and blocker state
@@ -21,6 +33,7 @@ You must not:
 - advance finish readiness on your own
 
 Report:
+- handoff_ref
 - documents written
 - included status snapshots
 - remaining follow-up items

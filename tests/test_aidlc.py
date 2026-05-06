@@ -18,7 +18,9 @@ if str(LIB) not in sys.path:
 from aidlc import hooks
 from aidlc import cli
 from aidlc.git_hooks import install_project_hooks
+from aidlc.io import read_frontmatter, write_frontmatter
 from aidlc.overlay import overlay_init, overlay_repair, root_export, validate_overlay
+from aidlc.schemas import validate_required
 from aidlc.state import (
     agent_claim,
     agent_release,
@@ -36,7 +38,7 @@ from aidlc.state import (
     work_item_cancel,
     workspace_status,
 )
-from aidlc.workspace import init_project, scaffold_workspace
+from aidlc.workspace import ai_dlc_context, init_project, scaffold_workspace
 
 
 def git_env() -> dict[str, str]:
@@ -149,8 +151,16 @@ class AidlcTest(unittest.TestCase):
             }
         ]
         work_items_path.write_text(json.dumps(work_items), encoding="utf-8")
+        plan_assignment = assignment_create(root, "dlc_plan_writer", None, [], None)
+        agent_report(root, plan_assignment["id"], "reported")
         transition(root, "plan_ready")
+        scope_assignment = assignment_create(root, "dlc_scope_manager", None, [], None)
+        agent_report(root, scope_assignment["id"], "reported")
+        transition(root, "assigning")
+        assigning_assignment = assignment_create(root, "dlc_scope_manager", None, [], None)
+        agent_report(root, assigning_assignment["id"], "reported")
         work_item_activate(root, "WI-001")
+        transition(root, "executing")
 
     def test_init_project_creates_scaffold(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -205,6 +215,14 @@ class AidlcTest(unittest.TestCase):
             self.assertIn("entry_template", evidence)
             self.assertIn("lease detail", handoff)
             self.assertIn("allow-next-agent", decisions)
+            plan_meta, _ = read_frontmatter(root / "ai-dlc" / "plans" / "LIN-123.md")
+            self.assertEqual(plan_meta["workflow"]["workflow_type"], "plan_implementation")
+            self.assertEqual(plan_meta["orchestration"]["controller_mode"], "orchestrate_only")
+            self.assertIn("phase_ownership", plan_meta["orchestration"])
+            self.assertIn("approval_boundary", plan_meta)
+            self.assertIn("rollback", plan_meta)
+            self.assertIn("phases", plan_meta)
+            self.assertEqual(plan_meta["paths"]["plan"], "ai-dlc/plans/LIN-123.md")
 
             self.prepare_active_web_item(root)
             self.assertEqual(validate(root), [])
@@ -213,14 +231,159 @@ class AidlcTest(unittest.TestCase):
 
             created = assignment_create(root, "dlc_repo_worker", "web", ["web/README.md"], "WI-001")
             listed = assignment_list(root)
-            self.assertEqual(created["id"], listed[0]["id"])
+            self.assertIn(created["id"], [item["id"] for item in listed])
             self.assertEqual(created["workspace_id"], "LIN-123")
             self.assertEqual(created["branch"]["issue"], "LIN-123-branch")
 
+            with self.assertRaisesRegex(ValueError, "not allowed during plan_implementation phase executing"):
+                assignment_create(root, "dlc_plan_writer", None, [], None)
+
+    def test_phase_owner_assignment_is_enforced(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
             plan_assignment = assignment_create(root, "dlc_plan_writer", None, [], None)
+            validate_required(plan_assignment)
             self.assertIn("ai-dlc/plans/**", plan_assignment["writable"])
             self.assertNotIn("ai-dlc/**", plan_assignment["forbidden"])
             self.assertEqual(plan_assignment["lock_scope"], "plan.lock")
+            with self.assertRaisesRegex(ValueError, "not allowed during plan_implementation phase planning"):
+                assignment_create(root, "dlc_repo_worker", "web", ["web/README.md"], "WI-001")
+
+    def test_plan_workflow_contract_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            plan_path = root / "ai-dlc" / "plans" / "LIN-123.md"
+            meta, body = read_frontmatter(plan_path)
+            meta.pop("workflow")
+            write_frontmatter(plan_path, meta, body)
+            errors = validate(root)
+            self.assertIn("plan.workflow is required", errors)
+
+    def test_plan_next_agent_must_match_phase_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            plan_path = root / "ai-dlc" / "plans" / "LIN-123.md"
+            meta, body = read_frontmatter(plan_path)
+            meta["current"]["next_agent"] = "dlc_scope_manager"
+            write_frontmatter(plan_path, meta, body)
+            errors = validate(root)
+            self.assertIn("plan.current.next_agent must be dlc_plan_writer for plan_implementation phase planning", errors)
+
+    def test_transition_requires_current_phase_owner_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            with self.assertRaisesRegex(ValueError, "phase planning requires dlc_plan_writer report"):
+                transition(root, "plan_ready")
+            assignment = assignment_create(root, "dlc_plan_writer", None, [], None)
+            agent_report(root, assignment["id"], "reported")
+            meta = transition(root, "plan_ready")
+            self.assertEqual(meta["status"], "plan_ready")
+
+    def test_cross_cutting_plan_contract_sections_are_required(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            plan_path = root / "ai-dlc" / "plans" / "LIN-123.md"
+            meta, body = read_frontmatter(plan_path)
+            meta.pop("approval_boundary")
+            meta["paths"].pop("evidence")
+            meta["targets"]["writable"] = "web/**"
+            meta["phases"][0].pop("checkpoints")
+            write_frontmatter(plan_path, meta, body)
+            errors = validate(root)
+            self.assertIn("plan.approval_boundary is required", errors)
+            self.assertIn("plan.paths.evidence is required", errors)
+            self.assertIn("plan.targets.writable must be a list", errors)
+            self.assertIn("plan.phases[0].checkpoints is required", errors)
+
+    def test_workflow_specific_transition_graph_is_enforced(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            plan_path = root / "ai-dlc" / "plans" / "LIN-123.md"
+            meta, body = read_frontmatter(plan_path)
+            meta["workflow"] = {
+                "origin_mode": "docs_only_no_workspace",
+                "execution_intent": "docs_only",
+                "safety_domain": "docs_report",
+                "workflow_type": "docs_report",
+                "config_edit_stage": None,
+            }
+            write_frontmatter(plan_path, meta, body)
+            assignment = assignment_create(root, "dlc_docs_writer", None, [], None)
+            agent_report(root, assignment["id"], "reported")
+            transition(root, "executing")
+            meta, _ = read_frontmatter(plan_path)
+            self.assertEqual(meta["status"], "executing")
+            self.assertEqual(meta["current"]["next_agent"], "dlc_docs_writer")
+            with self.assertRaisesRegex(ValueError, "invalid plan transition"):
+                transition(root, "evaluating")
+
+    def test_docs_report_assignment_uses_docs_writer_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            plan_path = root / "ai-dlc" / "plans" / "LIN-123.md"
+            meta, body = read_frontmatter(plan_path)
+            meta["workflow"] = {
+                "origin_mode": "docs_only_no_workspace",
+                "execution_intent": "docs_only",
+                "safety_domain": "docs_report",
+                "workflow_type": "docs_report",
+                "config_edit_stage": None,
+            }
+            meta["status"] = "executing"
+            meta["current"]["phase"] = "executing"
+            meta["current"]["next_agent"] = "dlc_docs_writer"
+            write_frontmatter(plan_path, meta, body)
+
+            assignment = assignment_create(root, "dlc_docs_writer", None, [], None)
+            self.assertEqual(assignment["lock_scope"], "docs.lock")
+            self.assertEqual(assignment["deliverables"], ["docs_ref"])
+            self.assertIn("ai-dlc/docs/**", assignment["writable"])
+            self.assertNotIn("ai-dlc/**", assignment["forbidden"])
+
+    def test_docs_report_agent_gate_follows_current_phase_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            plan_path = root / "ai-dlc" / "plans" / "LIN-123.md"
+            meta, body = read_frontmatter(plan_path)
+            meta["workflow"] = {
+                "origin_mode": "docs_only_no_workspace",
+                "execution_intent": "docs_only",
+                "safety_domain": "docs_report",
+                "workflow_type": "docs_report",
+                "config_edit_stage": None,
+            }
+            meta["status"] = "verifying"
+            meta["current"]["phase"] = "verifying"
+            meta["current"]["next_agent"] = "dlc_verifier"
+            write_frontmatter(plan_path, meta, body)
+
+            blocked = self.dispatch_with_payload(root, {"tool_name": "spawn_agent", "tool_input": {"agent": "dlc_docs_writer"}})
+            self.assertEqual(blocked["decision"], "block")
+            self.assertIn("next agent must be dlc_verifier", blocked["reason"])
+            allowed = self.dispatch_with_payload(root, {"tool_name": "spawn_agent", "tool_input": {"agent": "dlc_verifier"}})
+            self.assertEqual(allowed["decision"], "allow")
+
+    def test_git_finish_assignment_uses_git_operator_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            plan_path = root / "ai-dlc" / "plans" / "LIN-123.md"
+            meta, body = read_frontmatter(plan_path)
+            meta["workflow"] = {
+                "origin_mode": "resume_existing_workspace",
+                "execution_intent": "autonomous_until_git_boundary",
+                "safety_domain": "git_finish",
+                "workflow_type": "git_finish",
+                "config_edit_stage": None,
+            }
+            meta["status"] = "ready_to_finish"
+            meta["current"]["phase"] = "ready_to_finish"
+            meta["current"]["next_agent"] = "dlc_git_operator"
+            write_frontmatter(plan_path, meta, body)
+
+            assignment = assignment_create(root, "dlc_git_operator", None, [], None)
+            self.assertEqual(assignment["lock_scope"], "git.lock")
+            self.assertEqual(assignment["deliverables"], ["git_result_ref"])
+            self.assertIn("../.local/**", assignment["writable"])
 
     def test_validate_overlay_reports_missing_repos(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -261,15 +424,19 @@ class AidlcTest(unittest.TestCase):
             self.prepare_active_web_item(root)
             bootstrap(root)
 
-            payload = {"tool_name": "Edit", "tool_input": {"file_path": str(root / "web" / "README.md")}}
+            payload = {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": str(root / "web" / "README.md")}}
             blocked = self.dispatch_with_payload(root, payload)
             self.assertEqual(blocked["decision"], "block")
             self.assertIn("claimed lease", blocked["reason"])
+            pretool_output = blocked["hookSpecificOutput"]
+            self.assertEqual(pretool_output["hookEventName"], "PreToolUse")
+            self.assertEqual(pretool_output["permissionDecision"], "deny")
+            self.assertIn("claimed lease", pretool_output["permissionDecisionReason"])
 
             assignment = assignment_create(root, "dlc_repo_worker", "web", ["web/README.md"], "WI-001")
             lease = agent_claim(root, assignment["id"], session_id="sess-web")
             allowed = self.dispatch_with_payload(root, payload, {"CODEX_SESSION_ID": lease["session_id"]})
-            self.assertEqual(allowed["decision"], "allow")
+            self.assertEqual(allowed, {})
 
             forbidden_payload = {"tool_name": "Edit", "tool_input": {"file_path": str(root / "backend" / "README.md")}}
             forbidden = self.dispatch_with_payload(root, forbidden_payload, {"CODEX_SESSION_ID": lease["session_id"]})
@@ -383,6 +550,84 @@ class AidlcTest(unittest.TestCase):
             payload = {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": str(root / "ai-dlc" / "docs" / "a.md")}}
             self.assertEqual(self.dispatch_with_payload(root, payload), {})
 
+    def test_hook_allows_apply_patch_from_multiline_bootstrap_edit_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".codex").mkdir()
+            (root / ".codex" / "config.toml").write_text(
+                "\n".join([
+                    "[guardrails]",
+                    "subagent_required = true",
+                    "bootstrap_edit_paths = [",
+                    '  "ai-dlc/docs/**",',
+                    "]",
+                ]),
+                encoding="utf-8",
+            )
+            payload = {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "apply_patch",
+                "tool_input": {"cmd": "*** Update File: ai-dlc/docs/report.md\n+ok"},
+            }
+            self.assertEqual(self.dispatch_with_payload(root, payload), {})
+
+    def test_hook_merges_user_and_project_guardrails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            fake_home_config = fake_home / ".codex" / "config.toml"
+            fake_home_config.parent.mkdir(parents=True)
+            fake_home_config.write_text(
+                "\n".join([
+                    "[guardrails]",
+                    "subagent_required = false",
+                    'bootstrap_extra_commands = ["sango doctor"]',
+                    'bootstrap_edit_paths = ["user-only/**"]',
+                ]),
+                encoding="utf-8",
+            )
+            repo = tmp_path / "repo"
+            (repo / ".codex").mkdir(parents=True)
+            (repo / ".codex" / "config.toml").write_text(
+                "\n".join([
+                    "[guardrails]",
+                    "subagent_required = true",
+                    "bootstrap_edit_paths = [",
+                    '  "project-only/**",',
+                    "]",
+                ]),
+                encoding="utf-8",
+            )
+
+            env = {"HOME": str(fake_home)}
+            user_path_edit = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": str(repo / "user-only" / "a.md")}},
+                env,
+            )
+            self.assertEqual(user_path_edit, {})
+
+            project_path_edit = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": str(repo / "project-only" / "a.md")}},
+                env,
+            )
+            self.assertEqual(project_path_edit, {})
+
+            extra_command = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "sango doctor"}},
+                env,
+            )
+            self.assertEqual(extra_command, {})
+
+            blocked = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "mkdir -p scratch"}},
+                env,
+            )
+            self.assertEqual(blocked["decision"], "block")
+
     def test_hook_user_prompt_submit_returns_minimal_context_when_no_active_work(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root, _ = self.create_workspace(Path(tmp))
@@ -391,6 +636,116 @@ class AidlcTest(unittest.TestCase):
             self.assertIn("hookSpecificOutput", result)
             ctx = result["hookSpecificOutput"]["additionalContext"]
             self.assertTrue(ctx == "" or ctx.startswith("Next:"))
+
+    def test_hook_user_prompt_submit_detects_codex_config_edit_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            payload = {
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "AI_DLC_SAFETY_DOMAIN=codex_config_edit: update hooks",
+            }
+            result = self.dispatch_with_payload(root, payload)
+            output = result["hookSpecificOutput"]
+            self.assertEqual(output["hookEventName"], "UserPromptSubmit")
+            self.assertIn("Workflow safety_domain: codex_config_edit", output["additionalContext"])
+
+    def test_hook_dispatch_permission_request_uses_current_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            codex_dir = repo / ".codex"
+            codex_dir.mkdir()
+            (codex_dir / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            allowed = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PermissionRequest", "tool_name": "Bash", "tool_input": {"cmd": "pwd"}},
+            )
+            allowed_output = allowed["hookSpecificOutput"]
+            self.assertEqual(allowed_output["hookEventName"], "PermissionRequest")
+            self.assertEqual(allowed_output["decision"]["behavior"], "allow")
+            self.assertNotIn("permissionDecision", allowed)
+
+            denied = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PermissionRequest", "tool_name": "Bash", "tool_input": {"cmd": "mkdir -p scratch"}},
+            )
+            denied_output = denied["hookSpecificOutput"]
+            self.assertEqual(denied_output["hookEventName"], "PermissionRequest")
+            self.assertEqual(denied_output["decision"]["behavior"], "deny")
+            self.assertIn("message", denied_output["decision"])
+            self.assertNotIn("permissionDecision", denied)
+
+    def test_block_reason_is_schema_safe_and_diagnosable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            payload = {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": str(root / "web" / "README.md")}}
+            blocked = self.dispatch_with_payload(root, payload)
+            output = blocked["hookSpecificOutput"]
+            reason = output["permissionDecisionReason"]
+            self.assertEqual(output["hookEventName"], "PreToolUse")
+            self.assertEqual(output["permissionDecision"], "deny")
+            self.assertTrue(reason.startswith("AI-DLC_BLOCK "))
+            self.assertIn("writable session requires a claimed lease", reason)
+
+            diagnosis = hooks.diagnose_block(root, "PreToolUse", "Edit", "", reason)
+            self.assertEqual(diagnosis["block_type"], "needs_assignment")
+            self.assertEqual(diagnosis["suggested_route"], "delegate_phase_owner")
+            self.assertIn("delegate_to_subagent", diagnosis["allowed_next_actions"])
+
+    def test_block_diagnose_cli_maps_mutating_bash_to_assignment_route(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            stdout = io.StringIO()
+            with patch("aidlc.cli.Path.cwd", return_value=repo), contextlib.redirect_stdout(stdout):
+                code = cli.main([
+                    "block-diagnose",
+                    "--event",
+                    "PreToolUse",
+                    "--tool",
+                    "Bash",
+                    "--command",
+                    "mkdir -p scratch",
+                    "--message",
+                    "Controller-only: mutating Bash is blocked outside AI-DLC; delegate to a subagent.",
+                ])
+            self.assertEqual(code, 0)
+            diagnosis = json.loads(stdout.getvalue())
+            self.assertEqual(diagnosis["block_type"], "needs_assignment")
+            self.assertEqual(diagnosis["suggested_route"], "delegate_phase_owner")
+
+    def test_hook_allows_explicit_git_finish_gate_outside_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            codex_dir = repo / ".codex"
+            codex_dir.mkdir()
+            (codex_dir / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            blocked = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "git add README.md"}},
+            )
+            self.assertEqual(blocked["decision"], "block")
+
+            allowed_commands = [
+                "AI_DLC_GIT_FINISH_APPROVED=1 git add README.md",
+                "AI_DLC_GIT_FINISH_APPROVED=1 git commit -m codex-finish",
+                "AI_DLC_GIT_FINISH_APPROVED=1 git switch -c codex-finish",
+                "AI_DLC_GIT_FINISH_APPROVED=1 git push origin HEAD",
+                "AI_DLC_GIT_FINISH_APPROVED=1 gh pr create --title test --body test",
+            ]
+            for command in allowed_commands:
+                with self.subTest(command=command):
+                    result = self.dispatch_with_payload(
+                        repo,
+                        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": command}},
+                    )
+                    self.assertEqual(result, {})
+
+            destructive = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "AI_DLC_GIT_FINISH_APPROVED=1 git reset --hard"}},
+            )
+            self.assertEqual(destructive["decision"], "block")
 
     def test_hook_dispatch_root_system_project_context_is_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -414,6 +769,10 @@ class AidlcTest(unittest.TestCase):
     def test_hook_dispatch_non_workspace_pret_tool_and_stop_are_schema_safe(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             outside = Path(tmp)
+
+            session = self.dispatch_with_payload(outside, {"hook_event_name": "SessionStart"})
+            self.assertIn("Project-local AI-DLC", session["hookSpecificOutput"]["additionalContext"])
+            self.assertIn("ai-dlc ensure-context", session["hookSpecificOutput"]["additionalContext"])
 
             pretool = self.dispatch_with_payload(
                 outside,
@@ -620,6 +979,77 @@ class AidlcTest(unittest.TestCase):
             self.assertIn("--root-canonical-url", output)
             self.assertIn("--repo-url web=...", output)
 
+    def test_workspace_commands_report_missing_workspace_without_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            for command in ("status", "inspect"):
+                stderr = io.StringIO()
+                with self.subTest(command=command), patch("aidlc.cli.Path.cwd", return_value=repo), contextlib.redirect_stderr(stderr):
+                    code = cli.main([command])
+                output = stderr.getvalue()
+                self.assertEqual(code, 2)
+                self.assertIn("workspace.yaml not found", output)
+                self.assertNotIn("Traceback", output)
+
+    def test_context_prefers_project_local_ai_dlc_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            workspace_context = ai_dlc_context(root / "web")
+            self.assertEqual(workspace_context["mode"], "task_workspace")
+            self.assertEqual(workspace_context["control_plane_scope"], "project")
+            self.assertEqual(workspace_context["root"], str(root))
+
+            project = Path(tmp) / "plain-project"
+            (project / "ai-dlc").mkdir(parents=True)
+            (project / "ai-dlc" / "project-metadata.yaml").write_text("id: plain\n", encoding="utf-8")
+            project_context = ai_dlc_context(project)
+            self.assertEqual(project_context["mode"], "project_root")
+            self.assertEqual(project_context["control_plane_scope"], "project")
+            self.assertEqual(project_context["root"], str(project.resolve()))
+
+    def test_context_uses_codex_user_local_fallback_when_project_is_unconfigured(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_home = Path(tmp) / "home"
+            repo = Path(tmp) / "unconfigured"
+            repo.mkdir()
+            with patch.dict(os.environ, {"HOME": str(fake_home)}):
+                before = ai_dlc_context(repo)
+                self.assertEqual(before["mode"], "none")
+                self.assertEqual(before["control_plane_scope"], "none")
+                self.assertIn(str(fake_home / ".codex" / "ai-dlc" / "user-workspaces"), before["user_local_root"])
+                self.assertIn("Project-local AI-DLC is recommended", before["recommendation"])
+
+                ensured = ai_dlc_context(repo, ensure_user_local=True)
+                self.assertEqual(ensured["mode"], "user_local_available")
+                self.assertEqual(ensured["control_plane_scope"], "user_local")
+                user_root = Path(ensured["root"])
+                self.assertTrue((user_root / "context.yaml").exists())
+                self.assertTrue((user_root / "plans").is_dir())
+                self.assertTrue((user_root / "decisions").is_dir())
+
+                after = ai_dlc_context(repo)
+                self.assertEqual(after["mode"], "user_local_available")
+                self.assertEqual(after["root"], str(user_root))
+
+    def test_context_cli_reports_and_ensures_codex_user_local_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_home = Path(tmp) / "home"
+            repo = Path(tmp) / "unconfigured"
+            repo.mkdir()
+            with patch.dict(os.environ, {"HOME": str(fake_home)}), patch("aidlc.cli.Path.cwd", return_value=repo):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    self.assertEqual(cli.main(["context"]), 0)
+                before = json.loads(stdout.getvalue())
+                self.assertEqual(before["mode"], "none")
+
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    self.assertEqual(cli.main(["ensure-context"]), 0)
+                ensured = json.loads(stdout.getvalue())
+                self.assertEqual(ensured["mode"], "user_local_available")
+                self.assertTrue(Path(ensured["root"]).is_dir())
+
     def test_hook_dispatch_non_workspace_context_mentions_controller_only_when_enabled(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
@@ -631,6 +1061,7 @@ class AidlcTest(unittest.TestCase):
             output = result["hookSpecificOutput"]
             self.assertEqual(output["hookEventName"], "SessionStart")
             self.assertIn("Controller-only bootstrap phase", output["additionalContext"])
+            self.assertIn("bootstrap_edit_paths", output["additionalContext"])
 
     def test_control_plane_role_can_edit_assigned_ai_dlc_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -653,13 +1084,91 @@ class AidlcTest(unittest.TestCase):
             self.assertEqual(blocked["decision"], "block")
             self.assertIn("next agent must be", blocked["reason"])
 
-            allowed = self.dispatch_with_payload(root, {"tool_name": "spawn_agent", "tool_input": {"agent": "dlc_scope_manager"}})
+            allowed = self.dispatch_with_payload(root, {"tool_name": "spawn_agent", "tool_input": {"agent": "dlc_plan_writer"}})
             self.assertEqual(allowed["decision"], "allow")
 
             decisions = root / "ai-dlc" / "decisions" / "LIN-123.md"
             decisions.write_text(decisions.read_text(encoding="utf-8") + "\n- allow-next-agent: dlc_verifier\n", encoding="utf-8")
             override = self.dispatch_with_payload(root, {"tool_name": "spawn_agent", "tool_input": {"agent": "dlc_verifier"}})
             self.assertEqual(override["decision"], "allow")
+
+    def test_hook_allows_scoped_break_glass_controller_artifact_edit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            payload = {"tool_name": "Edit", "tool_input": {"file_path": str(root / "ai-dlc" / "plans" / "LIN-123.md")}}
+            blocked = self.dispatch_with_payload(root, payload)
+            self.assertEqual(blocked["decision"], "block")
+
+            decisions = root / "ai-dlc" / "decisions" / "LIN-123.md"
+            decisions.write_text(
+                decisions.read_text(encoding="utf-8")
+                + "\nallow-break-glass: controller_artifact_edit\n"
+                + "reason: repair invalid plan schema that blocks all subagents\n"
+                + "scope: ai-dlc/plans/LIN-123.md\n"
+                + "expires_at: 2099-01-01T00:00:00+00:00\n",
+                encoding="utf-8",
+            )
+            allowed = self.dispatch_with_payload(root, payload)
+            self.assertEqual(allowed["decision"], "allow")
+
+    def test_scoped_break_glass_requires_matching_scope_and_future_expiry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            payload = {"tool_name": "Edit", "tool_input": {"file_path": str(root / "ai-dlc" / "plans" / "LIN-123.md")}}
+            decisions = root / "ai-dlc" / "decisions" / "LIN-123.md"
+            base = decisions.read_text(encoding="utf-8")
+
+            decisions.write_text(
+                base
+                + "\nallow-break-glass: controller_artifact_edit\n"
+                + "reason: missing scope should not permit path edits\n"
+                + "expires_at: 2099-01-01T00:00:00+00:00\n",
+                encoding="utf-8",
+            )
+            missing_scope = self.dispatch_with_payload(root, payload)
+            self.assertEqual(missing_scope["decision"], "block")
+
+            decisions.write_text(
+                base
+                + "\nallow-break-glass: controller_artifact_edit\n"
+                + "reason: wrong scope should not permit this path\n"
+                + "scope: ai-dlc/handoff/LIN-123.md\n"
+                + "expires_at: 2099-01-01T00:00:00+00:00\n",
+                encoding="utf-8",
+            )
+            wrong_scope = self.dispatch_with_payload(root, payload)
+            self.assertEqual(wrong_scope["decision"], "block")
+
+            decisions.write_text(
+                base
+                + "\nallow-break-glass: controller_artifact_edit\n"
+                + "reason: expired marker should not permit this path\n"
+                + "scope: ai-dlc/plans/LIN-123.md\n"
+                + "expires_at: 2000-01-01T00:00:00+00:00\n",
+                encoding="utf-8",
+            )
+            expired = self.dispatch_with_payload(root, payload)
+            self.assertEqual(expired["decision"], "block")
+
+    def test_workspace_stop_blocks_until_phase_owner_deliverable_or_break_glass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            blocked = self.dispatch_with_payload(root, {"hook_event_name": "Stop"})
+            output = blocked["hookSpecificOutput"]
+            self.assertEqual(output["hookEventName"], "Stop")
+            self.assertEqual(output["decision"], "block")
+            self.assertIn("dlc_plan_writer", output["reason"])
+
+            decisions = root / "ai-dlc" / "decisions" / "LIN-123.md"
+            decisions.write_text(
+                decisions.read_text(encoding="utf-8")
+                + "\nallow-break-glass: validator_bypass_once\n"
+                + "reason: user explicitly requested stop despite missing phase deliverable\n"
+                + "expires_at: 2099-01-01T00:00:00+00:00\n",
+                encoding="utf-8",
+            )
+            allowed = self.dispatch_with_payload(root, {"hook_event_name": "Stop"})
+            self.assertEqual(allowed, {})
 
     def test_hook_dispatch_blocks_verifier_while_worker_claimed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -712,6 +1221,7 @@ class AidlcTest(unittest.TestCase):
             root, _ = self.create_workspace(Path(tmp))
             assignment = assignment_create(root, "dlc_plan_writer", None, [], None)
             lease = agent_claim(root, assignment["id"], session_id="sess-plan")
+            validate_required(lease)
             self.assertEqual(lease["lock_scope"], "plan.lock")
             locks = lock_list(root)
             self.assertTrue(any(lock["name"] == "plan.lock" for lock in locks))
@@ -911,6 +1421,75 @@ class AidlcTest(unittest.TestCase):
                 payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}}
                 result = self.dispatch_with_payload(root, payload)
                 self.assertEqual(result, {}, f"Expected allow for: {cmd}")
+
+    def test_hook_allows_install_sh_dry_run_but_requires_approval_for_normal_install(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake_home = root / "home"
+            fake_home_config = fake_home / ".codex" / "config.toml"
+            fake_home_config.parent.mkdir(parents=True)
+            fake_home_config.write_text(
+                "\n".join([
+                    "[guardrails]",
+                    "subagent_required = true",
+                    'bootstrap_extra_commands = ["./install.sh codex"]',
+                ]),
+                encoding="utf-8",
+            )
+            repo_root = Path(__file__).resolve().parents[1]
+
+            commands = [
+                "./install.sh -n codex",
+                f"{repo_root / 'install.sh'} -n codex",
+            ]
+            with patch("aidlc.hooks._find_codex_config", return_value=None):
+                for command in commands:
+                    with self.subTest(command=command):
+                        result = self.dispatch_with_payload(
+                            repo_root,
+                            {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": command}},
+                            {"HOME": str(fake_home)},
+                        )
+                        self.assertEqual(result, {}, f"Expected allow for: {command}")
+
+                normal_install = self.dispatch_with_payload(
+                    repo_root,
+                    {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "./install.sh codex"}},
+                    {"HOME": str(fake_home)},
+                )
+                approved_install = self.dispatch_with_payload(
+                    repo_root,
+                    {
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Bash",
+                        "tool_input": {"cmd": "AI_DLC_INSTALL_APPROVED=1 ./install.sh codex"},
+                    },
+                    {"HOME": str(fake_home)},
+                )
+                approved_absolute_install = self.dispatch_with_payload(
+                    repo_root,
+                    {
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Bash",
+                        "tool_input": {"cmd": f"AI_DLC_INSTALL_APPROVED=1 {repo_root / 'install.sh'} codex"},
+                    },
+                    {"HOME": str(fake_home)},
+                )
+                unconfigured_install = self.dispatch_with_payload(
+                    repo_root,
+                    {
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Bash",
+                        "tool_input": {"cmd": "AI_DLC_INSTALL_APPROVED=1 ./install.sh agents"},
+                    },
+                    {"HOME": str(fake_home)},
+                )
+            self.assertEqual(normal_install["decision"], "block")
+            self.assertIn("mutating Bash", normal_install["reason"])
+            self.assertEqual(approved_install, {})
+            self.assertEqual(approved_absolute_install, {})
+            self.assertEqual(unconfigured_install["decision"], "block")
+            self.assertIn("mutating Bash", unconfigured_install["reason"])
 
     def test_subagent_required_false_overrides_project_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
