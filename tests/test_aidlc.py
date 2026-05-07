@@ -31,6 +31,7 @@ from aidlc.state import (
     finish,
     lock_list,
     lock_release,
+    load_lease,
     transition,
     validate,
     verify_gate,
@@ -118,6 +119,8 @@ class AidlcTest(unittest.TestCase):
     def dispatch_with_payload(self, root: Path, payload: dict, extra_env: dict[str, str] | None = None) -> dict[str, str]:
         raw = json.dumps(payload)
         env = os.environ.copy()
+        env.pop("CODEX_SESSION_ID", None)
+        env.pop("CODEX_THREAD_ID", None)
         if extra_env:
             env.update(extra_env)
         with patch("builtins.input", return_value=raw), patch.dict(os.environ, env, clear=True):
@@ -126,6 +129,8 @@ class AidlcTest(unittest.TestCase):
     def run_hook_dispatch(self, cwd: Path, payload: dict, extra_env: dict[str, str] | None = None) -> tuple[int, dict]:
         raw = json.dumps(payload)
         env = os.environ.copy()
+        env.pop("CODEX_SESSION_ID", None)
+        env.pop("CODEX_THREAD_ID", None)
         if extra_env:
             env.update(extra_env)
         stdout = io.StringIO()
@@ -691,6 +696,7 @@ class AidlcTest(unittest.TestCase):
             self.assertEqual(diagnosis["block_type"], "needs_assignment")
             self.assertEqual(diagnosis["suggested_route"], "delegate_phase_owner")
             self.assertIn("delegate_to_subagent", diagnosis["allowed_next_actions"])
+            self.assertIn("do not ask the user again", diagnosis["delegation_guidance"])
 
     def test_block_diagnose_cli_maps_mutating_bash_to_assignment_route(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -712,6 +718,23 @@ class AidlcTest(unittest.TestCase):
             diagnosis = json.loads(stdout.getvalue())
             self.assertEqual(diagnosis["block_type"], "needs_assignment")
             self.assertEqual(diagnosis["suggested_route"], "delegate_phase_owner")
+            self.assertTrue(any("--role" in command and "--writable" in command for command in diagnosis["suggested_commands"]))
+            self.assertFalse(any("--agent" in command or "--path" in command for command in diagnosis["suggested_commands"]))
+            self.assertIn("create the assignment and delegate", diagnosis["delegation_guidance"])
+
+    def test_block_diagnose_classifies_bwrap_rtm_newaddr_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            diagnosis = hooks.diagnose_block(
+                repo,
+                "PreToolUse",
+                "Bash",
+                "pwd",
+                "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted",
+            )
+            self.assertEqual(diagnosis["block_type"], "blocked_runtime_sandbox")
+            self.assertEqual(diagnosis["suggested_route"], "workflow_repair_or_handoff")
+            self.assertIn("delegate_to_dlc_repairer", diagnosis["allowed_next_actions"])
 
     def test_hook_allows_explicit_git_finish_gate_outside_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -758,6 +781,7 @@ class AidlcTest(unittest.TestCase):
             self.assertEqual(output["hookEventName"], "SessionStart")
             self.assertIn("AI-DLC root-system project", output["additionalContext"])
             self.assertNotIn("AI-DLC workspace ではありません", output["additionalContext"])
+            self.assertIn("追加確認せず assignment を作成して phase owner に委譲", output["additionalContext"])
 
             blocked_bash = self.dispatch_with_payload(
                 root,
@@ -931,6 +955,161 @@ class AidlcTest(unittest.TestCase):
                 self.assertEqual(lease["assignment_id"], assignment["id"])
                 self.assertTrue(lease["workspace_less"])
 
+    def test_workspace_less_project_root_verifier_assignment_create_and_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            project = tmp_path / "plain-project"
+            self.init_repo(project, "project-local verifier\n")
+            init_project(project)
+
+            with patch.dict(os.environ, {"HOME": str(fake_home)}):
+                assignment = assignment_create(project, "dlc_verifier", None, [], "WI-VERIFY")
+                lease = agent_claim(project, assignment["id"], session_id="sess-verifier")
+
+            self.assertTrue(assignment["workspace_less"])
+            self.assertEqual(assignment["role"], "dlc_verifier")
+            self.assertEqual(assignment["phase"], "verifying")
+            self.assertEqual(assignment["lock_scope"], "evidence.lock")
+            self.assertIn("ai-dlc/evidence/**", assignment["writable"])
+            self.assertFalse(any(path.startswith("../.local/") for path in assignment["writable"]))
+            self.assertEqual(assignment["next_recommendation"]["assignment_role"], "dlc_evaluator")
+            self.assertEqual(lease["assignment_id"], assignment["id"])
+            self.assertTrue(lease["workspace_less"])
+            self.assertEqual(lease["role"], "dlc_verifier")
+
+    def test_workspace_less_verifier_lease_allows_read_only_bash_and_evidence_edit_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            project = tmp_path / "plain-project"
+            self.init_repo(project, "project-local verifier\n")
+            init_project(project)
+
+            with patch.dict(os.environ, {"HOME": str(fake_home)}):
+                assignment = assignment_create(project, "dlc_verifier", None, [], "WI-VERIFY")
+                agent_claim(project, assignment["id"], session_id="sess-verifier")
+
+            env = {"HOME": str(fake_home), "CODEX_SESSION_ID": "sess-verifier"}
+            allowed_bash = self.dispatch_with_payload(
+                project,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "git status --short"}},
+                env,
+            )
+            self.assertEqual(allowed_bash, {})
+
+            allowed_edit = self.dispatch_with_payload(
+                project,
+                {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": str(project / "ai-dlc" / "evidence" / "verify.md")}},
+                env,
+            )
+            self.assertEqual(allowed_edit, {})
+
+            blocked_edit = self.dispatch_with_payload(
+                project,
+                {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": str(project / "README.md")}},
+                env,
+            )
+            self.assertEqual(blocked_edit["decision"], "block")
+            self.assertIn("workspace-less lease violation", blocked_edit["reason"])
+
+    def test_workspace_less_verifier_lease_allows_unittest_and_pytest_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            project = tmp_path / "plain-project"
+            self.init_repo(project, "project-local verifier\n")
+            init_project(project)
+
+            with patch.dict(os.environ, {"HOME": str(fake_home)}):
+                assignment = assignment_create(project, "dlc_verifier", None, [], "WI-VERIFY")
+                agent_claim(project, assignment["id"], session_id="sess-verifier")
+
+            env = {"HOME": str(fake_home), "CODEX_SESSION_ID": "sess-verifier"}
+            commands = [
+                "python -m unittest tests.test_aidlc",
+                "python3 -m unittest tests.test_aidlc",
+                "python -m pytest tests/test_aidlc.py -k verifier",
+                "python3 -m pytest tests/test_aidlc.py -k verifier",
+            ]
+            for cmd in commands:
+                with self.subTest(cmd=cmd):
+                    allowed = self.dispatch_with_payload(
+                        project,
+                        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}},
+                        env,
+                    )
+                    self.assertEqual(allowed, {})
+
+    def test_workspace_less_verifier_lease_blocks_unrelated_mutating_bash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            project = tmp_path / "plain-project"
+            self.init_repo(project, "project-local verifier\n")
+            init_project(project)
+
+            with patch.dict(os.environ, {"HOME": str(fake_home)}):
+                assignment = assignment_create(project, "dlc_verifier", None, [], "WI-VERIFY")
+                agent_claim(project, assignment["id"], session_id="sess-verifier")
+
+            blocked = self.dispatch_with_payload(
+                project,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "mkdir -p scratch"}},
+                {"HOME": str(fake_home), "CODEX_SESSION_ID": "sess-verifier"},
+            )
+            self.assertEqual(blocked["decision"], "block")
+            self.assertIn("verifier test commands only", blocked["reason"])
+
+    def test_workspace_less_assignment_uses_project_local_context_and_default_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            project = tmp_path / "plain-project"
+            self.init_repo(project, "project-local\n")
+            init_project(project)
+
+            with patch.dict(os.environ, {"HOME": str(fake_home)}):
+                assignment = assignment_create(project, "dlc_repo_worker", None, ["README.md"], "WI-001")
+
+            self.assertTrue(assignment["workspace_less"])
+            self.assertEqual(assignment["repo"], "source")
+            self.assertTrue((project / "ai-dlc" / "assignments" / f"{assignment['id']}.yaml").exists())
+            self.assertFalse((fake_home / ".codex" / "ai-dlc" / "user-workspaces").exists())
+
+    def test_block_record_cli_persists_project_local_durable_record(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "plain-project"
+            self.init_repo(project, "project-local\n")
+            init_project(project)
+
+            stdout = io.StringIO()
+            with patch("aidlc.cli.Path.cwd", return_value=project), contextlib.redirect_stdout(stdout):
+                code = cli.main([
+                    "block-record",
+                    "--event",
+                    "PreToolUse",
+                    "--tool",
+                    "Bash",
+                    "--command",
+                    "mkdir -p scratch",
+                    "--message",
+                    "Controller-only: mutating Bash is blocked outside AI-DLC; delegate to a subagent.",
+                ])
+
+            self.assertEqual(code, 0)
+            record = json.loads(stdout.getvalue())
+            record_path = project / "ai-dlc" / record["record_ref"]
+            self.assertTrue(record_path.exists())
+
+            saved = read_yaml(record_path)
+            self.assertEqual(saved["block_type"], "needs_assignment")
+            self.assertEqual(saved["route"], "delegate_phase_owner")
+            self.assertEqual(saved["tool"], "Bash")
+            self.assertEqual(saved["command"], "mkdir -p scratch")
+            self.assertEqual(saved["cwd"], str(project.resolve()))
+            self.assertIn("create_assignment", saved["allowed_next_actions"])
+
     def test_workspace_less_assignment_prompt_context_guides_repo_worker(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -964,6 +1143,117 @@ class AidlcTest(unittest.TestCase):
             self.assertIn(f"ai-dlc agent-claim --assignment {assignment['id']} --session-id sess-worker", prompt_context)
             self.assertIn("README.md", prompt_context)
             self.assertIn("controller-only direct edit ban applies before claim", prompt_context)
+
+    def test_workspace_less_spawn_agent_auto_claims_verifier_on_child_session_start(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            project = tmp_path / "plain-project"
+            self.init_repo(project, "project-local verifier\n")
+            init_project(project)
+
+            env = {"HOME": str(fake_home)}
+            allowed = self.dispatch_with_payload(project, {"tool_name": "spawn_agent", "tool_input": {"agent": "dlc_verifier"}}, env)
+            self.assertEqual(allowed["decision"], "allow")
+
+            assignments = [item for item in assignment_list(project) if item.get("role") == "dlc_verifier"]
+            self.assertEqual(len(assignments), 1)
+            self.assertTrue(assignments[0]["workspace_less"])
+
+            session = self.dispatch_with_payload(project, {"hook_event_name": "SessionStart"}, {**env, "CODEX_SESSION_ID": "sess-verifier"})
+            output = session["hookSpecificOutput"]
+            self.assertEqual(output["hookEventName"], "SessionStart")
+            self.assertIn("Auto-claimed dlc_verifier assignment", output["additionalContext"])
+
+            lease = load_lease(project, "sess-verifier")
+            self.assertIsNotNone(lease)
+            assert lease is not None
+            self.assertTrue(lease["workspace_less"])
+            self.assertEqual(lease["role"], "dlc_verifier")
+            self.assertEqual(lease["assignment_id"], assignments[0]["id"])
+
+    def test_workspace_less_multiple_pending_auto_claim_does_not_claim_child_session(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            project = tmp_path / "plain-project"
+            self.init_repo(project, "project-local verifier\n")
+            init_project(project)
+
+            env = {"HOME": str(fake_home)}
+            verifier = self.dispatch_with_payload(project, {"tool_name": "spawn_agent", "tool_input": {"agent": "dlc_verifier"}}, env)
+            self.assertEqual(verifier["decision"], "allow")
+            docs = self.dispatch_with_payload(project, {"tool_name": "spawn_agent", "tool_input": {"agent": "dlc_docs_writer"}}, env)
+            self.assertEqual(docs["decision"], "allow")
+
+            session = self.dispatch_with_payload(project, {"hook_event_name": "SessionStart"}, {**env, "CODEX_SESSION_ID": "sess-child"})
+            output = session["hookSpecificOutput"]
+            self.assertEqual(output["hookEventName"], "SessionStart")
+            self.assertNotIn("Auto-claimed", output["additionalContext"])
+            self.assertIsNone(load_lease(project, "sess-child"))
+
+    def test_workspace_less_user_prompt_submit_auto_claims_when_session_start_was_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            project = tmp_path / "plain-project"
+            self.init_repo(project, "project-local verifier\n")
+            init_project(project)
+
+            env = {"HOME": str(fake_home)}
+            allowed = self.dispatch_with_payload(project, {"tool_name": "send_input", "tool_input": {"agent": "dlc_verifier", "message": "verify now"}}, env)
+            self.assertEqual(allowed["decision"], "allow")
+
+            prompt = self.dispatch_with_payload(
+                project,
+                {"hook_event_name": "UserPromptSubmit", "prompt": "verification context"},
+                {**env, "CODEX_SESSION_ID": "sess-late"},
+            )
+            output = prompt["hookSpecificOutput"]
+            self.assertEqual(output["hookEventName"], "UserPromptSubmit")
+            self.assertIn("Auto-claimed dlc_verifier assignment", output["additionalContext"])
+            self.assertIsNotNone(load_lease(project, "sess-late"))
+
+    def test_workspace_less_session_start_auto_claims_with_codex_thread_id_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            project = tmp_path / "plain-project"
+            self.init_repo(project, "project-local verifier\n")
+            init_project(project)
+
+            env = {"HOME": str(fake_home)}
+            allowed = self.dispatch_with_payload(project, {"tool_name": "spawn_agent", "tool_input": {"agent": "dlc_verifier"}}, env)
+            self.assertEqual(allowed["decision"], "allow")
+
+            session = self.dispatch_with_payload(
+                project,
+                {"hook_event_name": "SessionStart"},
+                {**env, "CODEX_SESSION_ID": "", "CODEX_THREAD_ID": "sess-thread"},
+            )
+            output = session["hookSpecificOutput"]
+            self.assertIn("Current session id: sess-thread", output["additionalContext"])
+            self.assertIn("Auto-claimed dlc_verifier assignment", output["additionalContext"])
+            self.assertIsNotNone(load_lease(project, "sess-thread"))
+
+    def test_hook_dispatch_user_prompt_submit_returns_assignment_guidance_for_authorized_impl_request(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            codex_dir = repo / ".codex"
+            codex_dir.mkdir()
+            (codex_dir / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            result = self.dispatch_with_payload(
+                repo,
+                {
+                    "hook_event_name": "UserPromptSubmit",
+                    "prompt": "packages/codex/.codex/ai-dlc/lib/aidlc/hooks.py を修正して needs_assignment を直して",
+                },
+            )
+            output = result["hookSpecificOutput"]
+            self.assertEqual(output["hookEventName"], "UserPromptSubmit")
+            self.assertIn("Current request already authorizes implementation/repair.", output["additionalContext"])
+            self.assertIn("Do not ask the user again; create the assignment and delegate to the phase owner.", output["additionalContext"])
 
     def test_hook_dispatch_allows_read_only_sed_and_related_bash_outside_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1273,6 +1563,35 @@ class AidlcTest(unittest.TestCase):
             override = self.dispatch_with_payload(root, {"tool_name": "spawn_agent", "tool_input": {"agent": "dlc_verifier"}})
             self.assertEqual(override["decision"], "allow")
 
+    def test_workspace_spawn_agent_auto_claims_verifier_on_child_session_start(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            plan_path = root / "ai-dlc" / "plans" / "LIN-123.md"
+            meta, body = read_frontmatter(plan_path)
+            meta["status"] = "verifying"
+            meta["current"]["phase"] = "verifying"
+            meta["current"]["next_agent"] = "dlc_verifier"
+            meta["current"]["active_work_item"] = "WI-001"
+            write_frontmatter(plan_path, meta, body)
+
+            allowed = self.dispatch_with_payload(root, {"tool_name": "spawn_agent", "tool_input": {"agent": "dlc_verifier"}})
+            self.assertEqual(allowed["decision"], "allow")
+
+            assignments = [item for item in assignment_list(root) if item.get("role") == "dlc_verifier"]
+            self.assertEqual(len(assignments), 1)
+            self.assertEqual(assignments[0]["status"], "created")
+
+            session = self.dispatch_with_payload(root, {"hook_event_name": "SessionStart"}, {"CODEX_SESSION_ID": "sess-verifier"})
+            output = session["hookSpecificOutput"]
+            self.assertEqual(output["hookEventName"], "SessionStart")
+            self.assertIn("Auto-claimed dlc_verifier assignment", output["additionalContext"])
+
+            lease = load_lease(root, "sess-verifier")
+            self.assertIsNotNone(lease)
+            assert lease is not None
+            self.assertEqual(lease["role"], "dlc_verifier")
+            self.assertEqual(lease["assignment_id"], assignments[0]["id"])
+
     def test_hook_allows_scoped_break_glass_controller_artifact_edit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root, _ = self.create_workspace(Path(tmp))
@@ -1576,6 +1895,85 @@ class AidlcTest(unittest.TestCase):
                     result = self.dispatch_with_payload(root, payload)
                     self.assertEqual(result, {}, f"Expected allow for: {cmd}")
 
+    def test_hook_allows_minimal_workspace_less_verifier_bootstrap_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "plain-project"
+            self.init_repo(project, "project-local verifier\n")
+            init_project(project)
+
+            allowed_commands = [
+                "ai-dlc assignment create --role dlc_verifier",
+                "ai-dlc assignment create --role dlc_verifier --work-item WI-VERIFY",
+                "ai-dlc agent-claim --assignment A-001 --session-id sess-verifier",
+            ]
+            for cmd in allowed_commands:
+                with self.subTest(cmd=cmd):
+                    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}}
+                    result = self.dispatch_with_payload(project, payload)
+                    self.assertEqual(result, {}, f"Expected allow for: {cmd}")
+
+    def test_hook_blocks_repo_worker_and_wide_workspace_less_aidlc_bootstrap_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "plain-project"
+            self.init_repo(project, "project-local verifier\n")
+            init_project(project)
+
+            blocked_commands = [
+                "ai-dlc assignment create --role dlc_repo_worker --repo source --writable README.md",
+                "ai-dlc assignment create --role dlc_verifier --repo source",
+                "ai-dlc agent-claim --assignment A-001",
+                "ai-dlc agent-report --assignment A-001 --status reported",
+            ]
+            for cmd in blocked_commands:
+                with self.subTest(cmd=cmd):
+                    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}}
+                    result = self.dispatch_with_payload(project, payload)
+                    self.assertEqual(result["decision"], "block")
+                    self.assertIn("mutating Bash", result["reason"])
+
+    def test_hook_dispatch_allows_minimal_bootstrap_commands_for_config_only_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            codex_dir = repo / ".codex"
+            codex_dir.mkdir()
+            (codex_dir / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            allowed_commands = [
+                "ai-dlc assignment create --role dlc_verifier",
+                "ai-dlc assignment create --role dlc_verifier --work-item WI-VERIFY",
+                "ai-dlc agent-claim --assignment A-001 --session-id sess-verifier",
+            ]
+            for cmd in allowed_commands:
+                with self.subTest(cmd=cmd):
+                    code, result = self.run_hook_dispatch(
+                        repo,
+                        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}},
+                    )
+                    self.assertEqual(code, 0)
+                    self.assertEqual(result, {}, f"Expected allow for: {cmd}")
+
+    def test_hook_dispatch_blocks_mutating_aidlc_commands_for_config_only_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            codex_dir = repo / ".codex"
+            codex_dir.mkdir()
+            (codex_dir / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            blocked_commands = [
+                "ai-dlc assignment create --role dlc_repo_worker --repo source --writable README.md",
+                "ai-dlc agent-report --assignment A-001 --status reported",
+                "ai-dlc agent-release --assignment A-001 --session-id sess-verifier",
+            ]
+            for cmd in blocked_commands:
+                with self.subTest(cmd=cmd):
+                    code, result = self.run_hook_dispatch(
+                        repo,
+                        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}},
+                    )
+                    self.assertEqual(code, 0)
+                    self.assertEqual(result["decision"], "block")
+                    self.assertIn("mutating Bash", result["reason"])
+
     def test_hook_blocks_aidlc_with_shell_injection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root, _ = self.create_workspace(Path(tmp))
@@ -1697,6 +2095,155 @@ class AidlcTest(unittest.TestCase):
                 {"hook_event_name": "PreToolUse", "tool_name": "apply_patch", "tool_input": {"cmd": "*** Update File: ai-dlc/docs/report.md\nfoo"}},
             )
             self.assertEqual(apply_patch, {}, "subagent_required=false should allow apply_patch")
+
+    def test_hook_dispatch_accepts_payload_session_id_for_claimed_edit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            self.prepare_active_web_item(root)
+            bootstrap(root)
+
+            web_assignment = assignment_create(root, "dlc_repo_worker", "web", ["web/README.md"], "WI-001")
+            backend_assignment = assignment_create(root, "dlc_repo_worker", "backend", ["backend/README.md"], "WI-001")
+            agent_claim(root, web_assignment["id"], session_id="sess-web")
+            agent_claim(root, backend_assignment["id"], session_id="sess-backend")
+
+            payload = {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Edit",
+                "session_id": "sess-web",
+                "tool_input": {"file_path": str(root / "web" / "README.md")},
+            }
+            result = self.dispatch_with_payload(root, payload, {"CODEX_SESSION_ID": ""})
+            self.assertEqual(result, {})
+
+    def test_hook_dispatch_uses_payload_session_id_for_claimed_git_c_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            self.prepare_active_web_item(root)
+            bootstrap(root)
+
+            web_assignment = assignment_create(root, "dlc_repo_worker", "web", ["web/README.md"], "WI-001")
+            backend_assignment = assignment_create(root, "dlc_repo_worker", "backend", ["backend/README.md"], "WI-001")
+            agent_claim(root, web_assignment["id"], session_id="sess-web")
+            agent_claim(root, backend_assignment["id"], session_id="sess-backend")
+
+            allowed = self.dispatch_with_payload(
+                root,
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "session_id": "sess-web",
+                    "tool_input": {"cmd": "git -C web status --short"},
+                },
+                {"CODEX_SESSION_ID": ""},
+            )
+            self.assertEqual(allowed, {})
+
+            blocked = self.dispatch_with_payload(
+                root,
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "session_id": "sess-web",
+                    "tool_input": {"cmd": "git -C backend status --short"},
+                },
+                {"CODEX_SESSION_ID": ""},
+            )
+            self.assertEqual(blocked["decision"], "block")
+            self.assertIn("session lease only permits git -C web commands", blocked["reason"])
+
+    def test_hook_dispatch_uses_codex_thread_id_for_claimed_edit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = self.create_workspace(Path(tmp))
+            self.prepare_active_web_item(root)
+            bootstrap(root)
+
+            web_assignment = assignment_create(root, "dlc_repo_worker", "web", ["web/README.md"], "WI-001")
+            agent_claim(root, web_assignment["id"], session_id="sess-thread")
+
+            payload = {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Edit",
+                "tool_input": {"file_path": str(root / "web" / "README.md")},
+            }
+            result = self.dispatch_with_payload(root, payload, {"CODEX_SESSION_ID": "", "CODEX_THREAD_ID": "sess-thread"})
+            self.assertEqual(result, {})
+
+
+    def test_hook_session_context_includes_current_session_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "ai-dlc").mkdir()
+            (root / "ai-dlc" / "project-metadata.yaml").write_text("id: test\n", encoding="utf-8")
+            (root / ".codex").mkdir()
+            (root / ".codex" / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            session_env = {"CODEX_SESSION_ID": "sess-bootstrap"}
+            session_start = self.dispatch_with_payload(
+                root,
+                {"hook_event_name": "SessionStart"},
+                session_env,
+            )
+            prompt_submit = self.dispatch_with_payload(
+                root,
+                {"hook_event_name": "UserPromptSubmit", "prompt": "continue verifier bootstrap"},
+                session_env,
+            )
+
+            self.assertIn("Current session id: sess-bootstrap", session_start["hookSpecificOutput"]["additionalContext"])
+            self.assertIn("Current session id: sess-bootstrap", prompt_submit["hookSpecificOutput"]["additionalContext"])
+
+    def test_hook_allows_control_plane_cleanup_commands_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            root = tmp_path / "plain-project"
+            self.init_repo(root, "project-local verifier\n")
+            init_project(root)
+
+            with patch.dict(os.environ, {"HOME": str(fake_home)}):
+                assignment = assignment_create(root, "dlc_verifier", None, [], "WI-VERIFY")
+                agent_claim(root, assignment["id"], session_id="sess-bootstrap")
+
+            commands = [
+                f"ai-dlc agent-release --assignment {assignment['id']} --session-id sess-bootstrap",
+                "ai-dlc lock release evidence.lock --session-id sess-bootstrap",
+            ]
+            for command in commands:
+                with self.subTest(command=command):
+                    result = self.dispatch_with_payload(
+                        root,
+                        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": command}},
+                        {"HOME": str(fake_home), "CODEX_SESSION_ID": "sess-bootstrap"},
+                    )
+                    self.assertEqual(result, {}, f"Expected allow for: {command}")
+
+    def test_hook_blocks_non_cleanup_mutating_aidlc_commands_in_controller_only_bootstrap(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            root = tmp_path / "plain-project"
+            self.init_repo(root, "project-local verifier\n")
+            init_project(root)
+
+            with patch.dict(os.environ, {"HOME": str(fake_home)}):
+                assignment = assignment_create(root, "dlc_verifier", None, [], "WI-VERIFY")
+                agent_claim(root, assignment["id"], session_id="sess-bootstrap")
+
+            blocked_commands = [
+                "ai-dlc assignment create --role dlc_repo_worker --repo web",
+                f"ai-dlc agent-release --assignment {assignment['id']} --session-id sess-bootstrap --force",
+                "ai-dlc lock release evidence.lock --session-id sess-bootstrap --force",
+            ]
+            for command in blocked_commands:
+                with self.subTest(command=command):
+                    result = self.dispatch_with_payload(
+                        root,
+                        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": command}},
+                        {"HOME": str(fake_home), "CODEX_SESSION_ID": "sess-bootstrap"},
+                    )
+                    self.assertEqual(result["decision"], "block")
+                    self.assertIn("workspace-less dlc_verifier lease allows read-only Bash and verifier test commands only", result["reason"])
 
 
 class AidlcCliInstallTest(unittest.TestCase):
