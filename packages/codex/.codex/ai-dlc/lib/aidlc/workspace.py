@@ -81,6 +81,7 @@ def ai_dlc_context(start: Path, *, ensure_user_local: bool = False) -> dict:
             "control_plane_scope": "project",
             "root": str(workspace_root),
             "user_local_root": "",
+            "warnings": [],
             "recommendation": "Use the existing AI-DLC task workspace.",
         }
 
@@ -88,12 +89,23 @@ def ai_dlc_context(start: Path, *, ensure_user_local: bool = False) -> dict:
     if project_root is None:
         project_root = _ancestor_with(current, "sango.yaml")
     if project_root is not None:
+        warnings: list[str] = []
+        recommendation = "Use the existing project-local AI-DLC control-plane."
+        hooks_json = project_root / ".codex" / "hooks.json"
+        hooks_dir = project_root / ".codex" / "hooks"
+        if hooks_json.exists() or hooks_dir.exists():
+            warnings.append("Project-local hooks detected; ensure they do not shadow the AI-DLC hook contract.")
+            recommendation = (
+                "Project-local hooks detected. Review `.codex/hooks.json` and `.codex/hooks/` so the AI-DLC hook contract "
+                "remains the active project-local entrypoint."
+            )
         return {
             "mode": "project_root",
             "control_plane_scope": "project",
             "root": str(project_root),
             "user_local_root": "",
-            "recommendation": "Use the existing project-local AI-DLC control-plane.",
+            "warnings": warnings,
+            "recommendation": recommendation,
         }
 
     user_root = codex_user_workspace_root(current)
@@ -137,6 +149,7 @@ def ai_dlc_context(start: Path, *, ensure_user_local: bool = False) -> dict:
         "control_plane_scope": "user_local" if exists else "none",
         "root": str(user_root) if exists else "",
         "user_local_root": str(user_root),
+        "warnings": [],
         "recommendation": (
             "Project-local AI-DLC is recommended. For plan-driven work, add `.codex/config.toml` with "
             "`codex_hooks = true` and `guardrails.subagent_required = true`; use `ai-dlc ensure-context` "
@@ -555,13 +568,13 @@ def init_project(
     _write_text_if_missing(root_system / ".codex" / "config.toml", project_codex_config())
     write_text(root_system / ".gitignore", project_gitignore())
     write_text(root_system / "ai-dlc" / ".gitkeep", "")
-    if repo_paths or repo_urls:
-        metadata = {
-            "schema": "ai-dlc.project-init.v1",
-            "root_system_path": _abs(root_system),
-            "repos": {name: {"path": _abs(path), "url": (repo_urls or {}).get(name, "")} for name, path in (repo_paths or {}).items()},
-        }
-        write_data(root_system / "ai-dlc" / "project-metadata.yaml", metadata)
+    metadata = {
+        "schema": "ai-dlc.project-init.v1",
+        "root_system_path": _abs(root_system),
+        "project_kind": project_kind,
+        "repos": {name: {"path": _abs(path), "url": (repo_urls or {}).get(name, "")} for name, path in (repo_paths or {}).items()},
+    }
+    write_data(root_system / "ai-dlc" / "project-metadata.yaml", metadata)
 
 
 def scaffold_workspace(

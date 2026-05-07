@@ -17,6 +17,7 @@ from .state import (
     assignment_create,
     assignment_list,
     assignment_update_status,
+    block_record,
     bootstrap,
     clean_state_check,
     deadlock_check,
@@ -384,6 +385,29 @@ def cmd_block_diagnose(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_block_record(args: argparse.Namespace) -> int:
+    cwd = Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd()
+    root = find_assignment_context_root(cwd)
+    diagnosis = diagnose_block(cwd, args.event, args.tool, args.command, args.message)
+    result = block_record(
+        root,
+        cwd=cwd,
+        block_type=str(diagnosis.get("block_type") or "unknown"),
+        route=str(diagnosis.get("suggested_route") or "inspect_block"),
+        tool=args.tool,
+        command=args.command,
+        message=args.message,
+        suggested_agent=str(diagnosis.get("suggested_agent") or ""),
+        allowed_next_actions=[str(item) for item in diagnosis.get("allowed_next_actions") or []],
+        recoverable=bool(diagnosis.get("recoverable", True)),
+        requires_user_approval=bool(diagnosis.get("requires_user_approval", False)),
+    )
+    if diagnosis.get("suggested_commands"):
+        result["suggested_commands"] = [str(item) for item in diagnosis["suggested_commands"]]
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
+
+
 def cmd_context(args: argparse.Namespace) -> int:
     cwd = Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd()
     print(json.dumps(ai_dlc_context(cwd), indent=2, ensure_ascii=False))
@@ -580,6 +604,14 @@ def build_parser() -> argparse.ArgumentParser:
     block_diagnose.add_argument("--command", default="")
     block_diagnose.add_argument("--message", default="")
     block_diagnose.set_defaults(func=cmd_block_diagnose)
+
+    block_record_parser = sub.add_parser("block-record")
+    block_record_parser.add_argument("--cwd", default="")
+    block_record_parser.add_argument("--event", default="")
+    block_record_parser.add_argument("--tool", default="")
+    block_record_parser.add_argument("--command", default="")
+    block_record_parser.add_argument("--message", default="")
+    block_record_parser.set_defaults(func=cmd_block_record)
 
     context_parser = sub.add_parser("context")
     context_parser.add_argument("--cwd", default="")

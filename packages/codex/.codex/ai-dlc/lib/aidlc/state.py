@@ -53,6 +53,32 @@ CONTROL_PLANE_LOCKS = {
     "dlc_initializer": "bootstrap.lock",
     "dlc_repairer": "bootstrap.lock",
 }
+WORKSPACE_LESS_ROLE_PHASES = {
+    "dlc_plan_writer": "planning",
+    "dlc_scope_manager": "assigning",
+    "dlc_repo_worker": "executing",
+    "dlc_verifier": "verifying",
+    "dlc_evaluator": "evaluating",
+    "dlc_handoff_writer": "handoff_ready",
+    "dlc_docs_writer": "docs_only",
+    "dlc_git_operator": "ready_to_finish",
+    "dlc_initializer": "initializing",
+    "dlc_repairer": "repairing",
+}
+WORKSPACE_LESS_NEXT_RECOMMENDATIONS = {
+    "dlc_plan_writer": {"phase": "plan_ready", "assignment_role": "dlc_scope_manager"},
+    "dlc_scope_manager": {"phase": "executing", "assignment_role": "dlc_repo_worker"},
+    "dlc_repo_worker": {"phase": "verifying", "assignment_role": "dlc_verifier"},
+    "dlc_verifier": {"phase": "evaluating", "assignment_role": "dlc_evaluator"},
+    "dlc_evaluator": {"phase": "handoff_ready", "assignment_role": "dlc_handoff_writer"},
+    "dlc_handoff_writer": {"phase": "ready_to_finish", "assignment_role": "dlc_git_operator"},
+    "dlc_docs_writer": {"phase": "docs_only", "assignment_role": "dlc_docs_writer"},
+    "dlc_git_operator": {"phase": "done", "assignment_role": "dlc_git_operator"},
+    "dlc_initializer": {"phase": "planning", "assignment_role": "dlc_plan_writer"},
+    "dlc_repairer": {"phase": "planning", "assignment_role": "dlc_plan_writer"},
+}
+AUTO_CLAIM_CREATE_ROLES = set(CONTROL_PLANE_LOCKS)
+AUTO_CLAIMABLE_ROLES = AUTO_CLAIM_CREATE_ROLES | {"dlc_repo_worker"}
 
 
 def _has_workspace(root: Path) -> bool:
@@ -61,21 +87,82 @@ def _has_workspace(root: Path) -> bool:
 
 def _workspace_less_context(root: Path) -> dict[str, Any]:
     context = ai_dlc_context(root, ensure_user_local=True)
-    if context.get("control_plane_scope") != "user_local" or not context.get("root"):
-        raise FileNotFoundError("workspace.yaml not found")
+    if context.get("control_plane_scope") not in {"project", "user_local"} or not context.get("root"):
+        raise FileNotFoundError("AI-DLC assignment context not found")
     return context
 
 
+def _workspace_less_state_root(root: Path) -> Path:
+    context = _workspace_less_context(root)
+    base_root = Path(str(context["root"])).expanduser().resolve()
+    if context.get("control_plane_scope") == "project":
+        return base_root / "ai-dlc"
+    return base_root
+
+
 def _workspace_less_project_id(root: Path) -> str:
-    context_path = assignment_root(root) / "context.yaml"
-    context = read_data(context_path)
-    return str(context.get("project_id") or Path(root).resolve().name)
+    context = _workspace_less_context(root)
+    context_root = Path(str(context["root"])).expanduser().resolve()
+    if context.get("control_plane_scope") == "project":
+        metadata_path = context_root / "ai-dlc" / "project-metadata.yaml"
+        if metadata_path.exists():
+            metadata = read_data(metadata_path)
+            return str(metadata.get("id") or metadata.get("project_id") or context_root.name)
+        return context_root.name
+    context_path = _workspace_less_state_root(root) / "context.yaml"
+    context_data = read_data(context_path)
+    return str(context_data.get("project_id") or Path(root).resolve().name)
 
 
 def _workspace_less_branch(root: Path) -> str:
     result = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root, capture_output=True, text=True, check=False)
     branch = result.stdout.strip()
     return branch if result.returncode == 0 and branch else "workspace-less"
+
+
+def _workspace_less_control_plane_patterns(root: Path, role: str) -> list[str]:
+    patterns = list(CONTROL_PLANE_ROLE_WRITABLE.get(role, []))
+    if _workspace_less_context(root).get("control_plane_scope") != "project":
+        return patterns
+    normalized: list[str] = []
+    for pattern in patterns:
+        if pattern.startswith("../.local/ai-dlc/"):
+            normalized.append("ai-dlc/" + pattern[len("../.local/ai-dlc/"):])
+            continue
+        if pattern == "../.local/**":
+            normalized.append("ai-dlc/**")
+            continue
+        normalized.append(pattern[3:] if pattern.startswith("../") else pattern)
+    return normalized
+
+
+def _workspace_less_resolved_writable(root: Path, role: str, writable: list[str]) -> list[str]:
+    if role == "dlc_repo_worker":
+        if not writable:
+            raise ValueError("workspace-less dlc_repo_worker assignment requires at least one --writable path")
+        return writable
+
+    role_writable = _workspace_less_control_plane_patterns(root, role)
+    if not role_writable:
+        raise ValueError(f"workspace-less assignment role is not supported: {role}")
+    if not writable:
+        return role_writable
+
+    invalid = [pattern for pattern in writable if not any(fnmatch.fnmatch(pattern, allowed) for allowed in role_writable)]
+    if invalid:
+        raise ValueError(f"workspace-less {role} writable paths must stay within role scope: {', '.join(invalid)}")
+    return writable
+
+
+def _workspace_less_forbidden(role: str) -> list[str]:
+    forbidden = [".git/**", "workspace.yaml"]
+    if role == "dlc_repo_worker":
+        forbidden.extend([".codex/**", "ai-dlc/**"])
+    elif role in CONTROL_PLANE_ROLE_WRITABLE:
+        forbidden.extend([".codex/**"])
+    else:
+        forbidden.extend([".codex/**", "ai-dlc/**"])
+    return forbidden
 
 
 def workspace_paths(root: Path) -> tuple[dict[str, Any], dict[str, Path]]:
@@ -299,6 +386,10 @@ def load_assignment(root: Path, assignment_id: str) -> dict[str, Any]:
     return read_data(base / "assignments" / f"{assignment_id}.yaml")
 
 
+def _resolved_session_id(session_id: str | None = None) -> str | None:
+    return session_id or os.environ.get("CODEX_SESSION_ID") or os.environ.get("CODEX_THREAD_ID")
+
+
 def load_lease(root: Path, session_id: str | None) -> dict[str, Any] | None:
     base = assignment_root(root)
     if session_id:
@@ -323,6 +414,140 @@ def load_lease(root: Path, session_id: str | None) -> dict[str, Any] | None:
     if len(candidates) == 1:
         return candidates[0]
     return None
+
+
+def _pending_auto_claims_dir(root: Path) -> Path:
+    return assignment_root(root) / "pending-auto-claims"
+
+
+def _next_pending_auto_claim_id(pending_dir: Path) -> str:
+    numbers = []
+    for path in pending_dir.glob("P*.yaml"):
+        try:
+            numbers.append(int(path.stem[1:]))
+        except ValueError:
+            pass
+    return f"P{(max(numbers, default=0) + 1):03d}"
+
+
+def _pending_auto_claims(root: Path) -> list[tuple[Path, dict[str, Any]]]:
+    pending_dir = _pending_auto_claims_dir(root)
+    if not pending_dir.exists():
+        return []
+    items: list[tuple[Path, dict[str, Any]]] = []
+    for path in sorted(pending_dir.glob("P*.yaml")):
+        try:
+            items.append((path, read_data(path)))
+        except Exception:
+            continue
+    return items
+
+
+def _current_active_work_item(root: Path) -> str | None:
+    if not _has_workspace(root):
+        return None
+    workspace = read_data(root / "workspace.yaml")
+    plan_meta, _ = read_frontmatter(root / workspace["paths"]["plan"])
+    current = plan_meta.get("current") or {}
+    if isinstance(current, dict) and current.get("active_work_item"):
+        return str(current["active_work_item"])
+    work_items = read_data(root / workspace["paths"]["work_items"])
+    active_items = _active_items(work_items)
+    if len(active_items) == 1:
+        return str(active_items[0]["id"])
+    return None
+
+
+def _claimable_assignments(root: Path, role: str) -> list[dict[str, Any]]:
+    return [
+        item
+        for item in assignment_list(root)
+        if item.get("role") == role and item.get("status") in {"created", "accepted"}
+    ]
+
+
+def stage_pending_auto_claim(root: Path, role: str) -> dict[str, Any] | None:
+    if role not in AUTO_CLAIMABLE_ROLES:
+        return None
+
+    claimable = _claimable_assignments(root, role)
+    if len(claimable) > 1:
+        return None
+
+    assignment = claimable[0] if claimable else None
+    if assignment is None:
+        if role not in AUTO_CLAIM_CREATE_ROLES:
+            return None
+        try:
+            assignment = assignment_create(root, role, None, [], _current_active_work_item(root))
+        except ValueError:
+            return None
+
+    for path, pending in _pending_auto_claims(root):
+        if pending.get("status") != "pending":
+            continue
+        if pending.get("assignment_id") != assignment["id"]:
+            continue
+        if pending.get("role") != role:
+            continue
+        pending["updated_at"] = now_iso()
+        write_data(path, pending)
+        return pending
+
+    pending_dir = _pending_auto_claims_dir(root)
+    pending_dir.mkdir(parents=True, exist_ok=True)
+    pending_id = _next_pending_auto_claim_id(pending_dir)
+    payload = {
+        "schema": "ai-dlc.pending_auto_claim.v1",
+        "id": pending_id,
+        "assignment_id": assignment["id"],
+        "role": role,
+        "status": "pending",
+        "created_at": now_iso(),
+    }
+    write_data(pending_dir / f"{pending_id}.yaml", payload)
+    return payload
+
+
+def auto_claim_pending(root: Path, session_id: str | None) -> dict[str, Any] | None:
+    if not session_id:
+        return None
+    if load_lease(root, session_id) is not None:
+        return None
+
+    candidates: list[tuple[Path, dict[str, Any], dict[str, Any]]] = []
+    for path, pending in _pending_auto_claims(root):
+        if pending.get("status") != "pending":
+            continue
+        assignment_id = pending.get("assignment_id")
+        if not assignment_id:
+            continue
+        try:
+            assignment = load_assignment(root, str(assignment_id))
+        except Exception:
+            continue
+        if assignment.get("status") not in {"created", "accepted"}:
+            continue
+        candidates.append((path, pending, assignment))
+
+    if len(candidates) != 1:
+        return None
+
+    path, pending, assignment = candidates[0]
+    try:
+        lease = agent_claim(root, assignment["id"], session_id=session_id)
+    except ValueError:
+        return None
+
+    pending["status"] = "claimed"
+    pending["session_id"] = session_id
+    pending["claimed_at"] = now_iso()
+    write_data(path, pending)
+    return {
+        "pending": pending,
+        "assignment": assignment,
+        "lease": lease,
+    }
 
 
 def _lock_path(base: Path, repo: str) -> Path:
@@ -466,6 +691,51 @@ def evidence_record(root: Path, key: str, status: str, note: str) -> dict[str, A
     return evidence["items"][key]
 
 
+def _block_record_storage(root: Path) -> tuple[Path, Path]:
+    if _has_workspace(root):
+        _, paths = workspace_paths(root)
+        return paths["decisions"].parent / "block-records", root
+    state_root = _workspace_less_state_root(root)
+    return state_root / "decisions" / "block-records", state_root
+
+
+def block_record(
+    root: Path,
+    *,
+    cwd: Path,
+    block_type: str,
+    route: str,
+    tool: str,
+    command: str,
+    message: str,
+    suggested_agent: str,
+    allowed_next_actions: list[str],
+    recoverable: bool = True,
+    requires_user_approval: bool = False,
+) -> dict[str, Any]:
+    records_dir, ref_root = _block_record_storage(root)
+    record_id = f"block-{uuid.uuid4().hex[:10]}"
+    payload = {
+        "schema": "ai-dlc.block_record.v1",
+        "id": record_id,
+        "block_type": block_type,
+        "route": route,
+        "tool": tool,
+        "command": command,
+        "message": message,
+        "cwd": str(cwd.expanduser().resolve()),
+        "timestamp": now_iso(),
+        "suggested_agent": suggested_agent,
+        "allowed_next_actions": allowed_next_actions,
+        "recoverable": recoverable,
+        "requires_user_approval": requires_user_approval,
+    }
+    path = records_dir / f"{record_id}.yaml"
+    write_data(path, payload)
+    payload["record_ref"] = str(path.relative_to(ref_root))
+    return payload
+
+
 def clean_state_check(root: Path) -> dict[str, Any]:
     import subprocess
 
@@ -511,7 +781,7 @@ def lock_release(root: Path, lock_name: str, session_id: str | None = None) -> N
     if not path.exists():
         raise ValueError(f"lock not found: {lock_name}")
     lock = _read_lock(path) or {}
-    session_id = session_id or os.environ.get("CODEX_SESSION_ID")
+    session_id = _resolved_session_id(session_id)
     if lock.get("session_id") and session_id and lock.get("session_id") != session_id:
         if not (_lease_expired(lock) and _has_workspace(root) and _decision_allows(root, f"allow-stale-lock-release: {lock_name}")):
             raise ValueError("lock is owned by a different session")
@@ -562,7 +832,7 @@ def finish(root: Path) -> dict[str, Any]:
 
 def assignment_root(root: Path) -> Path:
     if not _has_workspace(root):
-        return Path(_workspace_less_context(root)["root"])
+        return _workspace_less_state_root(root)
     workspace = read_data(root / "workspace.yaml")
     return (root / workspace["paths"]["local"]).resolve() / "ai-dlc"
 
@@ -636,20 +906,19 @@ def assignment_create(root: Path, role: str, repo: str | None, writable: list[st
 
 
 def _workspace_less_assignment_create(root: Path, role: str, repo: str | None, writable: list[str], work_item: str | None) -> dict[str, Any]:
-    if role != "dlc_repo_worker":
-        raise ValueError("workspace-less source_change assignments currently require role dlc_repo_worker")
-    if not writable:
-        raise ValueError("workspace-less dlc_repo_worker assignment requires at least one --writable path")
-
     root = root.expanduser().resolve()
     base = assignment_root(root)
     assignments_dir = base / "assignments"
     assignments_dir.mkdir(parents=True, exist_ok=True)
     assignment_id = _next_assignment_id(assignments_dir)
-    repo_name = repo or "source"
+    phase = WORKSPACE_LESS_ROLE_PHASES.get(role)
+    if not phase:
+        raise ValueError(f"workspace-less assignment role is not supported: {role}")
+
+    repo_name = (repo or "source") if role == "dlc_repo_worker" else None
     project_id = _workspace_less_project_id(root)
     branch = _workspace_less_branch(root)
-    forbidden = [".codex/**", ".git/**", "ai-dlc/**", "workspace.yaml"]
+    resolved_writable = _workspace_less_resolved_writable(root, role, writable)
     payload = {
         "schema": "ai-dlc.assignment.v1",
         "id": assignment_id,
@@ -658,22 +927,22 @@ def _workspace_less_assignment_create(root: Path, role: str, repo: str | None, w
         "source_root": str(root),
         "role": role,
         "agent": role,
-        "phase": "executing",
+        "phase": phase,
         "workflow_type": "plan_implementation",
-        "phase_owner": "dlc_repo_worker",
+        "phase_owner": role,
         "controller_mode": "orchestrate_only",
         "repo": repo_name,
-        "lock_scope": f"repo:{repo_name}",
+        "lock_scope": f"repo:{repo_name}" if repo_name else CONTROL_PLANE_LOCKS.get(role),
         "work_item": work_item,
-        "writable": writable,
-        "forbidden": forbidden,
+        "writable": resolved_writable,
+        "forbidden": _workspace_less_forbidden(role),
         "deliverables": _role_deliverables(role),
         "issue": {"tracker": "workspace-less", "id": project_id, "url": ""},
         "branch": {"issue": branch, "base_ref": ""},
         "result_ref": f"reports/{assignment_id}.json",
         "status": "created",
         "created_at": now_iso(),
-        "next_recommendation": {"phase": "verifying", "assignment_role": "dlc_verifier"},
+        "next_recommendation": WORKSPACE_LESS_NEXT_RECOMMENDATIONS.get(role, {"phase": phase, "assignment_role": role}),
     }
     write_data(assignments_dir / f"{assignment_id}.yaml", payload)
     return payload
@@ -710,7 +979,7 @@ def assignment_update_status(root: Path, assignment_id: str, status: str) -> dic
 
 
 def agent_claim(root: Path, assignment_id: str, session_id: str | None = None) -> dict[str, Any]:
-    session_id = session_id or os.environ.get("CODEX_SESSION_ID") or uuid.uuid4().hex
+    session_id = _resolved_session_id(session_id) or uuid.uuid4().hex
     base = assignment_root(root)
     assignment = read_data(base / "assignments" / f"{assignment_id}.yaml")
     if assignment.get("status") not in {"created", "accepted"}:
@@ -819,7 +1088,7 @@ def agent_report(root: Path, assignment_id: str, status: str, report_file: str |
 def agent_release(root: Path, assignment_id: str, session_id: str | None = None) -> None:
     base = assignment_root(root)
     assignment = read_data(base / "assignments" / f"{assignment_id}.yaml")
-    session_id = session_id or os.environ.get("CODEX_SESSION_ID")
+    session_id = _resolved_session_id(session_id)
     if not session_id:
         raise ValueError("session_id is required to release an assignment")
     lease_path = base / "leases" / f"{session_id}.json"

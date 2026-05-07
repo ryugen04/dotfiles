@@ -47,8 +47,9 @@ hook / permission / tool block を観測したら、最初の block で停止せ
 2. block message、blocked command/tool、現在 phase、target root、workspace.yaml 有無を読み、許可された read-only 経路または assignment 経路を探す。
 3. recovery route を 1 つ選ぶ: read-only retry、`workflow-bootstrap`、`workflow-repair`、正しい phase owner への assignment、approval request、または明示停止。
 4. controller が直接編集・実装・修復する必要がある場合は、該当 phase の subagent に委譲する。phase owner が違う場合は先に `dlc_scope_manager` で assignment を直す。
-5. plan / decisions / work-items が不足または古い場合は `dlc_plan_writer` または `dlc_scope_manager` に作成・修復させる。
-6. 復旧後は最小再現、関連 validation、実運用 path の順で確認し、block_type、選んだ route、残リスクを report に残す。
+5. `needs_assignment` かつ現在のユーザー依頼が既に実装/repair を許可している場合、ユーザー再確認には戻らない。assignment を作成して phase owner に即委譲する。
+6. plan / decisions / work-items が不足または古い場合は `dlc_plan_writer` または `dlc_scope_manager` に作成・修復させる。
+7. 復旧後は最小再現、関連 validation、実運用 path の順で確認し、block_type、選んだ route、残リスクを report に残す。
 
 `approval_required` は非破壊コマンドだけ承認を求める。`destructive_forbidden` はユーザーの明示承認がない限り実行せず、代替の read-only 証跡を集める。`hook_schema_error` は `codex-hooks-authoring` と `codex-runtime-probing` に切り替えて、受け手の schema と active runtime を確認する。
 
