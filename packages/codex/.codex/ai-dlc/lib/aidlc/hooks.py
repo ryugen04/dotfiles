@@ -445,7 +445,8 @@ def _is_allowed_project_validation_command(command: str, cwd: Path) -> bool:
         return bool(targets) and all(_is_allowed_py_compile_target(cwd, target) for target in targets)
     if tokens[1:3] != ["-m", "unittest"]:
         return False
-    if tokens[3:] == [UNITTEST_ALLOWED_MODULE]:
+    targets = tokens[3:]
+    if targets and all(target == UNITTEST_ALLOWED_MODULE or target.startswith(f"{UNITTEST_ALLOWED_MODULE}.") for target in targets):
         return True
     if len(tokens) == 6 and tokens[3] == "-k" and tokens[5] == UNITTEST_ALLOWED_MODULE:
         pattern = tokens[4]

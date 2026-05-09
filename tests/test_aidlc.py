@@ -1132,6 +1132,36 @@ class AidlcTest(unittest.TestCase):
             stop = self.dispatch_with_payload(outside, {"hook_event_name": "Stop"})
             self.assertEqual(stop, {})
 
+    def test_hook_dispatch_allows_project_validation_commands_outside_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            codex_dir = repo / ".codex"
+            codex_dir.mkdir()
+            (codex_dir / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+            absolute_test_path = repo / "tests" / "test_aidlc.py"
+
+            commands = [
+                "python3 -m py_compile packages/codex/.codex/ai-dlc/lib/aidlc/hooks.py",
+                f"python3 -m py_compile {absolute_test_path}",
+                "python3 -m unittest tests.test_aidlc",
+                "python3 -m unittest tests.test_aidlc.AidlcTest.test_hook_allows_workspace_less_read_only_diagnostics_and_bootstrap_recovery",
+                "python3 -m unittest tests.test_aidlc.AidlcTest.test_hook_allows_workspace_less_read_only_diagnostics_and_bootstrap_recovery tests.test_aidlc.AidlcTest.test_hook_dispatch_uses_camel_case_working_directory_for_workspace_resolution_and_ledger",
+            ]
+            for command in commands:
+                with self.subTest(command=command):
+                    allowed = self.dispatch_with_payload(
+                        repo,
+                        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": command}},
+                    )
+                    self.assertEqual(allowed, {})
+
+            blocked = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "python3 -m unittest tests.other_module"}},
+            )
+            self.assertEqual(blocked["decision"], "block")
+            self.assertIn("mutating Bash", blocked["reason"])
+
     def test_hook_dispatch_uses_env_event_name_when_payload_omits_it(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             outside = Path(tmp)
