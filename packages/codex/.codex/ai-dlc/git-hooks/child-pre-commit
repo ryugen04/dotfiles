@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-if git diff --cached --name-only | grep -E '(^|/)\.env(\.|$)|secret|credential' >/dev/null; then
-  echo "AI-DLC: possible secret/env file staged."
-  exit 1
-fi

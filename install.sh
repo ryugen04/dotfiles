@@ -51,7 +51,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 show_codex_conflict_help() {
     local conflicts=()
     local path
-    for path in "$HOME/.codex/AGENTS.md" "$HOME/.codex/config.toml" "$HOME/.codex/hooks.json"; do
+    for path in "$HOME/.codex/config.toml"; do
         if [[ -e "$path" && ! -L "$path" ]]; then
             conflicts+=("$path")
         fi
