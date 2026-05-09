@@ -8,7 +8,7 @@ model = "gpt-5.5"
 model_reasoning_effort = "xhigh"
 
 [features]
-codex_hooks = true
+hooks = true
 shell_snapshot = true
 
 [profiles.implement]
@@ -90,5 +90,32 @@ trust_level = "trusted"
 [projects."/home/glaucus03/dev/projects/sango"]
 trust_level = "trusted"
 
+[projects."/home/glaucus03/dev/projects/alexatoticktick"]
+trust_level = "trusted"
+
 [notice.model_migrations]
 "gpt-5.3-codex" = "gpt-5.4"
+
+[tui.model_availability_nux]
+"gpt-5.5" = 4
+
+[hooks.state]
+
+[hooks.state."/home/glaucus03/.codex/hooks.json:permission_request:0:0"]
+trusted_hash = "sha256:b810c638629e15f2e60a5348795801503661e1abe60259c1db421d87112fe7ac"
+
+[hooks.state."/home/glaucus03/.codex/hooks.json:post_tool_use:0:0"]
+trusted_hash = "sha256:dd04424bbfaf358bf5b0c9fca19f9055e9c1c2159dac78d0e04ede021dd4f15a"
+
+[hooks.state."/home/glaucus03/.codex/hooks.json:pre_tool_use:0:0"]
+enabled = true
+trusted_hash = "sha256:79c69cf61edf5c7879bc23d31a777d8212f967e4a7605f42d5f23fb3ae45433e"
+
+[hooks.state."/home/glaucus03/.codex/hooks.json:session_start:0:0"]
+trusted_hash = "sha256:281cf9f965386e053c4502d61586a0a07b8833a340022314204410f4af2b306a"
+
+[hooks.state."/home/glaucus03/.codex/hooks.json:stop:0:0"]
+trusted_hash = "sha256:097191e9c42cb8a416b59a97ccd714f4bbd1c900a86ead22aa68756c5be55825"
+
+[hooks.state."/home/glaucus03/.codex/hooks.json:user_prompt_submit:0:0"]
+trusted_hash = "sha256:95b11a042df49132ec5ff0ee93fbbf6261edced6d074537476773e16d52ae2ec"

@@ -28,10 +28,14 @@ bootstrap と local readiness が未完了のときに使う。AI-DLC task works
 ## Sango + AI-DLC Rules
 
 - physical child worktree 作成は sango に一本化する。AI-DLC bootstrap で別名ディレクトリを新規作成しない。
+- root-system bootstrap では task workspace を root-system 直下の `worktrees/<issue-slug>` に直接作成または採用する。`worktrees/<issue-slug>/<issue-slug>` のような nested workspace は新規作成しない。
 - repo key は実ディレクトリ名に合わせる。
 - base branch は各リポジトリの慣習に従う（`develop`, `main`, `master` 等）。リポジトリごとに異なる場合がある。
 - sango の `.sango/worktrees.json` は task worktree、offset、`from_branch`、services の一次情報として確認する。既存登録がある場合は破壊せず採用する。
-- `ai-dlc init-workspace` は sango worktree 内で実行し、`--root-canonical-path` は root-system canonical path、`--repo` は sango が作った実 path を渡す。
+- 新規 task workspace を作成する場合、`ai-dlc init-workspace` は root-system から実行し、`--workspace-root worktrees/<issue-slug>` を明示する。
+- `--root-canonical-path` は root-system canonical path、`--repo` は sango が作った実 path を渡す。
+- `ai-dlc init-workspace` では各 repo に `--repo-url key=value` と `--repo-base-ref key=value` を明示し、remote 推測や一律 default base ref に依存しない。
+- accidental nested workspace が既にある場合は削除しない。root-system 直下の `worktrees/<issue-slug>` を canonical target として新規作成または採用し、nested 側は superseded/preserved として記録・報告する。
 
 ## Required Sequence
 
@@ -39,15 +43,16 @@ bootstrap と local readiness が未完了のときに使う。AI-DLC task works
 2. user-level install が疑わしい場合だけ dotfiles 更新、`ai-dlc install`、`ai-dlc doctor` を確認する。
 3. plan-driven に進める通常 repo で `workspace.yaml` / `ai-dlc/project-metadata.yaml` がまだない場合は、source 編集前に project-local `.codex/config.toml` を作成し、`[features].codex_hooks = true` と `[guardrails].subagent_required = true` を設定する。bootstrap 中に controller が直接編集してよい path は `.codex/config.toml`、`.codex/plans/**`、`AGENTS.md` など初期構築に限る。
 4. root-system が未初期化なら `ai-dlc init-project` と sango bootstrap/doctor を行う。
-5. task worktree がなければ `sango worktree create` で作る。既存 worktree があるなら作り直さず採用する。
-6. task worktree root が git repo でない場合は初期 commit を作り、child repo の branch/base ref を確認する。
-7. `ai-dlc init-workspace` を実行する。repo key/path と repo base ref を実 child repo に一致させる。
-8. `ai-dlc validate-overlay`、`ai-dlc bootstrap`、`ai-dlc overlay-status`、必要なら `ai-dlc validate` を実行する。
-9. initializer assignment を作成し、`dlc_initializer` を起動する。既に bootstrap 済みなら evidence 更新だけにする。
-10. initializer が `.local`、git controller、child `.git` pointer、nested submodule、sango state の破損を報告した場合だけ `dlc_repairer` を起動する。
-11. repair report の後で readiness コマンドを再実行し、`bootstrap.status=ready` と active work item 条件を確認する。
-12. readiness が曖昧、または再確認が必要なら `dlc_verifier` を起動して bootstrap evidence を残す。
-13. `plan_ready`、`blocked`、`needs_decision` のいずれかに遷移する。
+5. target を root-system `worktrees/<issue-slug>` に決める。既存 worktree があるなら作り直さず採用し、ない場合だけ `sango worktree create` など承認済み bootstrap 操作でこの直下 path に作る。
+6. accidental nested workspace が見つかった場合は削除・移動せず、canonical target ではないことを報告し、root-system `worktrees/<issue-slug>` の作成または採用で supersede する。
+7. task worktree root が git repo でない場合は初期 commit を作り、child repo の branch/base ref を確認する。
+8. 新規 task workspace では root-system から `ai-dlc init-workspace --workspace-root worktrees/<issue-slug>` を実行する。repo key/path、`--repo-url key=value`、`--repo-base-ref key=value` を実 child repo に一致させる。
+9. `ai-dlc validate-overlay`、`ai-dlc bootstrap`、`ai-dlc overlay-status`、必要なら `ai-dlc validate` を実行する。
+10. initializer assignment を作成し、`dlc_initializer` を起動する。既に bootstrap 済みなら evidence 更新だけにする。
+11. initializer が `.local`、git controller、child `.git` pointer、nested submodule、sango state の破損を報告した場合だけ `dlc_repairer` を起動する。
+12. repair report の後で readiness コマンドを再実行し、`bootstrap.status=ready` と active work item 条件を確認する。
+13. readiness が曖昧、または再確認が必要なら `dlc_verifier` を起動して bootstrap evidence を残す。
+14. `plan_ready`、`blocked`、`needs_decision` のいずれかに遷移する。
 
 ## Boundaries
 

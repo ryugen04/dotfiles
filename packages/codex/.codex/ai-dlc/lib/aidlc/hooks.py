@@ -18,6 +18,7 @@ from .io import read_data, read_frontmatter, read_text
 from .block_ledger import ACTION_TYPES, open_block_events_for, record_block_event, ref_allowed
 from .state import assignment_root, bootstrap_gate_errors, lease_path_errors, load_assignment, load_lease
 from .workflow_contracts import scoped_break_glass_allowed, stop_missing_obligation, workflow_type
+from .workspace import ai_dlc_context, resolve_task_workspace
 
 DESTRUCTIVE_GIT = ["git reset --hard", "git clean", "git push", "git merge", "git worktree remove", "rm -rf", "sango worktree remove"]
 EDIT_TOOLS = {"apply_patch", "Edit", "Write", "MultiEdit"}
@@ -98,6 +99,7 @@ WORKING_DIRECTORY_KEYS = (
     "current_working_directory",
     "currentWorkingDirectory",
 )
+WORKSPACE_TARGET_OPTION_KEYS = {"--workspace", "--workspace-root"}
 
 
 def _find_workspace(start: Path) -> Path | None:
@@ -189,7 +191,7 @@ def _extract_paths_from_patch(text: str) -> list[str]:
     return paths
 
 
-def _extract_paths(payload: dict[str, Any], workspace: Path, base_cwd: Path | None = None) -> list[str]:
+def _extract_raw_paths(payload: dict[str, Any]) -> list[str]:
     raw_paths: list[str] = []
     for key in ["file_path", "path"]:
         value = payload.get(key)
@@ -219,12 +221,37 @@ def _extract_paths(payload: dict[str, Any], workspace: Path, base_cwd: Path | No
     if command_text:
         raw_paths.extend(_extract_paths_from_patch(command_text))
 
+    return raw_paths
+
+
+def _extract_paths(payload: dict[str, Any], workspace: Path, base_cwd: Path | None = None) -> list[str]:
+    raw_paths = _extract_raw_paths(payload)
+
     result: list[str] = []
     for raw_path in raw_paths:
         relative = _relativize(workspace, raw_path, base_cwd)
         if relative:
             result.append(relative)
     return sorted(set(result))
+
+
+def _find_workspace_from_payload_paths(payload: dict[str, Any], base_cwd: Path) -> Path | None:
+    workspaces: set[Path] = set()
+    for raw_path in _extract_raw_paths(payload):
+        path = Path(raw_path)
+        if not path.is_absolute():
+            path = base_cwd / path
+        probe = path if path.is_dir() else path.parent
+        for candidate in [probe, *probe.parents]:
+            if (candidate / "workspace.yaml").exists():
+                try:
+                    workspaces.add(candidate.resolve())
+                except Exception:
+                    workspaces.add(candidate)
+                break
+    if len(workspaces) == 1:
+        return next(iter(workspaces))
+    return None
 
 
 def _paths_match(paths: list[str], patterns: list[str]) -> bool:
@@ -895,6 +922,43 @@ def _is_read_only_aidlc_block(tokens: list[str]) -> bool:
     return False
 
 
+def _option_value(tokens: list[str], option: str) -> str:
+    for index, token in enumerate(tokens):
+        if token == option and index + 1 < len(tokens):
+            return tokens[index + 1]
+        if token.startswith(f"{option}="):
+            return token.split("=", 1)[1]
+    return ""
+
+
+def _strip_workspace_target_tokens(tokens: list[str]) -> list[str]:
+    stripped: list[str] = []
+    skip_next = False
+    for index, token in enumerate(tokens):
+        if skip_next:
+            skip_next = False
+            continue
+        if token in WORKSPACE_TARGET_OPTION_KEYS:
+            if index + 1 < len(tokens):
+                skip_next = True
+            continue
+        if any(token.startswith(f"{key}=") for key in WORKSPACE_TARGET_OPTION_KEYS):
+            continue
+        stripped.append(token)
+    return stripped
+
+
+def _command_target_workspace(command: str, fallback: Path) -> Path | None:
+    tokens = _safe_tokens(command)
+    if not tokens or tokens[0] != "ai-dlc":
+        return None
+    workspace = _option_value(tokens, "--workspace")
+    workspace_root = _option_value(tokens, "--workspace-root")
+    if not workspace and not workspace_root:
+        return None
+    return resolve_task_workspace(fallback, workspace=workspace, workspace_root=workspace_root)
+
+
 def _is_safe_aidlc_command(command: str) -> bool:
     tokens = _safe_tokens(command)
     if not tokens:
@@ -905,6 +969,7 @@ def _is_safe_aidlc_command(command: str) -> bool:
 def _is_read_only_aidlc(tokens: list[str]) -> bool:
     if not tokens or tokens[0] != "ai-dlc":
         return False
+    tokens = _strip_workspace_target_tokens(tokens)
     if any(token in {"-h", "--help"} for token in tokens[1:]):
         return True
     if _is_read_only_aidlc_block(tokens):
@@ -1504,9 +1569,23 @@ def _prompt_workspace_less_assignment_context(cwd: Path, payload: dict[str, Any]
 def _non_workspace_context(cwd: Path) -> str:
     project_root = _find_project_root(cwd)
     if project_root is not None:
+        context = ai_dlc_context(cwd)
+        discoverable = context.get("discoverable_workspaces") or []
+        workspace_lines = []
+        for item in discoverable[:5]:
+            if isinstance(item, dict):
+                workspace_lines.append(f"- {item.get('id', '')}: {item.get('path', item.get('root', ''))}")
+        workspace_hint = ""
+        if workspace_lines:
+            workspace_hint = (
+                " 発見済み task workspaces:\n"
+                + "\n".join(workspace_lines)
+                + "\n`ai-dlc status --workspace <id>` または `ai-dlc assignment create --workspace <id> ...` を使えます。"
+            )
         return (
             "AI-DLC root-system projectです。task workspaceではありません。"
-            " 対象 worktree の workspace.yaml がある場所へ移動するか、workflow-bootstrap で既存 worktree を採用してください。"
+            + workspace_hint
+            + " 対象 worktree の workspace.yaml がある場所へ移動するか、workflow-bootstrap で既存 worktree を採用してください。"
             " 直接編集は禁止です。"
         )
     if _subagent_required_outside_workspace(cwd):
@@ -1579,7 +1658,13 @@ def dispatch(cwd: Path) -> dict[str, Any]:
     payload = _load_payload()
     event_name = _extract_event_name(payload)
     effective_cwd = _extract_effective_cwd(payload, cwd)
-    workspace = _find_workspace(effective_cwd)
+    command = _extract_command(payload)
+    tool = _extract_tool(payload)
+    command_workspace = _command_target_workspace(command, effective_cwd)
+    path_workspace = _find_workspace_from_payload_paths(payload, effective_cwd) if tool in EDIT_TOOLS else None
+    workspace = command_workspace or path_workspace or _find_workspace(effective_cwd)
+    if command_workspace is not None:
+        effective_cwd = command_workspace
     _LEDGER_CONTEXT.clear()
     _LEDGER_CONTEXT.update({"payload": payload, "effective_cwd": effective_cwd, "workspace": workspace})
     if event_name == "SessionStart":
@@ -1621,8 +1706,6 @@ def dispatch(cwd: Path) -> dict[str, Any]:
         return _noop()
     if workspace is None:
         if _subagent_required_outside_workspace(effective_cwd):
-            tool = _extract_tool(payload)
-            command = _extract_command(payload)
             if tool == "Bash" and _is_git_finish_approved_command(command):
                 return _allow_hook(event_name, "controller-only git finish command approved")
             if tool in EDIT_TOOLS:
@@ -1656,8 +1739,6 @@ def dispatch(cwd: Path) -> dict[str, Any]:
             return _allow_hook(event_name, "controller-only bootstrap phase")
         return _allow_hook(event_name, "not an AI-DLC workspace")
 
-    tool = _extract_tool(payload)
-    command = _extract_command(payload)
     if any(pattern in command for pattern in DESTRUCTIVE_GIT):
         reason = "AI-DLC: destructive git command requires explicit approval."
         return _block_hook(event_name, reason, diagnose_block(workspace, event_name, tool, command, reason))

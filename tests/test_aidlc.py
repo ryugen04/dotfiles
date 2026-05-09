@@ -128,6 +128,49 @@ class AidlcTest(unittest.TestCase):
         install_project_hooks(root, [root / "web", root / "backend"])
         return root, repos
 
+    def create_root_system_task_workspace(self, tmp: Path) -> tuple[Path, Path, dict[str, str]]:
+        root_system = tmp / "root-system"
+        web_source = tmp / "web-source"
+        backend_source = tmp / "backend-source"
+        self.init_repo(root_system, "root\n")
+        self.init_repo(web_source, "web\n")
+        self.init_repo(backend_source, "backend\n")
+        task_root = root_system / "worktrees" / "LIN-123"
+        repos = {"web": str(web_source), "backend": str(backend_source)}
+        init_project(
+            root_system,
+            repo_paths=repos,
+            repo_urls={
+                "root-system": "git@example.com:acme/root-system.git",
+                "web": "git@example.com:acme/web.git",
+                "backend": "git@example.com:acme/backend.git",
+            },
+        )
+        scaffold_workspace(
+            task_root,
+            "LIN-123",
+            "LIN-123-branch",
+            repos,
+            "literal_worktree_overlay",
+            issue_url="https://linear.app/acme/issue/LIN-123",
+            issue_title="Implement overlay control plane",
+            base_ref="origin/main",
+            root_export_target="root-export-target",
+            root_export_remote="origin",
+            workspace_root=str(task_root),
+            root_system_path=str(root_system),
+            root_canonical_path=str(root_system),
+            root_canonical_url="git@example.com:acme/root-system.git",
+            repo_urls={
+                "web": "git@example.com:acme/web.git",
+                "backend": "git@example.com:acme/backend.git",
+            },
+            repo_base_refs={"web": "origin/main", "backend": "origin/main"},
+        )
+        overlay_init(task_root, repos=repos)
+        install_project_hooks(task_root, [task_root / "web", task_root / "backend"])
+        return root_system, task_root, repos
+
     def dispatch_with_payload(self, root: Path, payload: dict, extra_env: dict[str, str] | None = None) -> dict[str, str]:
         raw = json.dumps(payload)
         env = os.environ.copy()
@@ -285,6 +328,45 @@ class AidlcTest(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "not allowed during plan_implementation phase executing"):
                 assignment_create(root, "dlc_plan_writer", None, [], None)
+
+    def test_init_workspace_defaults_to_root_system_worktrees_issue_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            root_system = tmp_path / "root-system"
+            web_source = tmp_path / "web-source"
+            backend_source = tmp_path / "backend-source"
+            self.init_repo(root_system, "root\n")
+            self.init_repo(web_source, "web\n")
+            self.init_repo(backend_source, "backend\n")
+            init_project(
+                root_system,
+                repo_paths={"web": str(web_source), "backend": str(backend_source)},
+                repo_urls={
+                    "root-system": "git@example.com:acme/root-system.git",
+                    "web": "git@example.com:acme/web.git",
+                    "backend": "git@example.com:acme/backend.git",
+                },
+            )
+
+            argv = [
+                "init-workspace",
+                "--issue", "LIN-123",
+                "--issue-url", "https://linear.app/acme/issue/LIN-123",
+                "--issue-title", "Implement overlay control plane",
+                "--branch", "LIN-123-branch",
+                "--repo", f"web={web_source}",
+                "--repo", f"backend={backend_source}",
+                "--repo-url", "web=git@example.com:acme/web.git",
+                "--repo-url", "backend=git@example.com:acme/backend.git",
+                "--root-canonical-url", "git@example.com:acme/root-system.git",
+            ]
+            with patch("aidlc.cli.Path.cwd", return_value=root_system):
+                self.assertEqual(cli.main(argv), 0)
+
+            task_root = root_system / "worktrees" / "LIN-123"
+            workspace = read_yaml(task_root / "workspace.yaml")
+            self.assertEqual(workspace["workspace"]["root"], str(task_root.resolve()))
+            self.assertEqual(workspace["workspace"]["root_system_path"], str(root_system.resolve()))
 
     def test_phase_owner_assignment_is_enforced(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1109,6 +1191,39 @@ class AidlcTest(unittest.TestCase):
             self.assertEqual(event["workspace_id"], "LIN-123")
             self.assertEqual(event["effective_cwd"], str(task_root.resolve()))
 
+    def test_hook_dispatch_prefers_explicit_workspace_target_from_root_system(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            root_system, task_root, _ = self.create_root_system_task_workspace(tmp_path)
+
+            allowed_assignment = self.dispatch_with_payload(
+                root_system,
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {
+                        "cmd": "ai-dlc assignment create --workspace LIN-123 --role dlc_plan_writer",
+                    },
+                },
+                {"HOME": str(fake_home)},
+            )
+            self.assertEqual(allowed_assignment, {})
+            ledger = fake_home / ".codex" / "ai-dlc" / "block-ledger" / "events.jsonl"
+            self.assertFalse(ledger.exists())
+
+            blocked_edit = self.dispatch_with_payload(
+                root_system,
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Edit",
+                    "tool_input": {"file_path": str(task_root / "web" / "README.md")},
+                },
+                {"HOME": str(fake_home), "CODEX_SESSION_ID": "sess-explicit-target"},
+            )
+            self.assertEqual(blocked_edit["decision"], "block")
+            self.assertIn("direct edits are blocked outside AI-DLC", blocked_edit["reason"])
+
     def test_hook_dispatch_non_workspace_pret_tool_and_stop_are_schema_safe(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             outside = Path(tmp)
@@ -1876,6 +1991,48 @@ class AidlcTest(unittest.TestCase):
             self.assertEqual(project_context["mode"], "project_root")
             self.assertEqual(project_context["control_plane_scope"], "project")
             self.assertEqual(project_context["root"], str(project.resolve()))
+
+    def test_context_lists_discoverable_worktrees_from_root_system(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root_system, task_root, _ = self.create_root_system_task_workspace(Path(tmp))
+            context = ai_dlc_context(root_system)
+            self.assertEqual(context["mode"], "project_root")
+            self.assertEqual(context["root"], str(root_system.resolve()))
+            self.assertEqual(context["discoverable_workspaces"][0]["id"], "LIN-123")
+            self.assertEqual(context["discoverable_workspaces"][0]["root"], str(task_root.resolve()))
+
+    def test_context_cli_and_status_support_explicit_workspace_target(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root_system, task_root, _ = self.create_root_system_task_workspace(Path(tmp))
+            stdout = io.StringIO()
+            with patch("aidlc.cli.Path.cwd", return_value=root_system), contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli.main(["context"]), 0)
+            context = json.loads(stdout.getvalue())
+            self.assertEqual(context["mode"], "project_root")
+            self.assertEqual(context["discoverable_workspaces"][0]["id"], "LIN-123")
+
+            stdout = io.StringIO()
+            with patch("aidlc.cli.Path.cwd", return_value=root_system), contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli.main(["context", "--workspace", "LIN-123"]), 0)
+            targeted = json.loads(stdout.getvalue())
+            self.assertEqual(targeted["mode"], "task_workspace")
+            self.assertEqual(targeted["root"], str(task_root.resolve()))
+
+            stdout = io.StringIO()
+            with patch("aidlc.cli.Path.cwd", return_value=root_system), contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli.main(["status", "--workspace", "LIN-123"]), 0)
+            status = json.loads(stdout.getvalue())
+            self.assertEqual(status["workspace_id"], "LIN-123")
+
+    def test_assignment_create_supports_root_system_workspace_target(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root_system, _, _ = self.create_root_system_task_workspace(Path(tmp))
+            stdout = io.StringIO()
+            with patch("aidlc.cli.Path.cwd", return_value=root_system), contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli.main(["assignment", "create", "--workspace", "LIN-123", "--role", "dlc_plan_writer"]), 0)
+            assignment = json.loads(stdout.getvalue())
+            self.assertEqual(assignment["workspace_id"], "LIN-123")
+            self.assertEqual(assignment["role"], "dlc_plan_writer")
 
     def test_context_warns_when_project_local_generic_hooks_exist(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

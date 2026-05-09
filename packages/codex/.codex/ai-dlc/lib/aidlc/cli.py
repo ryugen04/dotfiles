@@ -42,7 +42,17 @@ from .state import (
     workspace_status,
 )
 from .validators import assert_overlay, assert_workspace
-from .workspace import ai_dlc_context, cleanup_user_context, init_project, init_workspace_prerequisite_errors, parse_keyed_args, parse_repo_args, scaffold_workspace
+from .workspace import (
+    ai_dlc_context,
+    cleanup_user_context,
+    default_workspace_root,
+    init_project,
+    init_workspace_prerequisite_errors,
+    parse_keyed_args,
+    parse_repo_args,
+    resolve_task_workspace,
+    scaffold_workspace,
+)
 
 
 def find_workspace_root(start: Path) -> Path:
@@ -57,6 +67,31 @@ def find_assignment_context_root(start: Path) -> Path:
         return find_workspace_root(start)
     except FileNotFoundError:
         return start
+
+
+def _workspace_target_args(args: argparse.Namespace) -> tuple[str, str]:
+    return str(getattr(args, "workspace", "") or ""), str(getattr(args, "workspace_root", "") or "")
+
+
+def resolve_workspace_root_arg(start: Path, args: argparse.Namespace) -> Path:
+    workspace, workspace_root = _workspace_target_args(args)
+    target = resolve_task_workspace(start, workspace=workspace, workspace_root=workspace_root)
+    if target is not None:
+        return target
+    return find_workspace_root(start)
+
+
+def resolve_assignment_context_root_arg(start: Path, args: argparse.Namespace) -> Path:
+    workspace, workspace_root = _workspace_target_args(args)
+    target = resolve_task_workspace(start, workspace=workspace, workspace_root=workspace_root)
+    if target is not None:
+        return target
+    return find_assignment_context_root(start)
+
+
+def add_workspace_target_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--workspace", default="")
+    parser.add_argument("--workspace-root", default="")
 
 
 def cmd_install(_: argparse.Namespace) -> int:
@@ -97,12 +132,17 @@ def cmd_init_project(args: argparse.Namespace) -> int:
 
 
 def cmd_init_workspace(args: argparse.Namespace) -> int:
-    root = Path.cwd()
+    root_system = Path.cwd()
+    workspace_root = Path(args.workspace_root).expanduser() if args.workspace_root else default_workspace_root(root_system, args.issue)
+    if not workspace_root.is_absolute():
+        workspace_root = (root_system / workspace_root).resolve()
+    else:
+        workspace_root = workspace_root.resolve()
     repos = parse_repo_args(args.repo)
     repo_urls = parse_keyed_args(args.repo_url) if args.repo_url else {}
     repo_base_refs = parse_keyed_args(args.repo_base_ref) if args.repo_base_ref else {}
     errors, next_actions = init_workspace_prerequisite_errors(
-        root,
+        root_system,
         repos,
         root_canonical_path=args.root_canonical_path,
         root_canonical_url=args.root_canonical_url,
@@ -117,7 +157,7 @@ def cmd_init_workspace(args: argparse.Namespace) -> int:
             lines.extend(f"- {action}" for action in next_actions)
         raise ValueError("\n".join(lines))
     scaffold_workspace(
-        root,
+        workspace_root,
         args.issue,
         args.branch,
         repos,
@@ -127,22 +167,23 @@ def cmd_init_workspace(args: argparse.Namespace) -> int:
         base_ref=args.base_ref,
         root_export_target=args.root_export_target,
         root_export_remote=args.root_export_remote,
-        workspace_root=args.workspace_root,
-        root_canonical_path=args.root_canonical_path,
+        workspace_root=str(workspace_root),
+        root_system_path=str(root_system),
+        root_canonical_path=args.root_canonical_path or str(root_system),
         root_canonical_url=args.root_canonical_url,
         repo_urls=repo_urls,
         repo_base_refs=repo_base_refs,
     )
-    overlay_init(root, args.issue, args.branch, repos)
-    install_project_hooks(root, [root / name for name in repos])
-    assert_overlay(root)
-    if validate(root):
-        raise ValueError("\n".join(validate(root)))
+    overlay_init(workspace_root, args.issue, args.branch, repos)
+    install_project_hooks(workspace_root, [workspace_root / name for name in repos])
+    assert_overlay(workspace_root)
+    if validate(workspace_root):
+        raise ValueError("\n".join(validate(workspace_root)))
     return 0
 
 
 def cmd_overlay_init(args: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), args)
     repos = parse_repo_args(args.repo) if args.repo else None
     overlay_init(root, args.issue, args.branch, repos)
     print(overlay_status(root))
@@ -150,7 +191,7 @@ def cmd_overlay_init(args: argparse.Namespace) -> int:
 
 
 def cmd_validate_overlay(_: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), _)
     errors = validate_overlay(root)
     if errors:
         print("\n".join(errors), file=sys.stderr)
@@ -160,13 +201,13 @@ def cmd_validate_overlay(_: argparse.Namespace) -> int:
 
 
 def cmd_overlay_status(_: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), _)
     print(overlay_status(root))
     return 0
 
 
 def cmd_root_export(args: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), args)
     target_branch = args.target_branch
     target_remote = args.target_remote
     target_repo = args.target_repo
@@ -200,14 +241,14 @@ def cmd_overlay_repair(_: argparse.Namespace) -> int:
 
 
 def cmd_inspect(_: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), _)
     assert_workspace(root)
     print("workspace valid")
     return 0
 
 
 def cmd_validate(_: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), _)
     errors = validate(root)
     if errors:
         print("\n".join(errors), file=sys.stderr)
@@ -217,7 +258,7 @@ def cmd_validate(_: argparse.Namespace) -> int:
 
 
 def cmd_transition(args: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), args)
     target = args.to or args.status
     if not target:
         raise ValueError("transition target is required")
@@ -227,74 +268,74 @@ def cmd_transition(args: argparse.Namespace) -> int:
 
 
 def cmd_bootstrap(args: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), args)
     print(json.dumps(bootstrap(root, args.status), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_work_item_activate(args: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), args)
     print(json.dumps(work_item_activate(root, args.item_id), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_work_item_block(args: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), args)
     print(json.dumps(work_item_block(root, args.item_id, args.reason), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_work_item_cancel(args: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), args)
     print(json.dumps(work_item_cancel(root, args.item_id, args.reason), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_verify_gate(args: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), args)
     print(json.dumps(verify_gate(root, args.item_id, args.summary), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_invalidate(args: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), args)
     invalidate(root, args.item_id)
     return 0
 
 
 def cmd_assignment_create(args: argparse.Namespace) -> int:
-    root = find_assignment_context_root(Path.cwd())
+    root = resolve_assignment_context_root_arg(Path.cwd(), args)
     payload = assignment_create(root, args.role, args.repo, args.writable, args.work_item)
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_assignment_list(_: argparse.Namespace) -> int:
-    root = find_assignment_context_root(Path.cwd())
+    root = resolve_assignment_context_root_arg(Path.cwd(), _)
     print(json.dumps(assignment_list(root), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_assignment_status(args: argparse.Namespace) -> int:
-    root = find_assignment_context_root(Path.cwd())
+    root = resolve_assignment_context_root_arg(Path.cwd(), args)
     print(json.dumps(assignment_update_status(root, args.assignment, args.status), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_agent_claim(args: argparse.Namespace) -> int:
-    root = find_assignment_context_root(Path.cwd())
+    root = resolve_assignment_context_root_arg(Path.cwd(), args)
     print(json.dumps(agent_claim(root, args.assignment, args.session_id), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_agent_report(args: argparse.Namespace) -> int:
-    root = find_assignment_context_root(Path.cwd())
+    root = resolve_assignment_context_root_arg(Path.cwd(), args)
     print(json.dumps(agent_report(root, args.assignment, args.status, args.report), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_agent_release(args: argparse.Namespace) -> int:
-    root = find_assignment_context_root(Path.cwd())
+    root = resolve_assignment_context_root_arg(Path.cwd(), args)
     agent_release(root, args.assignment, args.session_id)
     return 0
 
@@ -306,43 +347,43 @@ def cmd_evidence_record(args: argparse.Namespace) -> int:
 
 
 def cmd_clean_state_check(_: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), _)
     print(json.dumps(clean_state_check(root), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_deadlock_check(_: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), _)
     print(json.dumps(deadlock_check(root), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_lock_list(_: argparse.Namespace) -> int:
-    root = find_assignment_context_root(Path.cwd())
+    root = resolve_assignment_context_root_arg(Path.cwd(), _)
     print(json.dumps(lock_list(root), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_lock_release(args: argparse.Namespace) -> int:
-    root = find_assignment_context_root(Path.cwd())
+    root = resolve_assignment_context_root_arg(Path.cwd(), args)
     lock_release(root, args.lock_name, args.session_id)
     return 0
 
 
 def cmd_status(_: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), _)
     print(json.dumps(workspace_status(root), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_finish(_: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), _)
     print(json.dumps(finish(root), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_install_project_hooks(_: argparse.Namespace) -> int:
-    root = find_workspace_root(Path.cwd())
+    root = resolve_workspace_root_arg(Path.cwd(), _)
     repos = []
     workspace = json.loads(json.dumps({}))
     workspace = None
@@ -427,7 +468,7 @@ def cmd_block_record(args: argparse.Namespace) -> int:
 
 
 def cmd_block_sync(_: argparse.Namespace) -> int:
-    root = find_assignment_context_root(Path.cwd())
+    root = resolve_assignment_context_root_arg(Path.cwd(), _)
     actions = sync_block_actions(root)
     print(json.dumps(actions, indent=2, ensure_ascii=False))
     return 0
@@ -441,13 +482,13 @@ def cmd_block_export(args: argparse.Namespace) -> int:
 
 def cmd_context(args: argparse.Namespace) -> int:
     cwd = Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd()
-    print(json.dumps(ai_dlc_context(cwd), indent=2, ensure_ascii=False))
+    print(json.dumps(ai_dlc_context(cwd, workspace=args.workspace, workspace_root=args.workspace_root), indent=2, ensure_ascii=False))
     return 0
 
 
 def cmd_ensure_context(args: argparse.Namespace) -> int:
     cwd = Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd()
-    print(json.dumps(ai_dlc_context(cwd, ensure_user_local=True), indent=2, ensure_ascii=False))
+    print(json.dumps(ai_dlc_context(cwd, ensure_user_local=True, workspace=args.workspace, workspace_root=args.workspace_root), indent=2, ensure_ascii=False))
     return 0
 
 
@@ -497,12 +538,15 @@ def build_parser() -> argparse.ArgumentParser:
     overlay_init_parser.add_argument("--issue")
     overlay_init_parser.add_argument("--branch")
     overlay_init_parser.add_argument("--repo", action="append", default=[])
+    add_workspace_target_args(overlay_init_parser)
     overlay_init_parser.set_defaults(func=cmd_overlay_init)
 
     validate_overlay_parser = sub.add_parser("validate-overlay")
+    add_workspace_target_args(validate_overlay_parser)
     validate_overlay_parser.set_defaults(func=cmd_validate_overlay)
 
     overlay_status_parser = sub.add_parser("overlay-status")
+    add_workspace_target_args(overlay_status_parser)
     overlay_status_parser.set_defaults(func=cmd_overlay_status)
 
     root_export_parser = sub.add_parser("root-export")
@@ -510,6 +554,7 @@ def build_parser() -> argparse.ArgumentParser:
     root_export_parser.add_argument("--target-remote")
     root_export_parser.add_argument("--target-repo")
     root_export_parser.add_argument("--commit", action="store_true")
+    add_workspace_target_args(root_export_parser)
     root_export_parser.set_defaults(func=cmd_root_export)
 
     overlay_cleanup_parser = sub.add_parser("overlay-cleanup")
@@ -519,41 +564,50 @@ def build_parser() -> argparse.ArgumentParser:
     overlay_repair_parser.set_defaults(func=cmd_overlay_repair)
 
     inspect_parser = sub.add_parser("inspect")
+    add_workspace_target_args(inspect_parser)
     inspect_parser.set_defaults(func=cmd_inspect)
 
     validate_parser = sub.add_parser("validate")
+    add_workspace_target_args(validate_parser)
     validate_parser.set_defaults(func=cmd_validate)
 
     transition_parser = sub.add_parser("transition")
     transition_parser.add_argument("status", nargs="?")
     transition_parser.add_argument("--to")
+    add_workspace_target_args(transition_parser)
     transition_parser.set_defaults(func=cmd_transition)
 
     bootstrap_parser = sub.add_parser("bootstrap")
     bootstrap_parser.add_argument("--status")
+    add_workspace_target_args(bootstrap_parser)
     bootstrap_parser.set_defaults(func=cmd_bootstrap)
 
     work_item_parser = sub.add_parser("work-item")
     work_item_sub = work_item_parser.add_subparsers()
     activate_parser = work_item_sub.add_parser("activate")
     activate_parser.add_argument("item_id")
+    add_workspace_target_args(activate_parser)
     activate_parser.set_defaults(func=cmd_work_item_activate)
     block_parser = work_item_sub.add_parser("block")
     block_parser.add_argument("item_id")
     block_parser.add_argument("--reason", required=True)
+    add_workspace_target_args(block_parser)
     block_parser.set_defaults(func=cmd_work_item_block)
     cancel_parser = work_item_sub.add_parser("cancel")
     cancel_parser.add_argument("item_id")
     cancel_parser.add_argument("--reason", required=True)
+    add_workspace_target_args(cancel_parser)
     cancel_parser.set_defaults(func=cmd_work_item_cancel)
 
     verify_parser = sub.add_parser("verify-gate")
     verify_parser.add_argument("item_id")
     verify_parser.add_argument("--summary", required=True)
+    add_workspace_target_args(verify_parser)
     verify_parser.set_defaults(func=cmd_verify_gate)
 
     invalidate_parser = sub.add_parser("invalidate")
     invalidate_parser.add_argument("item_id")
+    add_workspace_target_args(invalidate_parser)
     invalidate_parser.set_defaults(func=cmd_invalidate)
 
     assignment_parser = sub.add_parser("assignment")
@@ -563,28 +617,34 @@ def build_parser() -> argparse.ArgumentParser:
     assignment_create_parser.add_argument("--repo")
     assignment_create_parser.add_argument("--work-item")
     assignment_create_parser.add_argument("--writable", action="append", default=[])
+    add_workspace_target_args(assignment_create_parser)
     assignment_create_parser.set_defaults(func=cmd_assignment_create)
     assignment_list_parser = assignment_sub.add_parser("list")
+    add_workspace_target_args(assignment_list_parser)
     assignment_list_parser.set_defaults(func=cmd_assignment_list)
     for status_name in ["accept", "reject"]:
         status_parser = assignment_sub.add_parser(status_name)
         status_parser.add_argument("--assignment", required=True)
+        add_workspace_target_args(status_parser)
         status_parser.set_defaults(func=cmd_assignment_status, status=f"{status_name}ed")
 
     claim_parser = sub.add_parser("agent-claim")
     claim_parser.add_argument("--assignment", required=True)
     claim_parser.add_argument("--session-id")
+    add_workspace_target_args(claim_parser)
     claim_parser.set_defaults(func=cmd_agent_claim)
 
     report_parser = sub.add_parser("agent-report")
     report_parser.add_argument("--assignment", required=True)
     report_parser.add_argument("--status", required=True)
     report_parser.add_argument("--report")
+    add_workspace_target_args(report_parser)
     report_parser.set_defaults(func=cmd_agent_report)
 
     release_parser = sub.add_parser("agent-release")
     release_parser.add_argument("--assignment", required=True)
     release_parser.add_argument("--session-id")
+    add_workspace_target_args(release_parser)
     release_parser.set_defaults(func=cmd_agent_release)
 
     evidence_parser = sub.add_parser("evidence")
@@ -596,27 +656,34 @@ def build_parser() -> argparse.ArgumentParser:
     evidence_record_parser.set_defaults(func=cmd_evidence_record)
 
     clean_parser = sub.add_parser("clean-state-check")
+    add_workspace_target_args(clean_parser)
     clean_parser.set_defaults(func=cmd_clean_state_check)
 
     deadlock_parser = sub.add_parser("deadlock-check")
+    add_workspace_target_args(deadlock_parser)
     deadlock_parser.set_defaults(func=cmd_deadlock_check)
 
     lock_parser = sub.add_parser("lock")
     lock_sub = lock_parser.add_subparsers()
     lock_list_parser = lock_sub.add_parser("list")
+    add_workspace_target_args(lock_list_parser)
     lock_list_parser.set_defaults(func=cmd_lock_list)
     lock_release_parser = lock_sub.add_parser("release")
     lock_release_parser.add_argument("lock_name")
     lock_release_parser.add_argument("--session-id")
+    add_workspace_target_args(lock_release_parser)
     lock_release_parser.set_defaults(func=cmd_lock_release)
 
     status_parser = sub.add_parser("status")
+    add_workspace_target_args(status_parser)
     status_parser.set_defaults(func=cmd_status)
 
     finish_parser = sub.add_parser("finish")
+    add_workspace_target_args(finish_parser)
     finish_parser.set_defaults(func=cmd_finish)
 
     install_hooks_parser = sub.add_parser("install-project-hooks")
+    add_workspace_target_args(install_hooks_parser)
     install_hooks_parser.set_defaults(func=cmd_install_project_hooks)
 
     git_shim = sub.add_parser("git-shim")
@@ -652,6 +719,7 @@ def build_parser() -> argparse.ArgumentParser:
     block_record.add_argument("--reason", default="")
     block_record.set_defaults(func=cmd_block_record)
     block_sync = block_sub.add_parser("sync")
+    add_workspace_target_args(block_sync)
     block_sync.set_defaults(func=cmd_block_sync)
     block_export = block_sub.add_parser("export")
     block_export.add_argument("--event-id", required=True)
@@ -660,10 +728,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     context_parser = sub.add_parser("context")
     context_parser.add_argument("--cwd", default="")
+    add_workspace_target_args(context_parser)
     context_parser.set_defaults(func=cmd_context)
 
     ensure_context = sub.add_parser("ensure-context")
     ensure_context.add_argument("--cwd", default="")
+    add_workspace_target_args(ensure_context)
     ensure_context.set_defaults(func=cmd_ensure_context)
 
     close_context = sub.add_parser("close-context")

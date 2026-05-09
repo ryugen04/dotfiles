@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 from .git_hooks import install_project_hooks
-from .io import ensure_dir, now_iso, write_data, write_frontmatter, write_text
+from .io import ensure_dir, now_iso, read_data, write_data, write_frontmatter, write_text
 
 
 def parse_keyed_args(values: list[str]) -> dict[str, str]:
@@ -34,6 +34,90 @@ def _ancestor_with(start: Path, relative: str) -> Path | None:
         if (candidate / relative).exists():
             return candidate
     return None
+
+
+def _project_root(start: Path) -> Path | None:
+    return _ancestor_with(start, "ai-dlc/project-metadata.yaml") or _ancestor_with(start, "sango.yaml")
+
+
+def _workspace_id(root: Path) -> str:
+    try:
+        return str(read_data(root / "workspace.yaml").get("id") or root.resolve().name)
+    except Exception:
+        return root.resolve().name
+
+
+def default_workspace_root(root_system: Path, issue: str) -> Path:
+    return root_system.expanduser().resolve() / "worktrees" / issue
+
+
+def _workspace_root_system(start: Path) -> Path | None:
+    workspace_root = _ancestor_with(start, "workspace.yaml")
+    if workspace_root is None:
+        return None
+    try:
+        root_system = read_data(workspace_root / "workspace.yaml").get("workspace", {}).get("root_system_path")
+    except Exception:
+        return None
+    if not isinstance(root_system, str) or not root_system:
+        return None
+    candidate = Path(root_system).expanduser().resolve()
+    return candidate if candidate.exists() else None
+
+
+def discover_task_workspaces(start: Path) -> list[dict[str, str]]:
+    current = start.expanduser().resolve()
+    project_root = _project_root(current) or _workspace_root_system(current)
+    if project_root is None:
+        return []
+
+    worktrees_dir = project_root / "worktrees"
+    if not worktrees_dir.exists():
+        return []
+
+    discovered: list[dict[str, str]] = []
+    for workspace_yaml in sorted(worktrees_dir.glob("**/workspace.yaml")):
+        workspace_root = workspace_yaml.parent.resolve()
+        discovered.append({
+            "id": _workspace_id(workspace_root),
+            "root": str(workspace_root),
+            "path": str(workspace_root.relative_to(project_root.resolve())),
+        })
+    return discovered
+
+
+def resolve_task_workspace(start: Path, *, workspace: str = "", workspace_root: str = "") -> Path | None:
+    current = start.expanduser().resolve()
+    project_root = _project_root(current) or _workspace_root_system(current)
+
+    if workspace_root:
+        base = project_root or current
+        candidate = Path(workspace_root).expanduser()
+        if not candidate.is_absolute():
+            candidate = (base / candidate).resolve()
+        else:
+            candidate = candidate.resolve()
+        if (candidate / "workspace.yaml").exists():
+            return candidate
+        nested = _ancestor_with(candidate, "workspace.yaml")
+        if nested is not None:
+            return nested
+        raise FileNotFoundError(
+            "existing task workspace not found for --workspace-root "
+            f"{workspace_root}; this resolver requires an existing workspace.yaml. "
+            "For new workspace creation targets, run `ai-dlc init-workspace --workspace-root ...` from the root-system."
+        )
+
+    if workspace:
+        current_workspace = _ancestor_with(current, "workspace.yaml")
+        if current_workspace is not None and _workspace_id(current_workspace) == workspace:
+            return current_workspace
+        for item in discover_task_workspaces(current):
+            if item["id"] == workspace or Path(item["root"]).name == workspace or item["path"] == workspace:
+                return Path(item["root"])
+        raise FileNotFoundError(f"workspace not found: {workspace}")
+
+    return _ancestor_with(current, "workspace.yaml")
 
 
 def stable_project_id(path: Path) -> str:
@@ -72,28 +156,38 @@ def cleanup_user_context(start: Path) -> dict:
     return {"status": "deleted", "root": str(target)}
 
 
-def ai_dlc_context(start: Path, *, ensure_user_local: bool = False) -> dict:
+def ai_dlc_context(
+    start: Path,
+    *,
+    ensure_user_local: bool = False,
+    workspace: str = "",
+    workspace_root: str = "",
+) -> dict:
     current = start.expanduser().resolve()
-    workspace_root = _ancestor_with(current, "workspace.yaml")
-    if workspace_root is not None:
+    target_workspace = resolve_task_workspace(current, workspace=workspace, workspace_root=workspace_root)
+    discoverable_workspaces = discover_task_workspaces(current)
+    if target_workspace is not None:
         return {
             "mode": "task_workspace",
             "control_plane_scope": "project",
-            "root": str(workspace_root),
+            "root": str(target_workspace),
             "user_local_root": "",
+            "discoverable_workspaces": discoverable_workspaces,
             "recommendation": "Use the existing AI-DLC task workspace.",
         }
 
-    project_root = _ancestor_with(current, "ai-dlc/project-metadata.yaml")
-    if project_root is None:
-        project_root = _ancestor_with(current, "sango.yaml")
+    project_root = _project_root(current)
     if project_root is not None:
         return {
             "mode": "project_root",
             "control_plane_scope": "project",
             "root": str(project_root),
             "user_local_root": "",
-            "recommendation": "Use the existing project-local AI-DLC control-plane.",
+            "discoverable_workspaces": discoverable_workspaces,
+            "recommendation": (
+                "Use the existing project-local AI-DLC control-plane. "
+                "Target a task workspace with `ai-dlc ... --workspace <id>` or `--workspace-root worktrees/<id>`."
+            ),
         }
 
     user_root = codex_user_workspace_root(current)
@@ -137,6 +231,7 @@ def ai_dlc_context(start: Path, *, ensure_user_local: bool = False) -> dict:
         "control_plane_scope": "user_local" if exists else "none",
         "root": str(user_root) if exists else "",
         "user_local_root": str(user_root),
+        "discoverable_workspaces": discoverable_workspaces,
         "recommendation": (
             "Project-local AI-DLC is recommended. For plan-driven work, add `.codex/config.toml` with "
             "`hooks = true` and `guardrails.subagent_required = true`; use `ai-dlc ensure-context` "
@@ -577,14 +672,15 @@ def scaffold_workspace(
     root_export_target: str = "main",
     root_export_remote: str = "origin",
     workspace_root: str | None = None,
+    root_system_path: str | None = None,
     root_canonical_path: str | None = None,
     root_canonical_url: str = "",
     repo_urls: dict[str, str] | None = None,
     repo_base_refs: dict[str, str] | None = None,
 ) -> None:
     repo_names = list(repos.keys())
-    workspace_root = _abs(workspace_root or root.parent)
-    root_system_path = _abs(root)
+    workspace_root = _abs(workspace_root or root)
+    root_system_path = _abs(root_system_path or root)
     root_canonical_path = _abs(root_canonical_path or root)
     local_root = root.parent / ".local"
     local_root_abs = _abs(local_root)
