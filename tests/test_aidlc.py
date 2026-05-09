@@ -18,7 +18,7 @@ if str(LIB) not in sys.path:
 
 from aidlc import hooks
 from aidlc import cli
-from aidlc.block_ledger import open_blocker_errors
+from aidlc.block_ledger import list_events, open_blocker_errors
 from aidlc.git_hooks import install_project_hooks
 from aidlc.io import read_frontmatter, write_frontmatter
 from aidlc.overlay import overlay_init, overlay_repair, root_export, validate_overlay
@@ -811,6 +811,28 @@ class AidlcTest(unittest.TestCase):
             self.assertIn("[REDACTED]", event["command"])
             self.assertNotIn("supersecret", json.dumps(event))
 
+    def test_read_only_false_positive_event_does_not_block_finish_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            home = tmp_path / "home"
+            root, _ = self.create_workspace(tmp_path)
+
+            blocked = self.dispatch_with_payload(
+                root,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "FOO=1 git status"}},
+                {"HOME": str(home)},
+            )
+            self.assertEqual(blocked["decision"], "block")
+            self.assertIn("type=read_only_false_positive", blocked["reason"])
+
+            with patch.dict(os.environ, {"HOME": str(home)}, clear=False):
+                events = list_events(include_recorded=True)
+                self.assertEqual(len(events), 1)
+                self.assertEqual(events[0]["block_type"], "read_only_false_positive")
+                self.assertFalse(events[0]["requires_durable_record"])
+                self.assertTrue(events[0]["recorded"])
+                self.assertEqual(open_blocker_errors(root, "finish"), [])
+
     def test_block_record_action_releases_finish_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -1037,6 +1059,56 @@ class AidlcTest(unittest.TestCase):
             self.assertEqual(root_system_command["decision"], "block")
             self.assertIn("mutating Bash", root_system_command["reason"])
 
+    def test_hook_dispatch_uses_camel_case_working_directory_for_workspace_resolution_and_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            canonical_root = tmp_path / "canonical-root"
+            canonical_root.mkdir()
+            task_parent = tmp_path / "task"
+            task_parent.mkdir()
+            task_root, _ = self.create_workspace(task_parent)
+            init_project(
+                canonical_root,
+                repo_paths={"web": str(task_root / "web")},
+                repo_urls={"web": "git@example.com:web.git"},
+            )
+
+            allowed_assignment = self.dispatch_with_payload(
+                canonical_root,
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {
+                        "cmd": "ai-dlc assignment create --role dlc_plan_writer",
+                        "workingDirectory": str(task_root),
+                    },
+                },
+                {"HOME": str(fake_home)},
+            )
+            self.assertEqual(allowed_assignment, {})
+
+            blocked_edit = self.dispatch_with_payload(
+                canonical_root,
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Edit",
+                    "tool_input": {
+                        "file_path": "web/README.md",
+                        "workingDirectory": str(task_root),
+                    },
+                },
+                {"HOME": str(fake_home), "CODEX_SESSION_ID": "sess-camel-cwd"},
+            )
+            self.assertEqual(blocked_edit["decision"], "block")
+            self.assertIn("claimed lease", blocked_edit["reason"])
+
+            ledger = fake_home / ".codex" / "ai-dlc" / "block-ledger" / "events.jsonl"
+            events = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+            event = events[-1]
+            self.assertEqual(event["workspace_id"], "LIN-123")
+            self.assertEqual(event["effective_cwd"], str(task_root.resolve()))
+
     def test_hook_dispatch_non_workspace_pret_tool_and_stop_are_schema_safe(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             outside = Path(tmp)
@@ -1141,9 +1213,15 @@ class AidlcTest(unittest.TestCase):
                 "ai-dlc --help",
                 "ai-dlc -h",
                 "ai-dlc assignment --help",
+                "ai-dlc assignment list",
                 "ai-dlc inspect",
                 "ai-dlc context",
                 "ai-dlc ensure-context",
+                "ai-dlc block list",
+                "ai-dlc block list --json",
+                "ai-dlc block actions",
+                "ai-dlc block actions --json",
+                "ai-dlc block-diagnose --cwd /tmp/task --event PreToolUse --tool Bash --command pwd --message needs_assignment",
                 "ai-dlc assignment create --role dlc_repo_worker --repo source --work-item WI-001 --writable README.md",
                 "ai-dlc assignment create --work-item WI-001 --writable README.md --repo source --role dlc_repo_worker",
                 "ai-dlc assignment create --writable src/module.py --role dlc_repo_worker --repo source --work-item WI-001 --writable README.md",
@@ -1158,6 +1236,126 @@ class AidlcTest(unittest.TestCase):
                 with self.subTest(cmd=cmd):
                     payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}}
                     self.assertEqual(self.dispatch_with_payload(repo, payload), {})
+
+    def test_hook_allows_only_narrow_workspace_less_codex_runtime_probes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            (repo / ".codex").mkdir()
+            (repo / ".codex" / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            allowed_commands = [
+                "which codex",
+                "command -v codex",
+                "codex --version",
+                "codex -V",
+                "codex --help",
+            ]
+            for cmd in allowed_commands:
+                with self.subTest(cmd=cmd):
+                    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}}
+                    self.assertEqual(self.dispatch_with_payload(repo, payload), {}, f"Expected allow for: {cmd}")
+
+            blocked_commands = [
+                "which python",
+                "command -v python",
+                "codex exec echo hi",
+                "codex login",
+                "codex logout",
+                "codex help",
+                "codex --version --json",
+                "codex -V extra",
+                "codex --version > out",
+                "codex --version $(pwd)",
+            ]
+            for cmd in blocked_commands:
+                with self.subTest(cmd=cmd):
+                    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}}
+                    blocked = self.dispatch_with_payload(repo, payload)
+                    self.assertEqual(blocked["decision"], "block", f"Expected block for: {cmd}")
+                    self.assertIn("mutating Bash", blocked["reason"])
+
+    def test_hook_dispatch_allows_only_scoped_workspace_less_block_recovery_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            repo = tmp_path / "repo"
+            repo.mkdir()
+            (repo / ".codex").mkdir()
+            (repo / ".codex" / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+            event_id = "B20260509T000000Z-test0001"
+
+            allowed_commands = [
+                f"ai-dlc block record --event-id {event_id} --ref ai-dlc/decisions/{event_id}.md",
+                f"ai-dlc block record --event-id {event_id} --type repair_task_created --ref .codex/plans/{event_id}.md --reason tracked",
+                "ai-dlc block sync",
+                f"ai-dlc block export --event-id {event_id} --plan {tmp_path / 'external' / 'blocker-plan.md'}",
+            ]
+            for cmd in allowed_commands:
+                with self.subTest(cmd=cmd):
+                    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}}
+                    self.assertEqual(self.dispatch_with_payload(repo, payload), {}, f"Expected allow for: {cmd}")
+
+            blocked_commands = [
+                f"ai-dlc block record --event-id {event_id} --ref packages/app.py",
+                f"ai-dlc block record --event-id {event_id} --type invalid --ref ai-dlc/decisions/{event_id}.md",
+                f"ai-dlc block record --event-id {event_id} --type deferred_by_user --ref ai-dlc/decisions/{event_id}.md",
+                f"ai-dlc block record --event-id {event_id} --ref ai-dlc/decisions/{event_id}.md>out",
+                f"ai-dlc block record --event-id {event_id} --ref ai-dlc/decisions/{event_id}.md<in",
+                f"ai-dlc block export --event-id {event_id} --plan packages/blocker-plan.md",
+                f"ai-dlc block export --event-id {event_id} --plan {tmp_path / 'external' / 'blocker-plan.md'}>out",
+                "ai-dlc block sync --json",
+                "ai-dlc block list --output file",
+            ]
+            for cmd in blocked_commands:
+                with self.subTest(cmd=cmd):
+                    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}}
+                    blocked = self.dispatch_with_payload(repo, payload)
+                    self.assertEqual(blocked["decision"], "block", f"Expected block for: {cmd}")
+                    self.assertIn("mutating Bash", blocked["reason"])
+
+    def test_hook_dispatch_allows_workspace_less_lifecycle_only_when_scoped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_home = tmp_path / "home"
+            repo = tmp_path / "repo"
+            self.init_repo(repo, "workspace-less lifecycle\n")
+            (repo / ".codex").mkdir()
+            (repo / ".codex" / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+            env = {"HOME": str(fake_home)}
+
+            with patch.dict(os.environ, env):
+                assignment = assignment_create(repo, "dlc_repo_worker", "source", ["README.md"], "WI-001")
+
+            claim_cmd = f"ai-dlc agent-claim --assignment {assignment['id']} --session-id sess-source"
+            claim_payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": claim_cmd}}
+            self.assertEqual(self.dispatch_with_payload(repo, claim_payload, env), {})
+
+            bad_claim = self.dispatch_with_payload(
+                repo,
+                {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": "ai-dlc agent-claim --assignment A999 --session-id sess-source"}},
+                env,
+            )
+            self.assertEqual(bad_claim["decision"], "block")
+
+            with patch.dict(os.environ, env):
+                agent_claim(repo, assignment["id"], session_id="sess-source")
+
+            report_cmd = f"ai-dlc agent-report --assignment {assignment['id']} --status reported"
+            release_cmd = f"ai-dlc agent-release --assignment {assignment['id']} --session-id sess-source"
+            for cmd in [report_cmd, release_cmd]:
+                with self.subTest(cmd=cmd):
+                    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}}
+                    self.assertEqual(self.dispatch_with_payload(repo, payload, env), {}, f"Expected allow for: {cmd}")
+
+            blocked_commands = [
+                f"ai-dlc agent-report --assignment {assignment['id']} --status done",
+                f"ai-dlc agent-release --assignment {assignment['id']} --session-id wrong-session",
+                f"ai-dlc agent-report --assignment A999 --status reported",
+            ]
+            for cmd in blocked_commands:
+                with self.subTest(cmd=cmd):
+                    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": cmd}}
+                    blocked = self.dispatch_with_payload(repo, payload, env)
+                    self.assertEqual(blocked["decision"], "block", f"Expected block for: {cmd}")
 
     def test_hook_blocks_incomplete_or_broad_workspace_less_repo_worker_assignment_create(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1387,6 +1585,82 @@ class AidlcTest(unittest.TestCase):
                         {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": command}},
                     )
                     self.assertEqual(allowed, {})
+
+    def test_hook_dispatch_allows_read_only_pipelines_outside_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            codex_dir = repo / ".codex"
+            codex_dir.mkdir()
+            (codex_dir / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            read_only_commands = [
+                "rg pattern README.md | head -n 20",
+                "nl -ba README.md | sed -n '1,20p'",
+                "git show --stat HEAD | sed -n '1,40p'",
+            ]
+            for command in read_only_commands:
+                with self.subTest(command=command):
+                    allowed = self.dispatch_with_payload(
+                        repo,
+                        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": command}},
+                    )
+                    self.assertEqual(allowed, {}, f"Expected allow for: {command}")
+
+            blocked_commands = [
+                "rg pattern README.md | tee out.txt",
+                "rg pattern README.md > out.txt",
+                "rg pattern README.md && head -n 20 README.md",
+                "rg $(pwd) README.md | head -n 20",
+                "nl -ba README.md | sed -i 's/a/b/'",
+            ]
+            for command in blocked_commands:
+                with self.subTest(command=command):
+                    blocked = self.dispatch_with_payload(
+                        repo,
+                        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": command}},
+                    )
+                    self.assertEqual(blocked["decision"], "block")
+                    self.assertIn("mutating Bash", blocked["reason"])
+
+    def test_hook_dispatch_allows_project_validation_python_commands_outside_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            codex_dir = repo / ".codex"
+            codex_dir.mkdir()
+            (codex_dir / "config.toml").write_text("[guardrails]\nsubagent_required = true\n", encoding="utf-8")
+
+            allowed_commands = [
+                "python3 -m py_compile packages/codex/.codex/ai-dlc/lib/aidlc/hooks.py packages/codex/.codex/ai-dlc/lib/aidlc/block_ledger.py",
+                "python -m py_compile tests/test_aidlc.py",
+                "python3 -m unittest tests.test_aidlc",
+                "python3 -m unittest -k test_hook_dispatch_allows_project_validation_python_commands_outside_workspace tests.test_aidlc",
+                "python -m unittest -k AidlcTest.test_hook_dispatch_allows_project_validation_python_commands_outside_workspace tests.test_aidlc",
+            ]
+            for command in allowed_commands:
+                with self.subTest(command=command):
+                    allowed = self.dispatch_with_payload(
+                        repo,
+                        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": command}},
+                    )
+                    self.assertEqual(allowed, {}, f"Expected allow for: {command}")
+
+            blocked_commands = [
+                "python3 -c 'print(1)'",
+                "python -c 'print(1)'",
+                "python3 scripts/check.py",
+                "python3 -m unittest tests.other",
+                "python3 -m unittest -k test_hook_dispatch_allows_project_validation_python_commands_outside_workspace tests.other",
+                "python3 -m py_compile packages/codex/.codex/ai-dlc/lib/aidlc/hooks.py>out",
+                "python3 -m py_compile packages/codex/.codex/ai-dlc/lib/aidlc/nested/module.py",
+            ]
+            for command in blocked_commands:
+                with self.subTest(command=command):
+                    blocked = self.dispatch_with_payload(
+                        repo,
+                        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"cmd": command}},
+                    )
+                    self.assertEqual(blocked["decision"], "block", f"Expected block for: {command}")
+                    self.assertIn("mutating Bash", blocked["reason"])
 
     def test_hook_dispatch_classifies_git_remote_and_worktree_read_only_precisely(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

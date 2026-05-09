@@ -15,7 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
     tomllib = None  # type: ignore[assignment]
 
 from .io import read_data, read_frontmatter, read_text
-from .block_ledger import open_block_events_for, record_block_event
+from .block_ledger import ACTION_TYPES, open_block_events_for, record_block_event, ref_allowed
 from .state import assignment_root, bootstrap_gate_errors, lease_path_errors, load_assignment, load_lease
 from .workflow_contracts import scoped_break_glass_allowed, stop_missing_obligation, workflow_type
 
@@ -27,6 +27,9 @@ GUARDRAIL_LIST_KEYS = {"bootstrap_edit_paths", "bootstrap_extra_commands"}
 WRITE_LIKE_BASH_PATTERNS = ["sed -i", "perl -pi", "python -c", "python3 -c", "ruby -pi", "tee ", " cat > ", " > ", " >> "]
 AGENT_TOOLS = {"spawn_agent", "send_input"}
 READ_ONLY_BASH_COMMANDS = {"ls", "pwd", "cat", "find", "rg", "sed", "head", "tail", "wc", "sort", "uniq", "cut", "nl"}
+PYTHON_VALIDATION_COMMANDS = {"python", "python3"}
+PY_COMPILE_ALLOWED_PATH_PATTERNS = ("packages/codex/.codex/ai-dlc/lib/aidlc/*.py", "tests/test_aidlc.py")
+UNITTEST_ALLOWED_MODULE = "tests.test_aidlc"
 READ_ONLY_AIDLC_COMMANDS = {
     ("ai-dlc", "doctor"),
     ("ai-dlc", "status"),
@@ -37,6 +40,10 @@ READ_ONLY_AIDLC_COMMANDS = {
     ("ai-dlc", "overlay-status"),
     ("ai-dlc", "deadlock-check"),
     ("ai-dlc", "clean-state-check"),
+}
+READ_ONLY_AIDLC_SUBCOMMANDS = {
+    ("ai-dlc", "assignment", "list"),
+    ("ai-dlc", "block-diagnose"),
 }
 BOOTSTRAP_AIDLC_COMMANDS = {
     ("ai-dlc", "install"),
@@ -73,6 +80,7 @@ GIT_FINISH_GH_SUBCOMMAND_PAIRS = {("pr", "create"), ("pr", "view"), ("pr", "stat
 INSTALL_APPROVAL_ENV = "AI_DLC_INSTALL_APPROVED"
 DISALLOWED_SHELL_FRAGMENTS = ("`", "$(", "\n", "\r", ";", "&&", "||")
 DISALLOWED_SHELL_TOKENS = {"|", "&", ">", ">>", "<", "<<", "<<<"}
+SHELL_PUNCTUATION = set("();<>|&")
 READ_ONLY_FIND_FORBIDDEN_PREFIXES = ("-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprintf", "-fls")
 WORKSPACE_LESS_FORBIDDEN_WRITABLE_PREFIXES = (".git", ".codex", "ai-dlc")
 WORKSPACE_LESS_FORBIDDEN_WRITABLES = {".", "*", "**", "workspace.yaml"}
@@ -82,6 +90,14 @@ WORKSPACE_LESS_BOOTSTRAP_WRITABLE = {
     "dlc_repairer": ["ai-dlc/bootstrap/**", "ai-dlc/overlay/**", "ai-dlc/decisions/**", "../.local/**", ".codex/config.toml", ".gitignore"],
 }
 _LEDGER_CONTEXT: dict[str, Any] = {}
+WORKING_DIRECTORY_KEYS = (
+    "workdir",
+    "cwd",
+    "working_dir",
+    "workingDirectory",
+    "current_working_directory",
+    "currentWorkingDirectory",
+)
 
 
 def _find_workspace(start: Path) -> Path | None:
@@ -366,19 +382,92 @@ def _block_hook(event_name: str, reason: str, diagnosis: dict[str, Any] | None =
     return _block(reason)
 
 
-def _safe_tokens(command: str) -> list[str]:
+def _safe_shell_tokens(command: str, *, allow_pipe: bool = False) -> list[str]:
     normalized = command.strip()
     if not normalized:
         return []
     if any(fragment in normalized for fragment in DISALLOWED_SHELL_FRAGMENTS):
         return []
     try:
-        tokens = shlex.split(normalized)
+        lexer = shlex.shlex(normalized, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        tokens = list(lexer)
     except ValueError:
         return []
-    if any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
+    if not tokens:
+        return []
+    for token in tokens:
+        if token == "|" and allow_pipe:
+            continue
+        if token in DISALLOWED_SHELL_TOKENS:
+            return []
+        if set(token).issubset(SHELL_PUNCTUATION):
+            return []
+    return tokens
+
+
+def _safe_tokens(command: str) -> list[str]:
+    tokens = _safe_shell_tokens(command)
+    if any(token == "|" for token in tokens):
         return []
     return tokens
+
+
+def _project_relative_path(cwd: Path, value: str) -> str | None:
+    if not value or value.startswith("-"):
+        return None
+    config_path = _find_codex_config(cwd)
+    if config_path is None:
+        return None
+    project_root = config_path.parent.parent
+    path = Path(value)
+    candidate = path if path.is_absolute() else cwd / path
+    try:
+        return candidate.resolve().relative_to(project_root.resolve()).as_posix()
+    except Exception:
+        return None
+
+
+def _is_allowed_py_compile_target(cwd: Path, value: str) -> bool:
+    relative = _project_relative_path(cwd, value)
+    if relative is None:
+        return False
+    return any(Path(relative).match(pattern) for pattern in PY_COMPILE_ALLOWED_PATH_PATTERNS)
+
+
+def _is_allowed_project_validation_command(command: str, cwd: Path) -> bool:
+    tokens = _safe_tokens(command)
+    if not tokens or tokens[0] not in PYTHON_VALIDATION_COMMANDS:
+        return False
+    if tokens[1:3] == ["-m", "py_compile"]:
+        targets = tokens[3:]
+        return bool(targets) and all(_is_allowed_py_compile_target(cwd, target) for target in targets)
+    if tokens[1:3] != ["-m", "unittest"]:
+        return False
+    if tokens[3:] == [UNITTEST_ALLOWED_MODULE]:
+        return True
+    if len(tokens) == 6 and tokens[3] == "-k" and tokens[5] == UNITTEST_ALLOWED_MODULE:
+        pattern = tokens[4]
+        return bool(re.match(r"^[A-Za-z0-9_.:-]+$", pattern))
+    return False
+
+
+def _pipeline_segments(tokens: list[str]) -> list[list[str]]:
+    segments: list[list[str]] = []
+    current: list[str] = []
+    for token in tokens:
+        if token == "|":
+            if not current:
+                return []
+            segments.append(current)
+            current = []
+        else:
+            current.append(token)
+    if not current:
+        return []
+    segments.append(current)
+    return segments
 
 
 def _strip_leading_env(tokens: list[str]) -> tuple[dict[str, str], list[str]]:
@@ -751,6 +840,16 @@ def _is_read_only_sort(tokens: list[str]) -> bool:
     return True
 
 
+def _is_read_only_codex_runtime_probe(tokens: list[str]) -> bool:
+    return tokens in (
+        ["which", "codex"],
+        ["command", "-v", "codex"],
+        ["codex", "--version"],
+        ["codex", "-V"],
+        ["codex", "--help"],
+    )
+
+
 def _is_read_only_gh(tokens: list[str]) -> bool:
     # gh <subcommand> [<action>] の組み合わせで判定
     if len(tokens) < 2:
@@ -783,15 +882,21 @@ def _is_read_only_git(tokens: list[str]) -> bool:
     return subcommand in READ_ONLY_GIT_SUBCOMMANDS
 
 
+def _is_read_only_aidlc_block(tokens: list[str]) -> bool:
+    if len(tokens) < 3 or tokens[:2] != ["ai-dlc", "block"]:
+        return False
+    subcommand = tokens[2]
+    flags = tokens[3:]
+    if subcommand == "list":
+        return all(flag in {"--json", "--all"} for flag in flags)
+    if subcommand == "actions":
+        return all(flag == "--json" for flag in flags)
+    return False
+
+
 def _is_safe_aidlc_command(command: str) -> bool:
-    normalized = command.strip()
-    if any(fragment in normalized for fragment in DISALLOWED_SHELL_FRAGMENTS):
-        return False
-    try:
-        tokens = shlex.split(normalized)
-    except ValueError:
-        return False
-    if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
+    tokens = _safe_tokens(command)
+    if not tokens:
         return False
     return tokens[0] == "ai-dlc"
 
@@ -801,7 +906,203 @@ def _is_read_only_aidlc(tokens: list[str]) -> bool:
         return False
     if any(token in {"-h", "--help"} for token in tokens[1:]):
         return True
+    if _is_read_only_aidlc_block(tokens):
+        return True
+    if len(tokens) >= 3 and tuple(tokens[:3]) in READ_ONLY_AIDLC_SUBCOMMANDS:
+        return True
+    if len(tokens) >= 2 and tuple(tokens[:2]) in READ_ONLY_AIDLC_SUBCOMMANDS:
+        return True
     return len(tokens) >= 2 and (tokens[0], tokens[1]) in READ_ONLY_AIDLC_COMMANDS
+
+
+def _parse_long_options(tokens: list[str]) -> tuple[dict[str, list[str]], list[str]] | None:
+    options: dict[str, list[str]] = {}
+    positionals: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token.startswith("--"):
+            key, separator, value = token.partition("=")
+            if not key or key == "--":
+                return None
+            if separator:
+                options.setdefault(key, []).append(value)
+            elif index + 1 < len(tokens) and not tokens[index + 1].startswith("--"):
+                options.setdefault(key, []).append(tokens[index + 1])
+                index += 1
+            else:
+                options.setdefault(key, []).append("")
+        elif token.startswith("-"):
+            return None
+        else:
+            positionals.append(token)
+        index += 1
+    return options, positionals
+
+
+def _single_option(options: dict[str, list[str]], name: str, default: str = "") -> str | None:
+    values = options.get(name)
+    if values is None:
+        return default
+    if len(values) != 1:
+        return None
+    return values[0]
+
+
+def _has_only_options(options: dict[str, list[str]], allowed: set[str]) -> bool:
+    return set(options).issubset(allowed)
+
+
+def _event_id_looks_safe(event_id: str) -> bool:
+    return bool(re.match(r"^B[A-Za-z0-9TtZz_-]{8,}$", event_id))
+
+
+def _is_allowed_block_record(tokens: list[str]) -> bool:
+    parsed = _parse_long_options(tokens[3:])
+    if parsed is None:
+        return False
+    options, positionals = parsed
+    if positionals or not _has_only_options(options, {"--event-id", "--type", "--ref", "--reason"}):
+        return False
+    event_id = _single_option(options, "--event-id")
+    action_type = _single_option(options, "--type", "durable_record")
+    ref = _single_option(options, "--ref")
+    reason = _single_option(options, "--reason", "")
+    if event_id is None or action_type is None or ref is None or reason is None:
+        return False
+    if not event_id or not _event_id_looks_safe(event_id):
+        return False
+    if action_type not in ACTION_TYPES:
+        return False
+    if action_type == "deferred_by_user" and not reason:
+        return False
+    return ref_allowed(ref)
+
+
+def _is_allowed_block_export(tokens: list[str]) -> bool:
+    parsed = _parse_long_options(tokens[3:])
+    if parsed is None:
+        return False
+    options, positionals = parsed
+    if positionals or not _has_only_options(options, {"--event-id", "--plan"}):
+        return False
+    event_id = _single_option(options, "--event-id")
+    plan = _single_option(options, "--plan")
+    if event_id is None or plan is None:
+        return False
+    if not event_id or not _event_id_looks_safe(event_id):
+        return False
+    if plan.startswith(("http://", "https://")) or Path(plan).suffix.lower() not in {".md", ".markdown"}:
+        return False
+    return ref_allowed(plan)
+
+
+def _is_allowed_block_recovery_command(tokens: list[str]) -> bool:
+    if len(tokens) < 3 or tokens[:2] != ["ai-dlc", "block"]:
+        return False
+    subcommand = tokens[2]
+    if subcommand == "record":
+        return _is_allowed_block_record(tokens)
+    if subcommand == "sync":
+        return len(tokens) == 3
+    if subcommand == "export":
+        return _is_allowed_block_export(tokens)
+    return False
+
+
+def _workspace_less_assignment_for_command(cwd: Path, assignment_id: str, allowed_statuses: set[str]) -> dict[str, Any] | None:
+    if not re.match(r"^A\d{3}$", assignment_id):
+        return None
+    try:
+        assignment = load_assignment(cwd, assignment_id)
+    except Exception:
+        return None
+    if not assignment.get("workspace_less"):
+        return None
+    if str(assignment.get("status")) not in allowed_statuses:
+        return None
+    return assignment
+
+
+def _workspace_less_lifecycle_lease_matches(cwd: Path, assignment_id: str, session_id: str = "") -> bool:
+    try:
+        explicit_session_id = session_id or os.environ.get("CODEX_SESSION_ID") or ""
+        if explicit_session_id:
+            lease_path = assignment_root(cwd) / "leases" / f"{explicit_session_id}.json"
+            if not lease_path.exists():
+                return False
+            lease = json.loads(lease_path.read_text(encoding="utf-8"))
+        else:
+            lease = load_lease(cwd, None)
+    except Exception:
+        return False
+    return bool(
+        lease
+        and lease.get("workspace_less")
+        and lease.get("assignment_id") == assignment_id
+        and lease.get("status") == "claimed"
+    )
+
+
+def _is_allowed_workspace_less_agent_claim(tokens: list[str], cwd: Path) -> bool:
+    parsed = _parse_long_options(tokens[2:])
+    if parsed is None:
+        return False
+    options, positionals = parsed
+    if positionals or not _has_only_options(options, {"--assignment", "--session-id"}):
+        return False
+    assignment_id = _single_option(options, "--assignment")
+    session_id = _single_option(options, "--session-id", "")
+    if assignment_id is None or session_id is None:
+        return False
+    return _workspace_less_assignment_for_command(cwd, assignment_id, {"created", "accepted"}) is not None
+
+
+def _is_allowed_workspace_less_agent_report(tokens: list[str], cwd: Path) -> bool:
+    parsed = _parse_long_options(tokens[2:])
+    if parsed is None:
+        return False
+    options, positionals = parsed
+    if positionals or not _has_only_options(options, {"--assignment", "--status", "--report"}):
+        return False
+    assignment_id = _single_option(options, "--assignment")
+    status = _single_option(options, "--status")
+    report = _single_option(options, "--report", "")
+    if assignment_id is None or status is None or report is None:
+        return False
+    if status not in {"reported", "blocked", "failed", "cancelled"}:
+        return False
+    if _workspace_less_assignment_for_command(cwd, assignment_id, {"claimed", "reported", "blocked", "failed", "cancelled"}) is None:
+        return False
+    return _workspace_less_lifecycle_lease_matches(cwd, assignment_id)
+
+
+def _is_allowed_workspace_less_agent_release(tokens: list[str], cwd: Path) -> bool:
+    parsed = _parse_long_options(tokens[2:])
+    if parsed is None:
+        return False
+    options, positionals = parsed
+    if positionals or not _has_only_options(options, {"--assignment", "--session-id"}):
+        return False
+    assignment_id = _single_option(options, "--assignment")
+    session_id = _single_option(options, "--session-id", "")
+    if assignment_id is None or session_id is None:
+        return False
+    if _workspace_less_assignment_for_command(cwd, assignment_id, {"claimed", "reported", "blocked", "failed", "cancelled"}) is None:
+        return False
+    return _workspace_less_lifecycle_lease_matches(cwd, assignment_id, session_id)
+
+
+def _is_allowed_workspace_less_lifecycle_command(tokens: list[str], cwd: Path) -> bool:
+    if len(tokens) < 2 or tokens[0] != "ai-dlc":
+        return False
+    if tokens[1] == "agent-claim":
+        return _is_allowed_workspace_less_agent_claim(tokens, cwd)
+    if tokens[1] == "agent-report":
+        return _is_allowed_workspace_less_agent_report(tokens, cwd)
+    if tokens[1] == "agent-release":
+        return _is_allowed_workspace_less_agent_release(tokens, cwd)
+    return False
 
 
 def _workspace_less_assignment_options(tokens: list[str]) -> dict[str, Any] | None:
@@ -919,33 +1220,19 @@ def _canonical_bootstrap_tokens(tokens: list[str], cwd: Path) -> list[str]:
 def _matches_bootstrap_extra_command(tokens: list[str], cwd: Path) -> bool:
     expected = _canonical_bootstrap_tokens(tokens, cwd)
     for configured in _bootstrap_extra_commands(cwd):
-        if any(fragment in configured for fragment in DISALLOWED_SHELL_FRAGMENTS):
-            continue
-        try:
-            configured_tokens = shlex.split(configured.strip())
-        except ValueError:
-            continue
-        if not configured_tokens or any(token in DISALLOWED_SHELL_TOKENS for token in configured_tokens):
+        configured_tokens = _safe_tokens(configured)
+        if not configured_tokens:
             continue
         if _canonical_bootstrap_tokens(configured_tokens, cwd) == expected:
             return True
     return False
 
 
-def _is_read_only_bash(command: str) -> bool:
-    normalized = command.strip()
-    if not normalized:
-        return True
-    if any(fragment in normalized for fragment in DISALLOWED_SHELL_FRAGMENTS):
-        return False
-    try:
-        tokens = shlex.split(normalized)
-    except ValueError:
-        return False
-    if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
-        return False
+def _is_read_only_tokens(tokens: list[str]) -> bool:
     if tokens[0] == "ai-dlc":
         return _is_read_only_aidlc(tokens)
+    if _is_read_only_codex_runtime_probe(tokens):
+        return True
     command_name = tokens[0]
     if command_name in READ_ONLY_BASH_COMMANDS:
         if command_name == "sed":
@@ -962,23 +1249,37 @@ def _is_read_only_bash(command: str) -> bool:
     return False
 
 
+def _is_read_only_bash(command: str) -> bool:
+    normalized = command.strip()
+    if not normalized:
+        return True
+    tokens = _safe_shell_tokens(normalized, allow_pipe=True)
+    if not tokens:
+        return False
+    segments = _pipeline_segments(tokens)
+    if not segments:
+        return False
+    return all(_is_read_only_tokens(segment) for segment in segments)
+
+
 def _is_allowed_bootstrap_command(command: str, cwd: Path) -> bool:
     normalized = command.strip()
     if not normalized:
         return False
-    if any(fragment in normalized for fragment in DISALLOWED_SHELL_FRAGMENTS):
-        return False
-    try:
-        tokens = shlex.split(normalized)
-    except ValueError:
+    tokens = _safe_tokens(normalized)
+    if not tokens:
         return False
     env, command_tokens = _strip_leading_env(tokens)
-    if not command_tokens or any(token in DISALLOWED_SHELL_TOKENS for token in command_tokens):
+    if not command_tokens:
         return False
     if command_tokens[0] == "ai-dlc":
         if len(command_tokens) >= 2 and command_tokens[1] == "ensure-context":
             return True
         if len(command_tokens) >= 2 and (command_tokens[0], command_tokens[1]) in BOOTSTRAP_AIDLC_COMMANDS:
+            return True
+        if _is_allowed_block_recovery_command(command_tokens):
+            return True
+        if _is_allowed_workspace_less_lifecycle_command(command_tokens, cwd):
             return True
         return _is_allowed_workspace_less_assignment_create(command_tokens)
     if len(command_tokens) >= 3 and command_tokens[0] == "sango" and command_tokens[1] == "worktree":
@@ -1002,20 +1303,29 @@ def _cwd_is_within(path: Path, parent: Path) -> bool:
         return False
 
 
+def _resolve_cwd_value(value: str, fallback: Path) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else (fallback / path).resolve()
+
+
 def _extract_effective_cwd(payload: dict[str, Any], fallback: Path) -> Path:
     tool_input = payload.get("tool_input") or payload.get("input") or {}
     if isinstance(tool_input, dict):
-        for key in ["workdir", "cwd", "working_dir"]:
+        for key in WORKING_DIRECTORY_KEYS:
             value = tool_input.get(key)
             if isinstance(value, str) and value:
-                path = Path(value)
-                return path if path.is_absolute() else (fallback / path).resolve()
+                return _resolve_cwd_value(value, fallback)
+        nested = tool_input.get("command")
+        if isinstance(nested, dict):
+            for key in WORKING_DIRECTORY_KEYS:
+                value = nested.get(key)
+                if isinstance(value, str) and value:
+                    return _resolve_cwd_value(value, fallback)
 
-    for key in ["workdir", "cwd", "working_dir"]:
+    for key in WORKING_DIRECTORY_KEYS:
         value = payload.get(key)
         if isinstance(value, str) and value:
-            path = Path(value)
-            return path if path.is_absolute() else (fallback / path).resolve()
+            return _resolve_cwd_value(value, fallback)
 
     return fallback
 
@@ -1334,7 +1644,12 @@ def dispatch(cwd: Path) -> dict[str, Any]:
                         "a supported role and narrow matrix-approved --writable paths."
                     )
                     return _block_hook(event_name, reason, diagnose_block(effective_cwd, event_name, tool, command, reason))
-            if tool == "Bash" and not _is_read_only_bash(command) and not _is_allowed_bootstrap_command(command, effective_cwd):
+            if (
+                tool == "Bash"
+                and not _is_read_only_bash(command)
+                and not _is_allowed_project_validation_command(command, effective_cwd)
+                and not _is_allowed_bootstrap_command(command, effective_cwd)
+            ):
                 reason = "Controller-only: mutating Bash is blocked outside AI-DLC; delegate to a subagent."
                 return _block_hook(event_name, reason, diagnose_block(effective_cwd, event_name, tool, command, reason))
             return _allow_hook(event_name, "controller-only bootstrap phase")
@@ -1352,6 +1667,8 @@ def dispatch(cwd: Path) -> dict[str, Any]:
     if tool == "Bash" and command and not _is_read_only_bash(command):
         if _is_safe_aidlc_command(command):
             pass
+        elif _is_allowed_project_validation_command(command, effective_cwd):
+            return _allow_hook(event_name, "AI-DLC: allowed project validation command")
         elif _is_allowed_verifier_gate_command(workspace, effective_cwd, command):
             return _allow_hook(event_name, "AI-DLC: allowed verifier gate command from work-items")
         elif "ai-dlc root-export" not in command and "ai-dlc overlay-cleanup" not in command and not _is_git_commit(command) and not _is_allowed_bootstrap_command(command, effective_cwd):

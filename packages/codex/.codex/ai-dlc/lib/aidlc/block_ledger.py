@@ -143,6 +143,7 @@ def record_block_event(
 ) -> dict[str, Any]:
     scope = scope_for(effective_cwd, workspace)
     command = _extract_command(payload)
+    requires_durable_record = str(diagnosis.get("block_type") or "") != "read_only_false_positive"
     event = {
         "event_id": _utc_event_id(reason),
         "timestamp": now_iso(),
@@ -161,7 +162,7 @@ def record_block_event(
         "command": redact(command),
         "reason": redact(reason),
         "suggested_actions": list(diagnosis.get("allowed_next_actions") or []),
-        "requires_durable_record": True,
+        "requires_durable_record": requires_durable_record,
     }
     _append_jsonl(events_path(), event)
     return event
@@ -174,11 +175,13 @@ def list_events(*, include_recorded: bool = False, scope_key: str | None = None)
     for event in events:
         if scope_key and event.get("scope_key") != scope_key:
             continue
-        recorded = event.get("event_id") in actioned
+        requires_durable_record = bool(event.get("requires_durable_record", True))
+        recorded = event.get("event_id") in actioned or not requires_durable_record
         if recorded and not include_recorded:
             continue
         item = dict(event)
         item["recorded"] = recorded
+        item["requires_durable_record"] = requires_durable_record
         result.append(item)
     return result
 
@@ -227,6 +230,10 @@ def _ref_allowed(ref: str) -> bool:
     normalized = ref.replace("\\", "/")
     allowed_prefixes = ("ai-dlc/decisions/", "ai-dlc/evidence/", ".codex/plans/")
     return normalized.startswith(allowed_prefixes) or normalized.startswith("/")
+
+
+def ref_allowed(ref: str) -> bool:
+    return _ref_allowed(ref)
 
 
 def write_block_ref(ref: Path, event_id: str, action_type: str, reason: str = "") -> None:
