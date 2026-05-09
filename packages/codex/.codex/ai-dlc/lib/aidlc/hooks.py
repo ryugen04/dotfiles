@@ -15,6 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
     tomllib = None  # type: ignore[assignment]
 
 from .io import read_data, read_frontmatter, read_text
+from .block_ledger import open_block_events_for, record_block_event
 from .state import assignment_root, bootstrap_gate_errors, lease_path_errors, load_assignment, load_lease
 from .workflow_contracts import scoped_break_glass_allowed, stop_missing_obligation, workflow_type
 
@@ -29,6 +30,8 @@ READ_ONLY_BASH_COMMANDS = {"ls", "pwd", "cat", "find", "rg", "sed", "head", "tai
 READ_ONLY_AIDLC_COMMANDS = {
     ("ai-dlc", "doctor"),
     ("ai-dlc", "status"),
+    ("ai-dlc", "inspect"),
+    ("ai-dlc", "context"),
     ("ai-dlc", "validate"),
     ("ai-dlc", "validate-overlay"),
     ("ai-dlc", "overlay-status"),
@@ -48,7 +51,7 @@ BOOTSTRAP_AIDLC_COMMANDS = {
     ("sango", "doctor"),
     ("sango", "bootstrap"),
 }
-READ_ONLY_GIT_SUBCOMMANDS = {"status", "diff", "rev-parse", "log", "show", "branch", "ls-files", "worktree"}
+READ_ONLY_GIT_SUBCOMMANDS = {"status", "diff", "rev-parse", "log", "show", "branch", "ls-files"}
 READ_ONLY_GH_SUBCOMMAND_PAIRS = {
     ("pr", "view"),
     ("pr", "list"),
@@ -71,6 +74,14 @@ INSTALL_APPROVAL_ENV = "AI_DLC_INSTALL_APPROVED"
 DISALLOWED_SHELL_FRAGMENTS = ("`", "$(", "\n", "\r", ";", "&&", "||")
 DISALLOWED_SHELL_TOKENS = {"|", "&", ">", ">>", "<", "<<", "<<<"}
 READ_ONLY_FIND_FORBIDDEN_PREFIXES = ("-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprintf", "-fls")
+WORKSPACE_LESS_FORBIDDEN_WRITABLE_PREFIXES = (".git", ".codex", "ai-dlc")
+WORKSPACE_LESS_FORBIDDEN_WRITABLES = {".", "*", "**", "workspace.yaml"}
+WORKSPACE_LESS_BOOTSTRAP_ROLES = {"dlc_initializer", "dlc_repairer"}
+WORKSPACE_LESS_BOOTSTRAP_WRITABLE = {
+    "dlc_initializer": ["ai-dlc/bootstrap/**", "ai-dlc/overlay/**", "../.local/**", ".codex/config.toml", ".gitignore"],
+    "dlc_repairer": ["ai-dlc/bootstrap/**", "ai-dlc/overlay/**", "ai-dlc/decisions/**", "../.local/**", ".codex/config.toml", ".gitignore"],
+}
+_LEDGER_CONTEXT: dict[str, Any] = {}
 
 
 def _find_workspace(start: Path) -> Path | None:
@@ -138,9 +149,11 @@ def _extract_prompt(payload: dict[str, Any]) -> str:
     return ""
 
 
-def _relativize(workspace: Path, value: str) -> str | None:
+def _relativize(workspace: Path, value: str, base_cwd: Path | None = None) -> str | None:
     path = Path(value)
-    if not path.is_absolute():
+    if not path.is_absolute() and base_cwd is not None:
+        path = base_cwd / path
+    elif not path.is_absolute():
         return value
     try:
         return str(path.resolve().relative_to(workspace.resolve()))
@@ -160,7 +173,7 @@ def _extract_paths_from_patch(text: str) -> list[str]:
     return paths
 
 
-def _extract_paths(payload: dict[str, Any], workspace: Path) -> list[str]:
+def _extract_paths(payload: dict[str, Any], workspace: Path, base_cwd: Path | None = None) -> list[str]:
     raw_paths: list[str] = []
     for key in ["file_path", "path"]:
         value = payload.get(key)
@@ -192,7 +205,7 @@ def _extract_paths(payload: dict[str, Any], workspace: Path) -> list[str]:
 
     result: list[str] = []
     for raw_path in raw_paths:
-        relative = _relativize(workspace, raw_path)
+        relative = _relativize(workspace, raw_path, base_cwd)
         if relative:
             result.append(relative)
     return sorted(set(result))
@@ -309,6 +322,22 @@ def _allow_hook(event_name: str, reason: str = "ok") -> dict[str, Any]:
 def _block_hook(event_name: str, reason: str, diagnosis: dict[str, Any] | None = None) -> dict[str, Any]:
     if diagnosis is not None:
         reason = _format_block_reason(diagnosis)
+        if event_name in {"PreToolUse", "PermissionRequest", "Stop"} and diagnosis.get("block_type") != "open_blockers":
+            payload = _LEDGER_CONTEXT.get("payload")
+            effective_cwd = _LEDGER_CONTEXT.get("effective_cwd")
+            workspace = _LEDGER_CONTEXT.get("workspace")
+            if isinstance(payload, dict) and isinstance(effective_cwd, Path):
+                try:
+                    record_block_event(
+                        payload=payload,
+                        event_name=event_name,
+                        effective_cwd=effective_cwd,
+                        workspace=workspace if isinstance(workspace, Path) else None,
+                        diagnosis=diagnosis,
+                        reason=reason,
+                    )
+                except Exception:
+                    pass
     if event_name == "PreToolUse":
         output = _block(reason)
         output["hookSpecificOutput"] = {
@@ -398,11 +427,9 @@ def _is_known_read_only_candidate(command: str) -> bool:
     if tokens[0] == "gh":
         return _is_read_only_gh(tokens)
     if tokens[0] == "git":
-        if len(tokens) >= 4 and tokens[1] == "-C":
-            return tokens[3] in READ_ONLY_GIT_SUBCOMMANDS
-        return len(tokens) >= 2 and tokens[1] in READ_ONLY_GIT_SUBCOMMANDS
+        return _is_read_only_git(tokens)
     if tokens[0] == "ai-dlc":
-        return len(tokens) >= 2 and (tokens[0], tokens[1]) in READ_ONLY_AIDLC_COMMANDS
+        return _is_read_only_aidlc(tokens)
     return False
 
 
@@ -428,9 +455,18 @@ def diagnose_block(cwd: Path, event_name: str = "", tool: str = "", command: str
         return _block_diagnosis(
             "wrong_next_agent",
             "delegate_phase_owner",
-            ["spawn_expected_agent", "record_allow_next_agent_decision", "repair_plan_phase"],
+            ["inspect_current_phase", "create_assignment", "delegate_to_subagent", "report_delegation_deadlock"],
             reason,
             suggested_agent=expected_match.group(1),
+        )
+    if "bootstrap/delegation deadlock" in lowered:
+        return _block_diagnosis(
+            "needs_assignment",
+            "delegate_phase_owner",
+            ["report_delegation_deadlock"],
+            reason,
+            recoverable=False,
+            suggested_agent="phase_owner",
         )
     if "workspace.yaml not found" in lowered or "workspace ではありません" in message or "task workspace" in lowered:
         return _block_diagnosis(
@@ -473,7 +509,7 @@ def diagnose_block(cwd: Path, event_name: str = "", tool: str = "", command: str
         return _block_diagnosis(
             "needs_assignment",
             "delegate_phase_owner",
-            ["inspect_current_phase", "create_assignment", "delegate_to_subagent"],
+            ["inspect_current_phase", "create_assignment", "delegate_to_subagent", "report_delegation_deadlock"],
             reason,
             suggested_agent="phase_owner",
         )
@@ -481,7 +517,7 @@ def diagnose_block(cwd: Path, event_name: str = "", tool: str = "", command: str
         return _block_diagnosis(
             "needs_assignment",
             "delegate_phase_owner",
-            ["inspect_current_phase", "create_assignment", "delegate_to_subagent"],
+            ["inspect_current_phase", "create_assignment", "delegate_to_subagent", "report_delegation_deadlock"],
             reason,
             suggested_agent="phase_owner",
         )
@@ -727,6 +763,26 @@ def _is_read_only_gh(tokens: list[str]) -> bool:
     return False
 
 
+def _git_args(tokens: list[str]) -> list[str]:
+    if not tokens or tokens[0] != "git":
+        return []
+    if len(tokens) >= 4 and tokens[1] == "-C":
+        return tokens[3:]
+    return tokens[1:]
+
+
+def _is_read_only_git(tokens: list[str]) -> bool:
+    args = _git_args(tokens)
+    if not args:
+        return False
+    subcommand = args[0]
+    if subcommand == "worktree":
+        return len(args) == 2 and args[1] == "list"
+    if subcommand == "remote":
+        return args == ["remote", "-v"] or args == ["remote", "get-url", "origin"]
+    return subcommand in READ_ONLY_GIT_SUBCOMMANDS
+
+
 def _is_safe_aidlc_command(command: str) -> bool:
     normalized = command.strip()
     if any(fragment in normalized for fragment in DISALLOWED_SHELL_FRAGMENTS):
@@ -738,6 +794,89 @@ def _is_safe_aidlc_command(command: str) -> bool:
     if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
         return False
     return tokens[0] == "ai-dlc"
+
+
+def _is_read_only_aidlc(tokens: list[str]) -> bool:
+    if not tokens or tokens[0] != "ai-dlc":
+        return False
+    if any(token in {"-h", "--help"} for token in tokens[1:]):
+        return True
+    return len(tokens) >= 2 and (tokens[0], tokens[1]) in READ_ONLY_AIDLC_COMMANDS
+
+
+def _workspace_less_assignment_options(tokens: list[str]) -> dict[str, Any] | None:
+    if tokens[:3] != ["ai-dlc", "assignment", "create"]:
+        return None
+
+    options: dict[str, Any] = {"role": None, "repo": None, "work_item": None, "writable": []}
+    index = 3
+    while index < len(tokens):
+        token = tokens[index]
+        if token in {"-h", "--help"}:
+            return None
+        if token == "--role" and index + 1 < len(tokens):
+            options["role"] = tokens[index + 1]
+            index += 2
+            continue
+        if token == "--repo" and index + 1 < len(tokens):
+            options["repo"] = tokens[index + 1]
+            index += 2
+            continue
+        if token == "--work-item" and index + 1 < len(tokens):
+            options["work_item"] = tokens[index + 1]
+            index += 2
+            continue
+        if token == "--writable" and index + 1 < len(tokens):
+            options["writable"].append(tokens[index + 1])
+            index += 2
+            continue
+        return None
+    return options
+
+
+def _is_workspace_less_writable_path_safe(path: str) -> bool:
+    normalized = path.strip().strip("/")
+    if not normalized or path.strip() in WORKSPACE_LESS_FORBIDDEN_WRITABLES:
+        return False
+    if path.startswith("/") or normalized.startswith("../") or "/../" in normalized:
+        return False
+    if normalized in WORKSPACE_LESS_FORBIDDEN_WRITABLES:
+        return False
+    if normalized.endswith("/"):
+        normalized = normalized.rstrip("/")
+    for prefix in WORKSPACE_LESS_FORBIDDEN_WRITABLE_PREFIXES:
+        if normalized == prefix or normalized.startswith(f"{prefix}/"):
+            return False
+    return True
+
+
+def _workspace_less_bootstrap_writable_path_safe(role: str, path: str) -> bool:
+    normalized = path.strip().rstrip("/")
+    if not normalized or normalized in WORKSPACE_LESS_FORBIDDEN_WRITABLES:
+        return False
+    if normalized.startswith("/") or normalized == ".." or (normalized.startswith("../") and not normalized.startswith("../.local/")):
+        return False
+    allowed = WORKSPACE_LESS_BOOTSTRAP_WRITABLE.get(role, [])
+    return any(fnmatch.fnmatch(normalized, pattern) or fnmatch.fnmatch(f"{normalized}/", pattern) for pattern in allowed)
+
+
+def _is_allowed_workspace_less_assignment_create(tokens: list[str]) -> bool:
+    options = _workspace_less_assignment_options(tokens)
+    if options is None:
+        return False
+    role = options["role"]
+    writable = options["writable"]
+    if role in WORKSPACE_LESS_BOOTSTRAP_ROLES:
+        if options["repo"] or options["work_item"] or not writable:
+            return False
+        return all(_workspace_less_bootstrap_writable_path_safe(role, path) for path in writable)
+    if role != "dlc_repo_worker":
+        return False
+    if not options["repo"] or not options["work_item"]:
+        return False
+    if not writable:
+        return False
+    return all(_is_workspace_less_writable_path_safe(path) for path in writable)
 
 
 def _repo_install_script() -> Path:
@@ -806,7 +945,7 @@ def _is_read_only_bash(command: str) -> bool:
     if not tokens or any(token in DISALLOWED_SHELL_TOKENS for token in tokens):
         return False
     if tokens[0] == "ai-dlc":
-        return True
+        return _is_read_only_aidlc(tokens)
     command_name = tokens[0]
     if command_name in READ_ONLY_BASH_COMMANDS:
         if command_name == "sed":
@@ -818,17 +957,9 @@ def _is_read_only_bash(command: str) -> bool:
         return True
     if command_name == "gh":
         return _is_read_only_gh(tokens)
-    if command_name != "git":
-        return False
-    if len(tokens) >= 4 and tokens[1] == "-C":
-        subcommand = tokens[3]
-    elif len(tokens) >= 2:
-        subcommand = tokens[1]
-    else:
-        return False
-    if subcommand != "worktree":
-        return subcommand in READ_ONLY_GIT_SUBCOMMANDS
-    return len(tokens) >= 5 and tokens[4] == "list"
+    if command_name == "git":
+        return _is_read_only_git(tokens)
+    return False
 
 
 def _is_allowed_bootstrap_command(command: str, cwd: Path) -> bool:
@@ -845,7 +976,11 @@ def _is_allowed_bootstrap_command(command: str, cwd: Path) -> bool:
     if not command_tokens or any(token in DISALLOWED_SHELL_TOKENS for token in command_tokens):
         return False
     if command_tokens[0] == "ai-dlc":
-        return True
+        if len(command_tokens) >= 2 and command_tokens[1] == "ensure-context":
+            return True
+        if len(command_tokens) >= 2 and (command_tokens[0], command_tokens[1]) in BOOTSTRAP_AIDLC_COMMANDS:
+            return True
+        return _is_allowed_workspace_less_assignment_create(command_tokens)
     if len(command_tokens) >= 3 and command_tokens[0] == "sango" and command_tokens[1] == "worktree":
         return command_tokens[2] in {"create", "list", "status"}
     if len(command_tokens) >= 2 and (command_tokens[0], command_tokens[1]) in BOOTSTRAP_AIDLC_COMMANDS:
@@ -868,17 +1003,19 @@ def _cwd_is_within(path: Path, parent: Path) -> bool:
 
 
 def _extract_effective_cwd(payload: dict[str, Any], fallback: Path) -> Path:
-    for key in ["workdir", "cwd", "working_dir"]:
-        value = payload.get(key)
-        if isinstance(value, str) and value:
-            return Path(value)
-
     tool_input = payload.get("tool_input") or payload.get("input") or {}
     if isinstance(tool_input, dict):
         for key in ["workdir", "cwd", "working_dir"]:
             value = tool_input.get(key)
             if isinstance(value, str) and value:
-                return Path(value)
+                path = Path(value)
+                return path if path.is_absolute() else (fallback / path).resolve()
+
+    for key in ["workdir", "cwd", "working_dir"]:
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            path = Path(value)
+            return path if path.is_absolute() else (fallback / path).resolve()
 
     return fallback
 
@@ -1038,17 +1175,18 @@ def _prompt_workspace_less_assignment_context(cwd: Path, payload: dict[str, Any]
         assignment = load_assignment(cwd, assignment_id)
     except Exception:
         return ""
-    if not assignment.get("workspace_less") or assignment.get("role") != "dlc_repo_worker":
+    if not assignment.get("workspace_less"):
         return ""
+    role = str(assignment.get("role"))
     session_id = _extract_session_id(payload) or "$CODEX_SESSION_ID"
     writable = ", ".join(str(path) for path in assignment.get("writable", [])) or "(none)"
     forbidden = ", ".join(str(path) for path in assignment.get("forbidden", [])) or "(none)"
     return (
-        f"Workspace-less dlc_repo_worker assignment: {assignment_id}\n"
+        f"Workspace-less {role} assignment: {assignment_id}\n"
         f"Claim first: ai-dlc agent-claim --assignment {assignment_id} --session-id {session_id}\n"
         f"After claim, lease-scoped edits are allowed only for writable paths: {writable}\n"
         f"Forbidden paths: {forbidden}\n"
-        "The controller-only direct edit ban applies before claim and to controller sessions, not to a claimed dlc_repo_worker lease."
+        f"The controller-only direct edit ban applies before claim and to controller sessions, not to a claimed {role} lease."
     )
 
 
@@ -1066,12 +1204,12 @@ def _non_workspace_context(cwd: Path) -> str:
             return (
                 "Controller-only bootstrap phase: controller の直接編集は禁止です。"
                 " 初期構築用コマンド、bootstrap_extra_commands、bootstrap_edit_paths の編集のみ許可されます。"
-                " dlc_repo_worker は assignment claim 後に lease-scoped paths だけ編集できます。"
+                " workspace-less assignments は claim 後に role ごとの lease-scoped paths だけ編集できます。"
             )
         return (
             "Controller-only bootstrap phase: controller の直接編集は禁止です。"
             " ai-dlc install/init-project/init-workspace/install-project-hooks、bootstrap_edit_paths の編集、read-only コマンドのみ許可されます。"
-            " dlc_repo_worker は assignment claim 後に lease-scoped paths だけ編集できます。"
+            " workspace-less assignments は claim 後に role ごとの lease-scoped paths だけ編集できます。"
         )
     return (
         "AI-DLC workspace ではありません。"
@@ -1088,7 +1226,7 @@ def _extract_session_id(payload: dict[str, Any]) -> str:
     return os.environ.get("CODEX_SESSION_ID") or ""
 
 
-def _workspace_less_worker_lease(cwd: Path, payload: dict[str, Any]) -> dict[str, Any] | None:
+def _workspace_less_lease(cwd: Path, payload: dict[str, Any]) -> dict[str, Any] | None:
     session_id = _extract_session_id(payload)
     try:
         lease = load_lease(cwd, session_id or None)
@@ -1096,13 +1234,11 @@ def _workspace_less_worker_lease(cwd: Path, payload: dict[str, Any]) -> dict[str
         return None
     if not lease or not lease.get("workspace_less"):
         return None
-    if lease.get("role") != "dlc_repo_worker":
-        return None
     return lease
 
 
 def _workspace_less_edit_block(cwd: Path, payload: dict[str, Any], event_name: str, tool: str, command: str, rel_paths: list[str]) -> dict[str, Any] | None:
-    lease = _workspace_less_worker_lease(cwd, payload)
+    lease = _workspace_less_lease(cwd, payload)
     if lease is None:
         return None
     try:
@@ -1113,29 +1249,37 @@ def _workspace_less_edit_block(cwd: Path, payload: dict[str, Any], event_name: s
     if assignment.get("status") != "claimed":
         reason = "Controller-only: workspace-less assignment must be claimed before editing."
         return _block_hook(event_name, reason, diagnose_block(cwd, event_name, tool, command, reason))
-    if lease.get("plan_status") != "executing":
-        reason = "Controller-only: workspace-less repo worker lease requires executing phase."
+    role_phase = {"dlc_repo_worker": "executing", "dlc_initializer": "initializing", "dlc_repairer": "repairing"}
+    expected_phase = role_phase.get(str(lease.get("role")))
+    if expected_phase is None:
+        reason = "Controller-only: workspace-less assignment role is not lease-editable."
+        return _block_hook(event_name, reason, diagnose_block(cwd, event_name, tool, command, reason))
+    if lease.get("plan_status") != expected_phase:
+        reason = f"Controller-only: workspace-less {lease.get('role')} lease requires {expected_phase} phase."
         return _block_hook(event_name, reason, diagnose_block(cwd, event_name, tool, command, reason))
     errors = lease_path_errors(cwd, lease, rel_paths)
     if errors:
         reason = f"Controller-only: workspace-less lease violation: {'; '.join(errors)}"
         return _block_hook(event_name, reason, diagnose_block(cwd, event_name, tool, command, reason))
-    return _allow_hook(event_name, "controller-only workspace-less repo worker lease")
+    return _allow_hook(event_name, f"controller-only workspace-less {lease.get('role')} lease")
 
 
 def dispatch(cwd: Path) -> dict[str, Any]:
     payload = _load_payload()
     event_name = _extract_event_name(payload)
-    workspace = _find_workspace(cwd)
+    effective_cwd = _extract_effective_cwd(payload, cwd)
+    workspace = _find_workspace(effective_cwd)
+    _LEDGER_CONTEXT.clear()
+    _LEDGER_CONTEXT.update({"payload": payload, "effective_cwd": effective_cwd, "workspace": workspace})
     if event_name == "SessionStart":
-        return _hook_output("SessionStart", _session_start_context(workspace) if workspace else _non_workspace_context(cwd))
+        return _hook_output("SessionStart", _session_start_context(workspace) if workspace else _non_workspace_context(effective_cwd))
     if event_name == "UserPromptSubmit":
         context_parts = [
             part
             for part in [
                 _prompt_delta_context(workspace),
                 _prompt_safety_context(payload),
-                _prompt_workspace_less_assignment_context(cwd, payload, workspace),
+                _prompt_workspace_less_assignment_context(effective_cwd, payload, workspace),
             ]
             if part
         ]
@@ -1147,31 +1291,52 @@ def dispatch(cwd: Path) -> dict[str, Any]:
             return _noop()
         workspace_data = read_data(workspace / "workspace.yaml")
         plan_meta, _ = read_frontmatter(workspace / workspace_data["paths"]["plan"])
+        if plan_meta.get("status") in {"ready_to_finish", "done"}:
+            open_events = open_block_events_for(workspace)
+            if open_events:
+                event_ids = ", ".join(str(item.get("event_id")) for item in open_events[:5])
+                reason = f"AI-DLC: open block events require action before finish: {event_ids}"
+                diagnosis = _block_diagnosis(
+                    "open_blockers",
+                    "record_block_action",
+                    ["ai-dlc block list", "ai-dlc block record", "ai-dlc block sync"],
+                    reason,
+                    recoverable=True,
+                )
+                return _block_hook("Stop", reason, diagnosis)
         missing = stop_missing_obligation(workspace, plan_meta)
         if missing:
             return _block_hook("Stop", missing, diagnose_block(workspace, "Stop", "", "", missing))
         return _noop()
     if workspace is None:
-        if _subagent_required_outside_workspace(cwd):
+        if _subagent_required_outside_workspace(effective_cwd):
             tool = _extract_tool(payload)
             command = _extract_command(payload)
             if tool == "Bash" and _is_git_finish_approved_command(command):
                 return _allow_hook(event_name, "controller-only git finish command approved")
             if tool in EDIT_TOOLS:
-                rel_paths = _extract_paths(payload, cwd)
+                rel_paths = _extract_paths(payload, effective_cwd, effective_cwd)
                 if not rel_paths:
                     reason = "Controller-only: edited paths could not be determined; delegate to a subagent."
-                    return _block_hook(event_name, reason, diagnose_block(cwd, event_name, tool, command, reason))
-                if _all_paths_match(rel_paths, _bootstrap_edit_paths(cwd)):
+                    return _block_hook(event_name, reason, diagnose_block(effective_cwd, event_name, tool, command, reason))
+                if _all_paths_match(rel_paths, _bootstrap_edit_paths(effective_cwd)):
                     return _allow_hook(event_name, "controller-only bootstrap edit allowed")
-                lease_decision = _workspace_less_edit_block(cwd, payload, event_name, tool, command, rel_paths)
+                lease_decision = _workspace_less_edit_block(effective_cwd, payload, event_name, tool, command, rel_paths)
                 if lease_decision is not None:
                     return lease_decision
                 reason = "Controller-only: direct edits are blocked outside AI-DLC; delegate to a subagent."
-                return _block_hook(event_name, reason, diagnose_block(cwd, event_name, tool, command, reason))
-            if tool == "Bash" and not _is_read_only_bash(command) and not _is_allowed_bootstrap_command(command, cwd):
+                return _block_hook(event_name, reason, diagnose_block(effective_cwd, event_name, tool, command, reason))
+            if tool == "Bash" and _is_safe_aidlc_command(command):
+                tokens = shlex.split(command.strip())
+                if tokens[:3] == ["ai-dlc", "assignment", "create"] and not _is_allowed_workspace_less_assignment_create(tokens):
+                    reason = (
+                        "Controller-only bootstrap/delegation deadlock: workspace-less assignment create requires "
+                        "a supported role and narrow matrix-approved --writable paths."
+                    )
+                    return _block_hook(event_name, reason, diagnose_block(effective_cwd, event_name, tool, command, reason))
+            if tool == "Bash" and not _is_read_only_bash(command) and not _is_allowed_bootstrap_command(command, effective_cwd):
                 reason = "Controller-only: mutating Bash is blocked outside AI-DLC; delegate to a subagent."
-                return _block_hook(event_name, reason, diagnose_block(cwd, event_name, tool, command, reason))
+                return _block_hook(event_name, reason, diagnose_block(effective_cwd, event_name, tool, command, reason))
             return _allow_hook(event_name, "controller-only bootstrap phase")
         return _allow_hook(event_name, "not an AI-DLC workspace")
 
@@ -1185,14 +1350,16 @@ def dispatch(cwd: Path) -> dict[str, Any]:
         reason = "AI-DLC: write-like Bash commands are blocked; use apply_patch/Edit with a claimed lease."
         return _block_hook(event_name, reason, diagnose_block(workspace, event_name, tool, command, reason))
     if tool == "Bash" and command and not _is_read_only_bash(command):
-        if _is_allowed_verifier_gate_command(workspace, _extract_effective_cwd(payload, cwd), command):
+        if _is_safe_aidlc_command(command):
+            pass
+        elif _is_allowed_verifier_gate_command(workspace, effective_cwd, command):
             return _allow_hook(event_name, "AI-DLC: allowed verifier gate command from work-items")
-        if "ai-dlc root-export" not in command and "ai-dlc overlay-cleanup" not in command and not _is_git_commit(command) and not _is_allowed_bootstrap_command(command, workspace):
+        elif "ai-dlc root-export" not in command and "ai-dlc overlay-cleanup" not in command and not _is_git_commit(command) and not _is_allowed_bootstrap_command(command, effective_cwd):
             reason = "AI-DLC: unknown mutating Bash commands are denied by default in AI-DLC workspaces."
             return _block_hook(event_name, reason, diagnose_block(workspace, event_name, tool, command, reason))
 
     if tool in EDIT_TOOLS:
-        rel_paths = _extract_paths(payload, workspace)
+        rel_paths = _extract_paths(payload, workspace, effective_cwd)
         if not rel_paths:
             reason = "AI-DLC: edited paths could not be determined."
             return _block_hook(event_name, reason, diagnose_block(workspace, event_name, tool, command, reason))

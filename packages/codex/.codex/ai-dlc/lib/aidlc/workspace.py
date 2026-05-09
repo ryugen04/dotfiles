@@ -122,12 +122,12 @@ def ai_dlc_context(start: Path, *, ensure_user_local: bool = False) -> dict:
                     "source_path": str(current),
                     "control_plane_scope": "user_local",
                     "created_at": now_iso(),
-                    "recommendation": (
-                        "Project-local AI-DLC is recommended for durable team workflows; "
-                        "plan-driven repos should add .codex/config.toml with codex_hooks enabled "
-                        "and guardrails.subagent_required=true before source edits. "
-                        "This user-local context is Codex-owned fallback state."
-                    ),
+                        "recommendation": (
+                            "Project-local AI-DLC is recommended for durable team workflows; "
+                            "plan-driven repos should add .codex/config.toml with hooks enabled "
+                            "and guardrails.subagent_required=true before source edits. "
+                            "This user-local context is Codex-owned fallback state."
+                        ),
                 },
             )
 
@@ -139,11 +139,11 @@ def ai_dlc_context(start: Path, *, ensure_user_local: bool = False) -> dict:
         "user_local_root": str(user_root),
         "recommendation": (
             "Project-local AI-DLC is recommended. For plan-driven work, add `.codex/config.toml` with "
-            "`codex_hooks = true` and `guardrails.subagent_required = true`; use `ai-dlc ensure-context` "
+            "`hooks = true` and `guardrails.subagent_required = true`; use `ai-dlc ensure-context` "
             "only as Codex user-local fallback state."
             if not exists
             else "Using Codex user-local AI-DLC fallback. Add project-local `.codex/config.toml` with "
-            "`guardrails.subagent_required = true` before source edits, or consider `ai-dlc init-project` "
+            "`hooks = true` and `guardrails.subagent_required = true` before source edits, or consider `ai-dlc init-project` "
             "when this should become project-local."
         ),
     }
@@ -238,7 +238,7 @@ sandbox_mode = "workspace-write"
 approval_policy = "on-request"
 
 [features]
-codex_hooks = true
+hooks = true
 shell_snapshot = true
 
 [sandbox_workspace_write]
@@ -256,7 +256,7 @@ sandbox_mode = "workspace-write"
 approval_policy = "on-request"
 
 [features]
-codex_hooks = true
+hooks = true
 shell_snapshot = true
 
 [guardrails]

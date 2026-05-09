@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from .block_ledger import open_blocker_errors
 from .io import now_iso, read_data, write_data
 
 
@@ -292,6 +293,7 @@ EXCLUDED_EXPORT_PREFIXES = ["web/", "backend/", "ai-dlc/executions/", "ai-dlc/sc
 
 def root_export(root: Path, target_branch: str, commit: bool = False) -> str:
     errors = validate_overlay(root)
+    errors.extend(open_blocker_errors(root, "root-export"))
     if errors:
         raise ValueError("\n".join(errors))
     temp_parent = (_local_root(root, read_data(root / "workspace.yaml")) / "tmp")
@@ -333,6 +335,9 @@ def root_export(root: Path, target_branch: str, commit: bool = False) -> str:
 
 
 def overlay_cleanup(root: Path) -> str:
+    blocker_errors = open_blocker_errors(root, "overlay-cleanup")
+    if blocker_errors:
+        raise ValueError("\n".join(blocker_errors))
     workspace = read_data(root / "workspace.yaml")
     local_root = _local_root(root, workspace)
     lines = [f"root status: {git(['status', '--short'], root) or 'clean'}"]

@@ -41,16 +41,18 @@ AI-DLC workflow の開始または再開で使う。開始地点は AI-DLC task 
 
 ## Block Recovery
 
-hook / permission / tool block を観測したら、最初の block で停止せず、以下の順で許可された復旧経路を探す。
+hook / permission / tool block を観測したら、`docs/codex/block-delegation-policy-matrix.md` を正本として復旧経路を選ぶ。
 
 1. `workflow-classify` で通常の 3 軸に加えて `block_type` を分類する。
-2. block message、blocked command/tool、現在 phase、target root、workspace.yaml 有無を読み、許可された read-only 経路または assignment 経路を探す。
+2. block message、blocked command/tool、現在 phase、target root、workspace.yaml 有無を読み、matrix の root class、phase、block_type に照合する。
 3. recovery route を 1 つ選ぶ: read-only retry、`workflow-bootstrap`、`workflow-repair`、正しい phase owner への assignment、approval request、または明示停止。
-4. controller が直接編集・実装・修復する必要がある場合は、該当 phase の subagent に委譲する。phase owner が違う場合は先に `dlc_scope_manager` で assignment を直す。
+4. `needs_assignment` または `route=delegate_phase_owner` の場合、controller は回避探索を続けない。許可 action は `inspect_current_phase`、`create_assignment`、`delegate_to_subagent`、`report_delegation_deadlock` だけとする。
 5. plan / decisions / work-items が不足または古い場合は `dlc_plan_writer` または `dlc_scope_manager` に作成・修復させる。
 6. 復旧後は最小再現、関連 validation、実運用 path の順で確認し、block_type、選んだ route、残リスクを report に残す。
 
-`approval_required` は非破壊コマンドだけ承認を求める。`destructive_forbidden` はユーザーの明示承認がない限り実行せず、代替の read-only 証跡を集める。`hook_schema_error` は `codex-hooks-authoring` と `codex-runtime-probing` に切り替えて、受け手の schema と active runtime を確認する。
+assignment 作成または owner 起動が block された場合は `bootstrap/delegation deadlock` として停止し、恒久修正 plan を提示する。controller は `codex exec`、直接 `apply_patch`、広い escalation、read-only 風の迂回で作業を続けない。
+
+`read_only_false_positive` は command tokens が実際に非破壊である場合だけ retry する。`approval_required` は非破壊コマンドだけ承認を求める。`destructive_forbidden` はユーザーの明示承認がない限り実行せず、代替の read-only 証跡を集める。`hook_schema_error` は `codex-hooks-authoring` と `codex-runtime-probing` に切り替えて、受け手の schema と active runtime を確認する。
 
 ## Phase Ownership
 

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .io import now_iso, read_data, read_frontmatter, write_data, write_frontmatter
+from .block_ledger import open_blocker_errors
 from .overlay import git, validate_overlay
 from .schemas import validate_required
 from .workspace import ai_dlc_context
@@ -53,6 +54,17 @@ CONTROL_PLANE_LOCKS = {
     "dlc_initializer": "bootstrap.lock",
     "dlc_repairer": "bootstrap.lock",
 }
+WORKSPACE_LESS_ROLE_PHASE = {
+    "dlc_initializer": "initializing",
+    "dlc_repairer": "repairing",
+    "dlc_repo_worker": "executing",
+}
+WORKSPACE_LESS_CONTROL_WRITABLE = {
+    "dlc_initializer": ["ai-dlc/bootstrap/**", "ai-dlc/overlay/**", "../.local/**", ".codex/config.toml", ".gitignore"],
+    "dlc_repairer": ["ai-dlc/bootstrap/**", "ai-dlc/overlay/**", "ai-dlc/decisions/**", "../.local/**", ".codex/config.toml", ".gitignore"],
+}
+WORKSPACE_LESS_BROAD_WRITABLE = {".", "*", "**", "workspace.yaml"}
+WORKSPACE_LESS_REPO_FORBIDDEN_PREFIXES = (".git", ".codex", "ai-dlc")
 
 
 def _has_workspace(root: Path) -> bool:
@@ -104,6 +116,8 @@ def transition(root: Path, status: str) -> dict[str, Any]:
     path, meta, body = load_plan(root)
     workflow_errors = validate_transition(meta, status)
     workflow_errors.extend(_phase_completion_errors(root, meta, status))
+    if status in {"ready_to_finish", "done"}:
+        workflow_errors.extend(open_blocker_errors(root, f"transition to {status}"))
     if workflow_errors:
         raise ValueError("\n".join(workflow_errors))
     meta["status"] = status
@@ -535,6 +549,7 @@ def workspace_status(root: Path) -> dict[str, Any]:
 
 def finish(root: Path) -> dict[str, Any]:
     errors = validate(root)
+    errors.extend(open_blocker_errors(root, "finish"))
     if errors:
         raise ValueError("\n".join(errors))
     active_assignments = [item["id"] for item in assignment_list(root) if item.get("status") == "claimed"]
@@ -635,21 +650,81 @@ def assignment_create(root: Path, role: str, repo: str | None, writable: list[st
     return payload
 
 
-def _workspace_less_assignment_create(root: Path, role: str, repo: str | None, writable: list[str], work_item: str | None) -> dict[str, Any]:
-    if role != "dlc_repo_worker":
-        raise ValueError("workspace-less source_change assignments currently require role dlc_repo_worker")
+def _workspace_less_path_is_relative(path: str) -> bool:
+    stripped = path.strip()
+    normalized = stripped.rstrip("/")
+    if not normalized or normalized in WORKSPACE_LESS_BROAD_WRITABLE:
+        return False
+    if stripped.startswith("/"):
+        return False
+    if normalized == "..":
+        return False
+    if normalized.startswith("../") and not normalized.startswith("../.local/"):
+        return False
+    if "/../" in normalized:
+        return False
+    return True
+
+
+def _workspace_less_repo_writable_safe(path: str) -> bool:
+    if not _workspace_less_path_is_relative(path):
+        return False
+    normalized = path.strip().strip("/")
+    if normalized in WORKSPACE_LESS_BROAD_WRITABLE:
+        return False
+    for prefix in WORKSPACE_LESS_REPO_FORBIDDEN_PREFIXES:
+        if normalized == prefix or normalized.startswith(f"{prefix}/"):
+            return False
+    return True
+
+
+def _workspace_less_control_writable_safe(role: str, path: str) -> bool:
+    if not _workspace_less_path_is_relative(path):
+        return False
+    normalized = path.strip().rstrip("/")
+    allowed = WORKSPACE_LESS_CONTROL_WRITABLE.get(role, [])
+    return any(fnmatch.fnmatch(normalized, pattern) or fnmatch.fnmatch(f"{normalized}/", pattern) for pattern in allowed)
+
+
+def _validate_workspace_less_assignment(role: str, repo: str | None, writable: list[str], work_item: str | None) -> None:
+    if role not in WORKSPACE_LESS_ROLE_PHASE:
+        raise ValueError("workspace-less assignments support only dlc_initializer, dlc_repairer, or dlc_repo_worker")
     if not writable:
-        raise ValueError("workspace-less dlc_repo_worker assignment requires at least one --writable path")
+        raise ValueError(f"workspace-less {role} assignment requires at least one --writable path")
+    if role == "dlc_repo_worker":
+        if not repo or not work_item:
+            raise ValueError("workspace-less dlc_repo_worker assignment requires --repo, --work-item, and at least one --writable path")
+        if not all(_workspace_less_repo_writable_safe(path) for path in writable):
+            raise ValueError("workspace-less dlc_repo_worker assignment requires narrow source --writable paths")
+        return
+    if repo or work_item:
+        raise ValueError(f"workspace-less {role} assignment must not set --repo or --work-item")
+    if not all(_workspace_less_control_writable_safe(role, path) for path in writable):
+        raise ValueError(f"workspace-less {role} assignment requires bootstrap/recovery --writable paths")
+
+
+def _workspace_less_assignment_create(root: Path, role: str, repo: str | None, writable: list[str], work_item: str | None) -> dict[str, Any]:
+    _validate_workspace_less_assignment(role, repo, writable, work_item)
 
     root = root.expanduser().resolve()
     base = assignment_root(root)
     assignments_dir = base / "assignments"
     assignments_dir.mkdir(parents=True, exist_ok=True)
     assignment_id = _next_assignment_id(assignments_dir)
-    repo_name = repo or "source"
+    repo_name = repo if role == "dlc_repo_worker" else None
     project_id = _workspace_less_project_id(root)
     branch = _workspace_less_branch(root)
-    forbidden = [".codex/**", ".git/**", "ai-dlc/**", "workspace.yaml"]
+    if role == "dlc_repo_worker":
+        forbidden = [".codex/**", ".git/**", "ai-dlc/**", "workspace.yaml"]
+        lock_scope = f"repo:{repo_name}"
+        next_recommendation = {"phase": "verifying", "assignment_role": "dlc_verifier"}
+        workflow_type_name = "plan_implementation"
+    else:
+        forbidden = [".git/**", "workspace.yaml", "packages/**", "tests/**", "src/**"]
+        lock_scope = CONTROL_PLANE_LOCKS[role]
+        next_recommendation = {"phase": "planning", "assignment_role": "dlc_plan_writer"}
+        workflow_type_name = "codex_config_edit"
+    phase = WORKSPACE_LESS_ROLE_PHASE[role]
     payload = {
         "schema": "ai-dlc.assignment.v1",
         "id": assignment_id,
@@ -658,12 +733,12 @@ def _workspace_less_assignment_create(root: Path, role: str, repo: str | None, w
         "source_root": str(root),
         "role": role,
         "agent": role,
-        "phase": "executing",
-        "workflow_type": "plan_implementation",
-        "phase_owner": "dlc_repo_worker",
+        "phase": phase,
+        "workflow_type": workflow_type_name,
+        "phase_owner": role,
         "controller_mode": "orchestrate_only",
         "repo": repo_name,
-        "lock_scope": f"repo:{repo_name}",
+        "lock_scope": lock_scope,
         "work_item": work_item,
         "writable": writable,
         "forbidden": forbidden,
@@ -673,7 +748,7 @@ def _workspace_less_assignment_create(root: Path, role: str, repo: str | None, w
         "result_ref": f"reports/{assignment_id}.json",
         "status": "created",
         "created_at": now_iso(),
-        "next_recommendation": {"phase": "verifying", "assignment_role": "dlc_verifier"},
+        "next_recommendation": next_recommendation,
     }
     write_data(assignments_dir / f"{assignment_id}.yaml", payload)
     return payload

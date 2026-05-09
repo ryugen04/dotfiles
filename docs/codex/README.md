@@ -8,6 +8,7 @@ AI-DLC の workspace / overlay そのものは `docs/ai-dlc/` を参照する。
 
 - `interactive-profiles.md`: 対話セッションと profile の使い分け。
 - `ai-dlc-context.md`: AI-DLC 設定済みディレクトリと Codex user-local fallback。
+- `block-delegation-policy-matrix.md`: hook block 時の allow / block / mandatory action / forbidden recovery の正本。
 - `hook-block-recovery.md`: hook / permission / tool block 時の復旧手順。
 - `config-authoring.md`: Codex config / hooks / skills / subagents の整備ルール。
 

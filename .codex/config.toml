@@ -10,23 +10,7 @@ sandbox_mode = "workspace-write"
 # CLIから呼ばれる場合は never、対話時は on-request に切り替え
 approval_policy = "on-request"
 
-# プロファイル定義
-[profiles.implement]
-# 実装委託用: 高精度・自動実行
-model_reasoning_effort = "high"
-approval_policy = "never"
-sandbox_mode = "workspace-write"
-
-[profiles.review]
-# レビュー用: 読み取り専用
-model_reasoning_effort = "high"
-sandbox_mode = "read-only"
-
-[profiles.fast]
-# 高速実装用: 軽量モデル
-model_reasoning_effort = "low"
-approval_policy = "never"
-sandbox_mode = "workspace-write"
+# project-local では profiles は未対応。必要な profile は user-level config に置く。
 
 [guardrails]
 # この repo では controller の直接実装を禁止し、委譲を必須化する
@@ -39,30 +23,14 @@ bootstrap_extra_commands = [
 ]
 bootstrap_edit_paths = [
   ".codex/config.toml",
+  ".codex/rules/**",
   ".codex/plans/**",
   "docs/codex/**",
   "AGENTS.md",
+  ".gitignore",
   "ai-dlc/**",
-  "packages/codex/.codex/AGENTS.md",
-  "packages/codex/.codex/config.toml",
-  "packages/codex/.codex/hooks.json",
-  "packages/codex/.codex/rules/**",
-  "packages/codex/.codex/ai-dlc/lib/aidlc/cli.py",
-  "packages/codex/.codex/ai-dlc/lib/aidlc/hooks.py",
-  "packages/codex/.codex/ai-dlc/lib/aidlc/state.py",
-  "packages/codex/.codex/ai-dlc/lib/aidlc/workspace.py",
-  "packages/codex/.codex/ai-dlc/lib/aidlc/schemas.py",
-  "packages/codex/.codex/ai-dlc/lib/aidlc/workflow_contracts.py",
-  "packages/codex/.codex/ai-dlc/schemas/ai-dlc_plan_v2.json",
-  "tests/test_aidlc.py",
-  "packages/agents/.agents/skills/codex-agents-md-authoring/**",
-  "packages/agents/.agents/skills/codex-rules-authoring/**",
-  "packages/agents/.agents/skills/codex-subagents-authoring/**",
-  "packages/agents/.agents/skills/codex-plan-authoring/**",
-  "packages/agents/.agents/skills/codex-hooks-authoring/**",
-  "packages/agents/.agents/skills/codex-config-authoring/**",
-  "packages/agents/.agents/skills/codex-skill-authoring/**",
-  "packages/agents/.agents/skills/codex-runtime-probing/**",
-  "packages/agents/.agents/skills/workflow-start/SKILL.md",
-  "packages/agents/.agents/skills/workflow-classify/SKILL.md",
+  ".agents/skills/**/SKILL.md",
+  ".agents/skills/**/references/*.md",
+  "packages/agents/.agents/skills/**/SKILL.md",
+  "packages/agents/.agents/skills/**/references/*.md",
 ]

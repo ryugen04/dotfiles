@@ -15,6 +15,8 @@ bootstrap と local readiness が未完了のときに使う。AI-DLC task works
 - bootstrap の実作業は `dlc_initializer`、local repair は `dlc_repairer` に委譲する。
 - controller 自身は source を編集しない。
 - task workspace 作成前の user-level install、root-system 初期化、sango worktree 作成・採用、`ai-dlc init-workspace` は controller の bootstrap 操作として扱う。
+- workspace-less bootstrap/recovery assignment は `dlc_initializer` と `dlc_repairer` に限定する。
+- assignment 作成や owner 起動が block された場合は `bootstrap/delegation deadlock` として停止し、`docs/codex/block-delegation-policy-matrix.md` に沿った恒久修正 plan を提示する。
 
 ## Bootstrap Modes
 
@@ -53,6 +55,8 @@ bootstrap と local readiness が未完了のときに使う。AI-DLC task works
 - `dlc_handoff_writer` は blocked または引き継ぎ記録が必要なときだけ使う。
 - `dlc_git_operator` は bootstrap では使わない。
 - `git reset --hard`、`git clean`、`git worktree remove`、既存 worktree の削除は bootstrap でも使わない。
+- `git worktree list` は read-only、`git worktree add` は mutating として扱う。
+- `needs_assignment` / `delegate_phase_owner` を受けたら bootstrap path や escalation を広げず、assignment / subagent / deadlock report のいずれかに限定する。
 
 ## Sango + AI-DLC Rules
 

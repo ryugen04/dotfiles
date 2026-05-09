@@ -7,6 +7,14 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .block_ledger import (
+    ACTION_TYPES,
+    export_block_plan,
+    list_actions,
+    list_events,
+    record_block_ref,
+    sync_block_actions,
+)
 from .git_hooks import install_project_hooks
 from .hooks import diagnose_block, dispatch
 from .overlay import overlay_cleanup, overlay_init, overlay_repair, overlay_status, root_export, validate_overlay
@@ -57,7 +65,7 @@ def cmd_install(_: argparse.Namespace) -> int:
         "~/.codex": (home / ".codex").exists(),
         "~/.agents/skills": (home / ".agents" / "skills").exists(),
         "~/.codex/ai-dlc/bin": (home / ".codex" / "ai-dlc" / "bin").exists(),
-        "codex_hooks": True,
+        "hooks_feature": True,
     }
     print(json.dumps(status, indent=2, ensure_ascii=False))
     return 0
@@ -67,7 +75,7 @@ def cmd_doctor(_: argparse.Namespace) -> int:
     home = Path.home()
     checks = {
         "codex_config": (home / ".codex" / "config.toml").exists(),
-        "codex_hooks": (home / ".codex" / "hooks.json").exists(),
+        "hooks_json": (home / ".codex" / "hooks.json").exists(),
         "ai_dlc_bin": (home / ".codex" / "ai-dlc" / "bin" / "ai-dlc").exists(),
         "skills_dir": (home / ".agents" / "skills").exists(),
         "python_yaml": True,
@@ -384,6 +392,53 @@ def cmd_block_diagnose(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_block_list(args: argparse.Namespace) -> int:
+    events = list_events(include_recorded=args.all)
+    if args.json:
+        print(json.dumps(events, indent=2, ensure_ascii=False))
+        return 0
+    if not events:
+        print("no open AI-DLC block events")
+        return 0
+    for event in events:
+        status = "recorded" if event.get("recorded") else "open"
+        event_id = event.get("event_id", "")
+        block_type = event.get("block_type", "")
+        scope = event.get("scope_key", "")
+        reason = str(event.get("reason", "")).splitlines()[0]
+        print(f"{event_id} [{status}] {block_type} {scope} - {reason}")
+    return 0
+
+
+def cmd_block_actions(args: argparse.Namespace) -> int:
+    actions = list_actions()
+    if args.json:
+        print(json.dumps(actions, indent=2, ensure_ascii=False))
+    else:
+        for action in actions:
+            print(f"{action.get('block_event_id', '')} {action.get('action_type', '')} {action.get('ref', '')}")
+    return 0
+
+
+def cmd_block_record(args: argparse.Namespace) -> int:
+    action = record_block_ref(args.event_id, args.type, args.ref, args.reason or "", base=Path.cwd())
+    print(json.dumps(action, indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_block_sync(_: argparse.Namespace) -> int:
+    root = find_assignment_context_root(Path.cwd())
+    actions = sync_block_actions(root)
+    print(json.dumps(actions, indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_block_export(args: argparse.Namespace) -> int:
+    destination = export_block_plan(args.event_id, Path(args.plan).expanduser())
+    print(str(destination))
+    return 0
+
+
 def cmd_context(args: argparse.Namespace) -> int:
     cwd = Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd()
     print(json.dumps(ai_dlc_context(cwd), indent=2, ensure_ascii=False))
@@ -580,6 +635,28 @@ def build_parser() -> argparse.ArgumentParser:
     block_diagnose.add_argument("--command", default="")
     block_diagnose.add_argument("--message", default="")
     block_diagnose.set_defaults(func=cmd_block_diagnose)
+
+    block = sub.add_parser("block")
+    block_sub = block.add_subparsers()
+    block_list = block_sub.add_parser("list")
+    block_list.add_argument("--all", action="store_true")
+    block_list.add_argument("--json", action="store_true")
+    block_list.set_defaults(func=cmd_block_list)
+    block_actions = block_sub.add_parser("actions")
+    block_actions.add_argument("--json", action="store_true")
+    block_actions.set_defaults(func=cmd_block_actions)
+    block_record = block_sub.add_parser("record")
+    block_record.add_argument("--event-id", required=True)
+    block_record.add_argument("--type", choices=sorted(ACTION_TYPES), default="durable_record")
+    block_record.add_argument("--ref", required=True)
+    block_record.add_argument("--reason", default="")
+    block_record.set_defaults(func=cmd_block_record)
+    block_sync = block_sub.add_parser("sync")
+    block_sync.set_defaults(func=cmd_block_sync)
+    block_export = block_sub.add_parser("export")
+    block_export.add_argument("--event-id", required=True)
+    block_export.add_argument("--plan", required=True)
+    block_export.set_defaults(func=cmd_block_export)
 
     context_parser = sub.add_parser("context")
     context_parser.add_argument("--cwd", default="")

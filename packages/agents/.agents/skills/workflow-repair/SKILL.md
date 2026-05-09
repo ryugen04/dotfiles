@@ -14,6 +14,8 @@ overlay、`.local`、hook、git pointer などの local 問題を直すときに
 - root session は controller-only のまま `repairing` を管理する。
 - 修復作業は `dlc_repairer` に委譲し、controller 自身は local runtime も直接いじらない。
 - tracked source file は repair フローの対象外。
+- repair route の allow / block / mandatory action は `docs/codex/block-delegation-policy-matrix.md` を正本にする。
+- repair assignment 作成や `dlc_repairer` 起動が block された場合は、controller が直接修復せず `bootstrap/delegation deadlock` として停止する。
 
 ## Required Sequence
 
@@ -33,3 +35,4 @@ overlay、`.local`、hook、git pointer などの local 問題を直すときに
 
 - `dlc_repo_worker` は repair skill では起動しない。
 - `dlc_git_operator` は repair では使わない。destructive cleanup は別途明示承認が必要。
+- repair 名目で source/test path、広い `.codex/**`、または bootstrap allowlist を広げない。
