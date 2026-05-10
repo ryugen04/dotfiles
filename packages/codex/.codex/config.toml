@@ -1,5 +1,8 @@
 [projects."/home/glaucus03/dev/projects/dotfiles"]
 trust_level = "trusted"
 
+[tui]
+status_line = ["model-with-reasoning", "context-remaining", "current-dir", "git-branch"]
+
 [tui.model_availability_nux]
 "gpt-5.5" = 1
