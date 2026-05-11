@@ -97,7 +97,7 @@ published: false
 2. 指定がなければカレントディレクトリの `articles/` を使用
 
 例:
-- `/blog:draft KittyのOS別設定 --output=$HOME/dev/projects/public-zenn-docs`
+- `/blog:draft KittyのOS別設定 --output=/path/to/public-zenn-docs`
 - `/blog:draft KittyのOS別設定` （カレントディレクトリのarticles/に出力）
 
 **ファイル名:**

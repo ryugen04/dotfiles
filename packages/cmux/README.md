@@ -64,7 +64,7 @@ local:
 
 ```bash
 # PATHを通す or シンボリックリンク作成
-DOTFILES_DIR="${DOTFILES_DIR:-$HOME/dev/projects/dotfiles}"
+DOTFILES_DIR="/path/to/dotfiles"
 ln -sf "$DOTFILES_DIR/packages/cmux/scripts/cmux-difit.sh" "$HOME/bin/cmux-difit"
 ln -sf "$DOTFILES_DIR/packages/cmux/scripts/cmux-mo.sh" "$HOME/bin/cmux-mo"
 ln -sf "$DOTFILES_DIR/packages/cmux/scripts/cmux-open.sh" "$HOME/bin/cmux-open"

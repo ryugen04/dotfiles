@@ -24,6 +24,8 @@ Establish dotfiles that can configure Codex Careflow on another machine and boot
 - Do not track local absolute home paths, project trust paths, auth files, histories, sqlite databases, caches, Careflow state, or Sango runtime outputs.
 - Do not write forbidden local identifiers into the repository. They must come from local env or CI secret as `FORBIDDEN_WORDS`.
 - Existing user or project files are not overwritten unless they contain a dotfiles managed marker or `--force` is explicitly used for user-level symlinks.
+- Existing project files with a dotfiles managed marker are not overwritten when they diverged from the current template unless `--force` is explicitly used.
+- The `careflow` CLI is an explicit prerequisite for enabling Codex hooks. The `codex-careflow` dotfiles package distributes local helper files; it does not install the Careflow runtime.
 
 ## Workflow Enforcement Target
 
@@ -38,7 +40,7 @@ Run all applicable checks before commit, push, or PR:
 
 1. `git status --short --branch --untracked-files=all`
 2. `FORBIDDEN_WORDS=... scripts/check-portability.sh`
-3. `./install.sh -n codex`
+3. `DOTFILES_TARGET_HOME=<fixture-home> ./install.sh -n codex`
 4. `./install.sh -n codex-project <fixture-repo>`
 5. `./install.sh -n sango-project <fixture-repo>`
 6. `python3 packages/codex-careflow/.codex-careflow/bin/doctor.py --repo .`

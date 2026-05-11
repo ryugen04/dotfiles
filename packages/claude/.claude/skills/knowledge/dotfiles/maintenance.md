@@ -26,7 +26,7 @@ rm ~/.new-config
 ### 3. 変更のコミット
 
 ```bash
-cd "${DOTFILES_DIR:-$HOME/dev/projects/dotfiles}"
+cd "${DOTFILES_DIR:-/path/to/dotfiles}"
 git add -A
 git commit -m "feat(<package>): 変更内容"
 git push

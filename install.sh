@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET_DIR="$HOME"
+TARGET_DIR="${DOTFILES_TARGET_HOME:-$HOME}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -37,9 +37,14 @@ Commands:
     sango-project <repo>     Bootstrap project-local sango.yaml if absent
 
 Examples:
+    DOTFILES_TARGET_HOME=/tmp/dotfiles-home $(basename "$0") -n codex
     $(basename "$0") codex codex-careflow agents
     $(basename "$0") -n codex-project .
     $(basename "$0") -D codex
+
+Environment:
+    DOTFILES_TARGET_HOME  Override the user-level install target. Use this for
+                          dry-run verification against a fixture home.
 EOF
 }
 
@@ -85,7 +90,7 @@ ensure_dir() {
     if $DRY_RUN; then
         echo "[DRY-RUN] mkdir -p $dir"
     else
-        mkdir -p "$dir"
+        mkdir -p "$dir" || return 1
     fi
 }
 
@@ -100,7 +105,7 @@ install_symlink() {
 
     if $DELETE; then
         if [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then
-            run_or_echo rm "$target"
+            run_or_echo rm "$target" || return 1
             log_success "Removed managed link: $target"
         elif [[ -e "$target" ]]; then
             log_warn "Not removing unmanaged path: $target"
@@ -108,7 +113,7 @@ install_symlink() {
         return 0
     fi
 
-    ensure_dir "$(dirname "$target")"
+    ensure_dir "$(dirname "$target")" || return 1
     if [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then
         log_success "Link already installed: $target"
         return 0
@@ -118,9 +123,9 @@ install_symlink() {
             log_error "Refusing to replace unmanaged path without --force: $target"
             return 1
         fi
-        run_or_echo rm -f "$target"
+        run_or_echo rm -f "$target" || return 1
     fi
-    run_or_echo ln -s "$source" "$target"
+    run_or_echo ln -s "$source" "$target" || return 1
     log_success "Installed link: $target"
 }
 
@@ -142,7 +147,10 @@ update_managed_block() {
     local tmp
     tmp="$(mktemp)"
     render_codex_block > "$tmp"
-    ensure_dir "$(dirname "$file")"
+    ensure_dir "$(dirname "$file")" || {
+        rm -f "$tmp"
+        return 1
+    }
 
     if $DELETE; then
         if [[ -f "$file" ]]; then
@@ -153,7 +161,10 @@ update_managed_block() {
                     $0 == begin {skip=1; next}
                     $0 == end {skip=0; next}
                     !skip {print}
-                ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+                ' "$file" > "$file.tmp" && mv "$file.tmp" "$file" || {
+                    rm -f "$tmp" "$file.tmp"
+                    return 1
+                }
             fi
         fi
         rm -f "$tmp"
@@ -172,20 +183,28 @@ update_managed_block() {
                 }
                 $0 == end {skip=0; next}
                 !skip {print}
-            ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+            ' "$file" > "$file.tmp" && mv "$file.tmp" "$file" || {
+                rm -f "$tmp" "$file.tmp"
+                return 1
+            }
         fi
     elif [[ -f "$file" ]]; then
         if $DRY_RUN; then
             echo "[DRY-RUN] append managed block to $file"
         else
-            printf '\n' >> "$file"
-            cat "$tmp" >> "$file"
+            printf '\n' >> "$file" && cat "$tmp" >> "$file" || {
+                rm -f "$tmp"
+                return 1
+            }
         fi
     else
         if $DRY_RUN; then
             echo "[DRY-RUN] create $file with managed block"
         else
-            cp "$tmp" "$file"
+            cp "$tmp" "$file" || {
+                rm -f "$tmp"
+                return 1
+            }
         fi
     fi
     rm -f "$tmp"
@@ -200,7 +219,7 @@ install_codex() {
     install_symlink "$DOTFILES_DIR/packages/codex/.codex/AGENTS.md" "$TARGET_DIR/.codex/AGENTS.md" || return 1
     install_symlink "$DOTFILES_DIR/packages/codex/.codex/hooks.json" "$TARGET_DIR/.codex/hooks.json" || return 1
     install_symlink "$DOTFILES_DIR/packages/codex/.codex/rules/careflow.rules" "$TARGET_DIR/.codex/rules/careflow.rules" || return 1
-    update_managed_block "$TARGET_DIR/.codex/config.toml"
+    update_managed_block "$TARGET_DIR/.codex/config.toml" || return 1
     command -v sango >/dev/null 2>&1 || log_warn "sango is not on PATH; Sango evidence checks are unavailable"
 }
 
@@ -208,11 +227,11 @@ copy_managed_file() {
     local source="$1"
     local target="$2"
     local marker="$3"
-    ensure_dir "$(dirname "$target")"
+    ensure_dir "$(dirname "$target")" || return 1
 
     if $DELETE; then
         if [[ -f "$target" ]] && grep -Fq "$marker" "$target"; then
-            run_or_echo rm "$target"
+            run_or_echo rm "$target" || return 1
             log_success "Removed managed file: $target"
         elif [[ -e "$target" ]]; then
             log_warn "Not removing unmanaged file: $target"
@@ -224,10 +243,16 @@ copy_managed_file() {
         log_error "Refusing to replace unmanaged existing file: $target"
         return 1
     fi
+    if [[ -e "$target" ]] && ! cmp -s "$source" "$target"; then
+        if ! $FORCE; then
+            log_error "Refusing to replace diverged managed file without --force: $target"
+            return 1
+        fi
+    fi
     if $DRY_RUN; then
         echo "[DRY-RUN] install $target from $source"
     else
-        cp "$source" "$target"
+        cp "$source" "$target" || return 1
     fi
     log_success "Installed managed file: $target"
 }
@@ -254,10 +279,10 @@ install_codex_project() {
         log_error "careflow is not on PATH; install Codex Careflow before bootstrapping project hooks"
         return 1
     fi
-    copy_managed_file "$DOTFILES_DIR/packages/codex/.codex/templates/project-AGENTS.md" "$repo/.codex/AGENTS.md" "dotfiles-managed: codex-careflow-project-v1"
-    copy_managed_file "$DOTFILES_DIR/packages/codex/.codex/hooks.json" "$repo/.codex/hooks.json" "careflow codex-hook"
-    copy_managed_file "$DOTFILES_DIR/packages/codex/.codex/rules/careflow.rules" "$repo/.codex/rules/careflow.rules" "Codex Careflow"
-    copy_managed_file "$DOTFILES_DIR/packages/codex/.codex/templates/careflow/workspace.yaml" "$repo/.aidlc/workspace.yaml" "dotfiles-managed: codex-careflow-workspace-v1"
+    copy_managed_file "$DOTFILES_DIR/packages/codex/.codex/templates/project-AGENTS.md" "$repo/.codex/AGENTS.md" "dotfiles-managed: codex-careflow-project-v1" || return 1
+    copy_managed_file "$DOTFILES_DIR/packages/codex/.codex/hooks.json" "$repo/.codex/hooks.json" "careflow codex-hook" || return 1
+    copy_managed_file "$DOTFILES_DIR/packages/codex/.codex/rules/careflow.rules" "$repo/.codex/rules/careflow.rules" "Codex Careflow" || return 1
+    copy_managed_file "$DOTFILES_DIR/packages/codex/.codex/templates/careflow/workspace.yaml" "$repo/.aidlc/workspace.yaml" "dotfiles-managed: codex-careflow-workspace-v1" || return 1
 }
 
 install_sango_project() {
@@ -266,7 +291,7 @@ install_sango_project() {
     [[ -d "$repo" ]] || { log_error "Repository path does not exist: $repo"; return 1; }
     repo="$(cd "$repo" && pwd -P)"
     require_git_repo "$repo" || return 1
-    copy_managed_file "$DOTFILES_DIR/packages/codex/.codex/templates/sango/sango.yaml" "$repo/sango.yaml" "dotfiles-managed: sango-project-v1"
+    copy_managed_file "$DOTFILES_DIR/packages/codex/.codex/templates/sango/sango.yaml" "$repo/sango.yaml" "dotfiles-managed: sango-project-v1" || return 1
 }
 
 stow_package() {

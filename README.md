@@ -13,6 +13,8 @@ macOS/Linux 環境の dotfiles 管理リポジトリ。
 
 通常 package は GNU Stow で `$HOME` に展開します。`codex` だけは安全のため `.codex` 全体を stow せず、portable files の symlink と local `config.toml` の managed block を生成します。
 
+前提として `careflow` CLI を先にインストールし、`command -v careflow` が成功する状態にしてください。`codex-careflow` package は dotfiles 側の補助 doctor と docs の配布であり、Careflow 本体のインストーラではありません。
+
 ```bash
 ./install.sh codex codex-careflow agents
 ```
@@ -24,6 +26,11 @@ macOS/Linux 環境の dotfiles 管理リポジトリ。
 - repo 直下 `.codex/` はこの dotfiles 自身の project-local 設定と作業記録用
 
 既存 `~/.codex/config.toml` は保持され、managed block だけが追加・更新されます。trusted project path などの PC 固有設定は managed block の外に置いてください。
+user-level install の dry-run は実 HOME に依存させず、fixture HOME を渡して検証します。
+
+```bash
+DOTFILES_TARGET_HOME=/tmp/dotfiles-home ./install.sh -n codex
+```
 
 任意 repo へ Careflow / Sango 前提の project-local 設定を配布する場合:
 
@@ -31,6 +38,8 @@ macOS/Linux 環境の dotfiles 管理リポジトリ。
 ./install.sh codex-project /path/to/repo
 ./install.sh sango-project /path/to/repo
 ```
+
+project-local bootstrap は unmanaged file を上書きしません。dotfiles-managed marker 付きでも内容がローカル変更されている場合は `--force` なしでは拒否します。
 
 ## Codex / Careflow
 

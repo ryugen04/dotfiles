@@ -10,13 +10,6 @@ import subprocess
 from pathlib import Path
 
 
-OWNED_PATHS = (
-    "README.md",
-    "codex-plan.md",
-    "packages/codex",
-    "packages/codex-careflow",
-)
-
 REQUIRED_FILES = (
     "packages/codex/.codex/config.toml.template",
     "packages/codex/.codex/AGENTS.md",
@@ -38,15 +31,17 @@ PATH_MARKERS = tuple(
 )
 
 
-def owned_files(repo: Path) -> list[Path]:
-    files: list[Path] = []
-    for relative in OWNED_PATHS:
-        path = repo / relative
-        if path.is_file():
-            files.append(path)
-        elif path.is_dir():
-            files.extend(child for child in path.rglob("*") if child.is_file())
-    return files
+def repository_files(repo: Path) -> list[Path]:
+    result = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "--cached", "--others", "--exclude-standard"],
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    if result.returncode != 0:
+        return [child for child in repo.rglob("*") if child.is_file() and ".git" not in child.parts]
+    return [repo / relative for relative in result.stdout.splitlines()]
 
 
 def read_text(path: Path) -> str:
@@ -81,7 +76,7 @@ def check_config(repo: Path) -> list[str]:
 
 def check_path_markers(repo: Path) -> list[str]:
     errors: list[str] = []
-    for path in owned_files(repo):
+    for path in repository_files(repo):
         if not path.is_file():
             continue
         try:
@@ -164,7 +159,7 @@ def main() -> int:
     payload = {
         "status": "FAIL" if failed else "OK",
         "repo": str(repo),
-        "checked_files": len(owned_files(repo)),
+        "checked_files": len(repository_files(repo)),
         "errors": errors,
         "warnings": warnings,
     }
@@ -183,7 +178,7 @@ def main() -> int:
 
     print("codex-careflow doctor: OK")
     print(f"- repo: {repo}")
-    print(f"- checked files: {len(owned_files(repo))}")
+    print(f"- checked files: {len(repository_files(repo))}")
     for warning in warnings:
         print(f"- warning: {warning}")
     return 0
