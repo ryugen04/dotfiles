@@ -1,0 +1,32 @@
+# Codex Careflow coarse command policy.
+# State-aware decisions belong in `careflow codex-hook ...`.
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Pushing requires discharge-ready state and git operator responsibility.",
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "merge"],
+    decision = "prompt",
+    justification = "PR merge requires final verification and approval.",
+)
+
+prefix_rule(
+    pattern = ["curl"],
+    decision = "prompt",
+    justification = "Network script download requires explicit approval.",
+)
+
+prefix_rule(
+    pattern = ["wget"],
+    decision = "prompt",
+    justification = "Network script download requires explicit approval.",
+)
+
+prefix_rule(
+    pattern = ["rm", "-rf", "/"],
+    decision = "forbidden",
+    justification = "Never remove filesystem root.",
+)

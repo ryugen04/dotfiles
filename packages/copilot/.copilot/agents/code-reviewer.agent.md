@@ -29,7 +29,7 @@ Keep going until the review is complete—never stop early.
 
 ### Stow Packages
 - ✅ ホームディレクトリ相対パス
-- 🚫 絶対パス `/Users/...` のハードコード
+- 🚫 個人ホーム配下の絶対パスのハードコード
 - ✅ XDG Base Directory準拠
 
 ### Claude/Copilot設定

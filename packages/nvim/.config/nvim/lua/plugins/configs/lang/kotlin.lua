@@ -54,7 +54,7 @@ return {
 	},
 	-- 旧プラグイン（無効化して残す。Detekt/テストランナーが必要になったら復活）
 	-- {
-	-- 	dir = "~/dev/projects/kotlin-extended-lsp.nvim",
+		-- 	dir = vim.fn.expand("$PROJECTS_DIR/kotlin-extended-lsp.nvim"),
 	-- 	ft = "kotlin",
 	-- 	config = function()
 	-- 		require("kotlin-extended-lsp").setup({...})

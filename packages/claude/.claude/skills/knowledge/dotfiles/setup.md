@@ -19,8 +19,8 @@ brew install git stow curl
 ### 1. リポジトリのクローン
 
 ```bash
-mkdir -p ~/dev/projects
-cd ~/dev/projects
+mkdir -p "$HOME/dev/projects"
+cd "$HOME/dev/projects"
 git clone git@github.com:<user>/dotfiles.git
 cd dotfiles
 ```

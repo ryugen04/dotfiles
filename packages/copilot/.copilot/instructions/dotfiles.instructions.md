@@ -36,7 +36,7 @@ readonly CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}"
 ### ❌ Bad
 ```bash
 #!/bin/bash
-CONFIG_DIR="/Users/username/.config"  # ハードコード禁止
+CONFIG_DIR="$HOME/.config"  # portable
 ```
 
 ## Security Rules

@@ -26,8 +26,10 @@ alias hist='history 10'
 alias histgrep='history | grep'
 
 # プロジェクト
-alias cdp='cd ~/dev/projects'
-alias cdpd='cd ~/dev/projects/dotfiles'
+export PROJECTS_DIR="${PROJECTS_DIR:-$HOME/dev/projects}"
+export DOTFILES_DIR="${DOTFILES_DIR:-$PROJECTS_DIR/dotfiles}"
+alias cdp='cd "$PROJECTS_DIR"'
+alias cdpd='cd "$DOTFILES_DIR"'
 
 # Claude
 alias yolo='claude --dangerously-skip-permissions'
