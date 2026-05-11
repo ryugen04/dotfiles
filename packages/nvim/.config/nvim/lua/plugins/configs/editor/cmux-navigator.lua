@@ -1,5 +1,5 @@
 return {
-  dir = vim.fn.expand('~/dev/projects/cmux-navigator.nvim'),
+  dir = (vim.env.PROJECTS_DIR or vim.fn.expand("$HOME/dev/projects")) .. "/cmux-navigator.nvim",
   name = 'cmux-navigator',
   lazy = false,
   cond = function()

@@ -1,0 +1,80 @@
+{
+  "SessionStart": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "careflow codex-hook SessionStart",
+          "timeout": 10,
+          "statusMessage": "Careflow session context"
+        }
+      ]
+    }
+  ],
+  "UserPromptSubmit": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "careflow codex-hook UserPromptSubmit",
+          "timeout": 10,
+          "statusMessage": "Careflow prompt triage"
+        }
+      ]
+    }
+  ],
+  "PreToolUse": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "careflow codex-hook PreToolUse",
+          "timeout": 10,
+          "statusMessage": "Careflow pre-tool policy"
+        }
+      ]
+    }
+  ],
+  "PermissionRequest": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "careflow codex-hook PermissionRequest",
+          "timeout": 10,
+          "statusMessage": "Careflow permission policy"
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "careflow codex-hook PostToolUse",
+          "timeout": 10,
+          "statusMessage": "Careflow evidence capture"
+        }
+      ]
+    }
+  ],
+  "Stop": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "careflow codex-hook Stop",
+          "timeout": 10,
+          "statusMessage": "Careflow checkpoint review"
+        }
+      ]
+    }
+  ]
+}

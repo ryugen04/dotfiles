@@ -1,0 +1,10 @@
+# Portable Codex config template.
+# This file is rendered into a managed block in the local ~/.codex/config.toml.
+
+[tui]
+status_line = ["model-with-reasoning", "context-remaining", "current-dir", "git-branch"]
+
+[profiles.readonly-audit]
+model_reasoning_effort = "medium"
+approval_policy = "never"
+sandbox_mode = "read-only"

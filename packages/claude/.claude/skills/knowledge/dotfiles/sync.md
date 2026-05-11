@@ -3,7 +3,7 @@
 ## 基本的な同期手順
 
 ```bash
-cd ~/dev/projects/dotfiles
+cd "${DOTFILES_DIR:-/path/to/dotfiles}"
 
 # 1. 変更を取得
 git fetch origin

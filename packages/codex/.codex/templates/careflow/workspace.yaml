@@ -1,0 +1,17 @@
+# dotfiles-managed: codex-careflow-workspace-v1
+version: 1
+workspace_key: portable-project
+kind: monorepo
+repos:
+  root:
+    path: "."
+worktrees:
+  strategy: aidlc-managed
+  monorepo_pattern: ".worktrees/{branch_slug}"
+local:
+  output_dir: ".aidlc/local"
+policy:
+  require_plan_before_assignment: true
+  require_assignment_before_write: true
+  require_worktree_for_mutation: true
+  require_active_lease: true

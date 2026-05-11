@@ -61,6 +61,21 @@ plan.md
 .aidlc-runs/
 *.aidlc.log
 
+# Careflow/Sango generated/runtime outputs
+.careflow/
+.sango/
+.sango/logs/
+.sango/pids/
+.sango/bare/
+.sango/work/
+.sango/template-cache/
+.sango/locks/
+.sango/audit/
+.codex/careflow/
+.codex/sango/
+*.careflow.log
+*.sango.log
+
 # Python cache
 __pycache__/
 *.py[cod]

@@ -21,6 +21,17 @@ __pycache__
 \.pyc$
 node_modules
 
+# Local agent/runtime state
+\.aidlc
+\.ai-dlc
+\.aidlc-state
+\.aidlc-runs
+\.careflow
+\.sango
+\.worktrees
+\.codex/artifacts
+\.codex/plans
+
 # Documentation
 README\.md
 LICENSE

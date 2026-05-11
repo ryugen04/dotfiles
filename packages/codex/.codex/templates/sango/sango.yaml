@@ -1,0 +1,30 @@
+# dotfiles-managed: sango-project-v1
+name: portable-project
+version: "1.0"
+
+services: {}
+
+ports:
+  strategy: fixed
+  base_offset: 100
+  range: [3000, 9999]
+
+worktree:
+  default_branch: main
+  auto_setup: true
+  include:
+    root: []
+
+doctor:
+  checks:
+    - name: Git
+      command: git --version
+      expect: git
+
+runbooks:
+  - title: General service failure
+    keywords: ["service", "failure"]
+    steps:
+      - Run `sango doctor --json`.
+      - Run `sango status --json`.
+      - Inspect logs with `sango logs --json`.
