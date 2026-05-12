@@ -53,6 +53,7 @@ _add_to_path() {
 }
 
 _add_to_path "$HOME/.local/bin"
+_add_to_path "$HOME/.cargo/bin"
 _add_to_path "$HOME/.codex/ai-dlc/bin"
 _add_to_path "$HOME/bin"
 _add_to_path "$HOME/.yarn/bin"
