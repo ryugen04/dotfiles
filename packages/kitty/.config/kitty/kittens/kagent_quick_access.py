@@ -8,6 +8,9 @@ Normal use expects the kagent binary to be installed:
 Override command with:
     KAGENT_QUICK_ACCESS_COMMAND='cargo run -p kagent-cli -- quick-access'
     KAGENT_QUICK_ACCESS_CWD="$HOME/dev/projects/kagent"
+
+Pin placement to a kitty output name:
+    KAGENT_QUICK_ACCESS_MONITOR=DP-1
 """
 
 import os
@@ -66,25 +69,27 @@ def handle_result(args: List[str], answer: str, target_window_id: int, boss) -> 
     else:
         shell_command = command
 
-    subprocess.Popen(
-        [
-            "kitten",
-            "quick-access-terminal",
-            "--instance-group",
-            "kagent-agent-lens",
-            "-o",
-            "edge=center-sized",
-            "-o",
-            "columns=150",
-            "-o",
-            "lines=44",
-            "-o",
-            "hide_on_focus_loss=no",
-            "-o",
-            "background_opacity=0.96",
-            *shell_command,
-        ]
-    )
+    output_name = os.environ.get("KAGENT_QUICK_ACCESS_MONITOR", "DP-1")
+    quick_access_args = [
+        "kitten",
+        "quick-access-terminal",
+        "--instance-group",
+        "kagent-agent-lens",
+        "-o",
+        f"output_name={output_name}",
+        "-o",
+        "edge=center-sized",
+        "-o",
+        "columns=140",
+        "-o",
+        "lines=42",
+        "-o",
+        "hide_on_focus_loss=no",
+        "-o",
+        "background_opacity=0.96",
+    ]
+
+    subprocess.Popen([*quick_access_args, *shell_command])
 
 
 handle_result.no_ui = True
