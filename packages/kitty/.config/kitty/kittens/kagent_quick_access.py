@@ -8,11 +8,15 @@ Normal use expects the kagent binary to be installed:
 Override command with:
     KAGENT_QUICK_ACCESS_COMMAND='cargo run -p kagent-cli -- quick-access'
     KAGENT_QUICK_ACCESS_CWD="$HOME/dev/projects/kagent"
+
+Pin placement to a monitor by xrandr index or name:
+    KAGENT_QUICK_ACCESS_MONITOR=DP-1
 """
 
 import os
 import json
 import platform
+import re
 from pathlib import Path
 import shlex
 import shutil
@@ -51,7 +55,10 @@ def resolve_command(args: List[str], target_cwd: Optional[str]) -> Tuple[List[st
     ], target_cwd
 
 
-def get_window_geometry() -> Optional[Tuple[int, int, int, int]]:
+Geometry = Tuple[int, int, int, int]
+
+
+def get_target_geometry() -> Optional[Geometry]:
     system = platform.system()
 
     if system == "Darwin":
@@ -59,12 +66,108 @@ def get_window_geometry() -> Optional[Tuple[int, int, int, int]]:
     if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
         return get_geometry_hyprland()
     if os.environ.get("DISPLAY"):
-        return get_geometry_x11()
+        return get_monitor_geometry_x11()
 
     return None
 
 
-def get_geometry_x11() -> Optional[Tuple[int, int, int, int]]:
+def get_monitor_geometry_x11() -> Optional[Geometry]:
+    monitors = get_xrandr_monitors()
+    if not monitors:
+        return get_active_window_geometry_x11()
+
+    configured = os.environ.get("KAGENT_QUICK_ACCESS_MONITOR")
+    if configured:
+        selected = find_monitor_by_name_or_index(monitors, configured)
+        if selected:
+            return selected
+
+    point = get_active_window_center_x11() or get_mouse_point_x11()
+    if point:
+        selected = find_monitor_containing_point(monitors, point)
+        if selected:
+            return selected
+
+    primary = next((monitor for monitor in monitors if monitor[0]), None)
+    return primary[1] if primary else monitors[0][1]
+
+
+def get_xrandr_monitors() -> List[Tuple[bool, Geometry, str]]:
+    try:
+        result = subprocess.run(
+            ["xrandr", "--listmonitors"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return []
+
+        monitors = []
+        pattern = re.compile(r"^\s*(\d+):\s+\+(\*)?[^ ]*\s+(\d+)/\d+x(\d+)/\d+\+(-?\d+)\+(-?\d+)\s+(.+)$")
+        for line in result.stdout.splitlines():
+            match = pattern.match(line)
+            if not match:
+                continue
+            index, primary, width, height, x, y, name = match.groups()
+            monitors.append(
+                (
+                    primary == "*",
+                    (int(x), int(y), int(width), int(height)),
+                    name.strip() or index,
+                )
+            )
+        return monitors
+    except Exception:
+        return []
+
+
+def find_monitor_by_name_or_index(
+    monitors: List[Tuple[bool, Geometry, str]], value: str
+) -> Optional[Geometry]:
+    for index, (_, geometry, name) in enumerate(monitors):
+        if value == name or value == str(index):
+            return geometry
+    return None
+
+
+def find_monitor_containing_point(
+    monitors: List[Tuple[bool, Geometry, str]], point: Tuple[int, int]
+) -> Optional[Geometry]:
+    px, py = point
+    for _, (x, y, width, height), _ in monitors:
+        if x <= px < x + width and y <= py < y + height:
+            return (x, y, width, height)
+    return None
+
+
+def get_mouse_point_x11() -> Optional[Tuple[int, int]]:
+    try:
+        result = subprocess.run(
+            ["xdotool", "getmouselocation", "--shell"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return None
+        data = parse_shell_vars(result.stdout)
+        if "X" in data and "Y" in data:
+            return (data["X"], data["Y"])
+    except Exception:
+        return None
+    return None
+
+
+def get_active_window_center_x11() -> Optional[Tuple[int, int]]:
+    geometry = get_active_window_geometry_x11()
+    if not geometry:
+        return None
+    x, y, width, height = geometry
+    return (x + width // 2, y + height // 2)
+
+
+def get_active_window_geometry_x11() -> Optional[Geometry]:
     try:
         result = subprocess.run(
             ["xdotool", "getactivewindow", "getwindowgeometry", "--shell"],
@@ -75,12 +178,7 @@ def get_geometry_x11() -> Optional[Tuple[int, int, int, int]]:
         if result.returncode != 0:
             return None
 
-        geo = {}
-        for line in result.stdout.strip().split("\n"):
-            if "=" in line:
-                key, value = line.split("=", 1)
-                geo[key] = int(value)
-
+        geo = parse_shell_vars(result.stdout)
         if all(key in geo for key in ["X", "Y", "WIDTH", "HEIGHT"]):
             return (geo["X"], geo["Y"], geo["WIDTH"], geo["HEIGHT"])
     except Exception:
@@ -89,7 +187,17 @@ def get_geometry_x11() -> Optional[Tuple[int, int, int, int]]:
     return None
 
 
-def get_geometry_macos() -> Optional[Tuple[int, int, int, int]]:
+def parse_shell_vars(output: str) -> dict:
+    values = {}
+    for line in output.strip().split("\n"):
+        if "=" in line:
+            key, value = line.split("=", 1)
+            if value.lstrip("-").isdigit():
+                values[key] = int(value)
+    return values
+
+
+def get_geometry_macos() -> Optional[Geometry]:
     try:
         script = """
         tell application "System Events"
@@ -122,7 +230,7 @@ def get_geometry_macos() -> Optional[Tuple[int, int, int, int]]:
     return None
 
 
-def get_geometry_hyprland() -> Optional[Tuple[int, int, int, int]]:
+def get_geometry_hyprland() -> Optional[Geometry]:
     try:
         result = subprocess.run(
             ["hyprctl", "activewindow", "-j"],
@@ -146,7 +254,7 @@ def get_geometry_hyprland() -> Optional[Tuple[int, int, int, int]]:
 
 def calculate_popup_geometry(
     x: int, y: int, width: int, height: int, ratio: float
-) -> Tuple[int, int, int, int]:
+) -> Geometry:
     popup_width = int(width * ratio)
     popup_height = int(height * ratio)
     popup_x = x + (width - popup_width) // 2
@@ -171,7 +279,7 @@ def handle_result(args: List[str], answer: str, target_window_id: int, boss) -> 
     else:
         shell_command = command
 
-    geometry = get_window_geometry()
+    geometry = get_target_geometry()
     if geometry:
         x, y, width, height = geometry
         popup_x, popup_y, popup_width, popup_height = calculate_popup_geometry(

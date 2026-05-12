@@ -169,6 +169,12 @@ export KAGENT_QUICK_ACCESS_COMMAND='cargo run -p kagent-cli -- quick-access'
 export KAGENT_QUICK_ACCESS_CWD="$HOME/dev/projects/kagent"
 ```
 
+マルチモニターで表示先を固定したい場合は、`xrandr --listmonitors` の index または name を指定する。
+
+```sh
+export KAGENT_QUICK_ACCESS_MONITOR=DP-1
+```
+
 ## 参考
 
 - [vim-kitty-navigator](https://github.com/knubie/vim-kitty-navigator)
