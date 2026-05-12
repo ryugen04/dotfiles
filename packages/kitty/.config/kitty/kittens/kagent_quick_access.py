@@ -9,14 +9,11 @@ Override command with:
     KAGENT_QUICK_ACCESS_COMMAND='cargo run -p kagent-cli -- quick-access'
     KAGENT_QUICK_ACCESS_CWD="$HOME/dev/projects/kagent"
 
-Pin placement to a monitor by xrandr index or name:
+Pin placement to a kitty output name:
     KAGENT_QUICK_ACCESS_MONITOR=DP-1
 """
 
 import os
-import json
-import platform
-import re
 from pathlib import Path
 import shlex
 import shutil
@@ -55,213 +52,6 @@ def resolve_command(args: List[str], target_cwd: Optional[str]) -> Tuple[List[st
     ], target_cwd
 
 
-Geometry = Tuple[int, int, int, int]
-
-
-def get_target_geometry() -> Optional[Geometry]:
-    system = platform.system()
-
-    if system == "Darwin":
-        return get_geometry_macos()
-    if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
-        return get_geometry_hyprland()
-    if os.environ.get("DISPLAY"):
-        return get_monitor_geometry_x11()
-
-    return None
-
-
-def get_monitor_geometry_x11() -> Optional[Geometry]:
-    monitors = get_xrandr_monitors()
-    if not monitors:
-        return get_active_window_geometry_x11()
-
-    configured = os.environ.get("KAGENT_QUICK_ACCESS_MONITOR")
-    if configured:
-        selected = find_monitor_by_name_or_index(monitors, configured)
-        if selected:
-            return selected
-
-    point = get_active_window_center_x11() or get_mouse_point_x11()
-    if point:
-        selected = find_monitor_containing_point(monitors, point)
-        if selected:
-            return selected
-
-    primary = next((monitor for monitor in monitors if monitor[0]), None)
-    return primary[1] if primary else monitors[0][1]
-
-
-def get_xrandr_monitors() -> List[Tuple[bool, Geometry, str]]:
-    try:
-        result = subprocess.run(
-            ["xrandr", "--listmonitors"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            return []
-
-        monitors = []
-        pattern = re.compile(r"^\s*(\d+):\s+\+(\*)?[^ ]*\s+(\d+)/\d+x(\d+)/\d+\+(-?\d+)\+(-?\d+)\s+(.+)$")
-        for line in result.stdout.splitlines():
-            match = pattern.match(line)
-            if not match:
-                continue
-            index, primary, width, height, x, y, name = match.groups()
-            monitors.append(
-                (
-                    primary == "*",
-                    (int(x), int(y), int(width), int(height)),
-                    name.strip() or index,
-                )
-            )
-        return monitors
-    except Exception:
-        return []
-
-
-def find_monitor_by_name_or_index(
-    monitors: List[Tuple[bool, Geometry, str]], value: str
-) -> Optional[Geometry]:
-    for index, (_, geometry, name) in enumerate(monitors):
-        if value == name or value == str(index):
-            return geometry
-    return None
-
-
-def find_monitor_containing_point(
-    monitors: List[Tuple[bool, Geometry, str]], point: Tuple[int, int]
-) -> Optional[Geometry]:
-    px, py = point
-    for _, (x, y, width, height), _ in monitors:
-        if x <= px < x + width and y <= py < y + height:
-            return (x, y, width, height)
-    return None
-
-
-def get_mouse_point_x11() -> Optional[Tuple[int, int]]:
-    try:
-        result = subprocess.run(
-            ["xdotool", "getmouselocation", "--shell"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            return None
-        data = parse_shell_vars(result.stdout)
-        if "X" in data and "Y" in data:
-            return (data["X"], data["Y"])
-    except Exception:
-        return None
-    return None
-
-
-def get_active_window_center_x11() -> Optional[Tuple[int, int]]:
-    geometry = get_active_window_geometry_x11()
-    if not geometry:
-        return None
-    x, y, width, height = geometry
-    return (x + width // 2, y + height // 2)
-
-
-def get_active_window_geometry_x11() -> Optional[Geometry]:
-    try:
-        result = subprocess.run(
-            ["xdotool", "getactivewindow", "getwindowgeometry", "--shell"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            return None
-
-        geo = parse_shell_vars(result.stdout)
-        if all(key in geo for key in ["X", "Y", "WIDTH", "HEIGHT"]):
-            return (geo["X"], geo["Y"], geo["WIDTH"], geo["HEIGHT"])
-    except Exception:
-        return None
-
-    return None
-
-
-def parse_shell_vars(output: str) -> dict:
-    values = {}
-    for line in output.strip().split("\n"):
-        if "=" in line:
-            key, value = line.split("=", 1)
-            if value.lstrip("-").isdigit():
-                values[key] = int(value)
-    return values
-
-
-def get_geometry_macos() -> Optional[Geometry]:
-    try:
-        script = """
-        tell application "System Events"
-            if (name of processes) contains "kitty" then
-                tell process "kitty"
-                    if (count of windows) > 0 then
-                        set frontWindow to window 1
-                        set winPos to position of frontWindow
-                        set winSize to size of frontWindow
-                        return (item 1 of winPos as text) & " " & (item 2 of winPos as text) & " " & (item 1 of winSize as text) & " " & (item 2 of winSize as text)
-                    end if
-                end tell
-            end if
-            return ""
-        end tell
-        """
-        result = subprocess.run(
-            ["osascript", "-e", script],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            parts = result.stdout.strip().split()
-            if len(parts) == 4:
-                return tuple(int(float(part)) for part in parts)
-    except Exception:
-        return None
-
-    return None
-
-
-def get_geometry_hyprland() -> Optional[Geometry]:
-    try:
-        result = subprocess.run(
-            ["hyprctl", "activewindow", "-j"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            return None
-
-        data = json.loads(result.stdout)
-        if data.get("class") == "kitty":
-            at = data.get("at", [0, 0])
-            size = data.get("size", [800, 600])
-            return (at[0], at[1], size[0], size[1])
-    except Exception:
-        return None
-
-    return None
-
-
-def calculate_popup_geometry(
-    x: int, y: int, width: int, height: int, ratio: float
-) -> Geometry:
-    popup_width = int(width * ratio)
-    popup_height = int(height * ratio)
-    popup_x = x + (width - popup_width) // 2
-    popup_y = y + (height - popup_height) // 2
-    return (popup_x, popup_y, popup_width, popup_height)
-
-
 def handle_result(args: List[str], answer: str, target_window_id: int, boss) -> None:
     cwd = None
     target_window = boss.window_id_map.get(target_window_id)
@@ -279,49 +69,25 @@ def handle_result(args: List[str], answer: str, target_window_id: int, boss) -> 
     else:
         shell_command = command
 
-    geometry = get_target_geometry()
-    if geometry:
-        x, y, width, height = geometry
-        popup_x, popup_y, popup_width, popup_height = calculate_popup_geometry(
-            x, y, width, height, 0.86
-        )
-        quick_access_args = [
-            "kitten",
-            "quick-access-terminal",
-            "--instance-group",
-            "kagent-agent-lens",
-            "-o",
-            "edge=none",
-            "-o",
-            f"margin_left={popup_x}",
-            "-o",
-            f"margin_top={popup_y}",
-            "-o",
-            f"columns={popup_width}px",
-            "-o",
-            f"lines={popup_height}px",
-            "-o",
-            "hide_on_focus_loss=no",
-            "-o",
-            "background_opacity=0.96",
-        ]
-    else:
-        quick_access_args = [
-            "kitten",
-            "quick-access-terminal",
-            "--instance-group",
-            "kagent-agent-lens",
-            "-o",
-            "edge=center-sized",
-            "-o",
-            "columns=140",
-            "-o",
-            "lines=42",
-            "-o",
-            "hide_on_focus_loss=no",
-            "-o",
-            "background_opacity=0.96",
-        ]
+    output_name = os.environ.get("KAGENT_QUICK_ACCESS_MONITOR", "DP-1")
+    quick_access_args = [
+        "kitten",
+        "quick-access-terminal",
+        "--instance-group",
+        "kagent-agent-lens",
+        "-o",
+        f"output_name={output_name}",
+        "-o",
+        "edge=center-sized",
+        "-o",
+        "columns=140",
+        "-o",
+        "lines=42",
+        "-o",
+        "hide_on_focus_loss=no",
+        "-o",
+        "background_opacity=0.96",
+    ]
 
     subprocess.Popen([*quick_access_args, *shell_command])
 

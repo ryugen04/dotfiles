@@ -169,7 +169,8 @@ export KAGENT_QUICK_ACCESS_COMMAND='cargo run -p kagent-cli -- quick-access'
 export KAGENT_QUICK_ACCESS_CWD="$HOME/dev/projects/kagent"
 ```
 
-マルチモニターで表示先を固定したい場合は、`xrandr --listmonitors` の index または name を指定する。
+マルチモニターで表示先を固定したい場合は、kitty の `output_name` を指定する。
+X11 では `margin_left` / `margin_top` による座標指定は使わず、kitty の `edge=center-sized` で中央表示する。
 
 ```sh
 export KAGENT_QUICK_ACCESS_MONITOR=DP-1
