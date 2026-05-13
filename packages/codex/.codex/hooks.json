@@ -1,5 +1,6 @@
 {
-  "SessionStart": [
+  "hooks": {
+    "SessionStart": [
     {
       "matcher": "*",
       "hooks": [
@@ -11,8 +12,8 @@
         }
       ]
     }
-  ],
-  "UserPromptSubmit": [
+    ],
+    "UserPromptSubmit": [
     {
       "matcher": "*",
       "hooks": [
@@ -24,8 +25,8 @@
         }
       ]
     }
-  ],
-  "PreToolUse": [
+    ],
+    "PreToolUse": [
     {
       "matcher": "*",
       "hooks": [
@@ -37,8 +38,8 @@
         }
       ]
     }
-  ],
-  "PermissionRequest": [
+    ],
+    "PermissionRequest": [
     {
       "matcher": "*",
       "hooks": [
@@ -50,8 +51,8 @@
         }
       ]
     }
-  ],
-  "PostToolUse": [
+    ],
+    "PostToolUse": [
     {
       "matcher": "*",
       "hooks": [
@@ -63,8 +64,8 @@
         }
       ]
     }
-  ],
-  "Stop": [
+    ],
+    "Stop": [
     {
       "matcher": "*",
       "hooks": [
@@ -76,5 +77,6 @@
         }
       ]
     }
-  ]
+    ]
+  }
 }
