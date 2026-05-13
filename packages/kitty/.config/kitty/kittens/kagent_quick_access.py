@@ -15,9 +15,11 @@ Pin placement to a kitty output name:
 
 import os
 from pathlib import Path
+import json
 import shlex
 import shutil
 import subprocess
+import tempfile
 from typing import List, Optional, Tuple
 
 
@@ -54,20 +56,57 @@ def resolve_command(args: List[str], target_cwd: Optional[str]) -> Tuple[List[st
 
 def handle_result(args: List[str], answer: str, target_window_id: int, boss) -> None:
     cwd = None
+    kitty_ls_json_path = ""
     target_window = boss.window_id_map.get(target_window_id)
     if target_window:
         cwd = target_window.cwd_of_child
+        try:
+            ls_payload = boss.call_remote_control(target_window, ("ls",))
+            if isinstance(ls_payload, str):
+                ls_text = ls_payload
+            elif ls_payload is not None:
+                ls_text = json.dumps(ls_payload)
+            else:
+                ls_text = ""
+            if ls_text:
+                with tempfile.NamedTemporaryFile(
+                    mode="w", prefix="kagent-kitty-ls-", suffix=".json", delete=False
+                ) as fp:
+                    fp.write(ls_text)
+                    kitty_ls_json_path = fp.name
+        except Exception:
+            kitty_ls_json_path = ""
 
     command, command_cwd = resolve_command(args, cwd)
 
+    source_listen_on = ""
+    if target_window:
+        try:
+            source_listen_on = target_window.child.environ.get("KITTY_LISTEN_ON", "")
+        except Exception:
+            pass
+    env_prefix = ""
+    if source_listen_on:
+        env_prefix = f"KAGENT_KITTY_TO={shlex.quote(source_listen_on)} "
+    if kitty_ls_json_path:
+        env_prefix = (
+            f"{env_prefix}KAGENT_KITTY_LS_JSON_PATH={shlex.quote(kitty_ls_json_path)} "
+        )
+
+    run_command = " ".join(shlex.quote(part) for part in command)
+    launch_prefix = f"{env_prefix}exec "
     if command_cwd and os.path.isdir(command_cwd):
         shell_command = [
             "bash",
             "-lc",
-            f"cd {shlex.quote(command_cwd)} && exec {' '.join(shlex.quote(part) for part in command)}",
+            f"cd {shlex.quote(command_cwd)} && {launch_prefix}{run_command}",
         ]
     else:
-        shell_command = command
+        shell_command = [
+            "bash",
+            "-lc",
+            f"{launch_prefix}{run_command}",
+        ]
 
     output_name = os.environ.get("KAGENT_QUICK_ACCESS_MONITOR", "DP-1")
     quick_access_args = [
@@ -84,7 +123,7 @@ def handle_result(args: List[str], answer: str, target_window_id: int, boss) -> 
         "-o",
         "lines=42",
         "-o",
-        "hide_on_focus_loss=no",
+        "hide_on_focus_loss=yes",
         "-o",
         "background_opacity=0.96",
     ]
