@@ -11,7 +11,7 @@ NO CHECKPOINT COMPLETION WITHOUT DUAL REVIEW
 ```
 手順:
 1. プランファイルを `.claude/plans/` に書き出す
-2. codex-implementer エージェントにプランのレビューを依頼
+2. codex-reviewer エージェントにプランのレビューを依頼
 3. レビュー指摘を反映
 4. ExitPlanMode を呼ぶ
 ```
@@ -55,7 +55,7 @@ Task → general-purpose agent
   観点: 品質・網羅性
 
 # Step 2: Codex CLI レビュー
-Task → codex-implementer agent（/codex:review相当）
+Task → codex-reviewer agent（/codex:review相当）
   入力: レポートMDファイルのパス + 参照先コードファイル群
   観点: 技術的正確性
 ```
@@ -78,5 +78,5 @@ Task → codex-implementer agent（/codex:review相当）
 
 ---
 
-**最終更新**: 2026-03-24
-**背景**: 調査レポートの品質・正確性を担保するため、デュアルレビューを必須化
+**最終更新**: 2026-06-12
+**背景**: 調査レポートの品質・正確性を担保するため、デュアルレビューを必須化。Cursor 解約に伴い Plan レビュー委託先を `codex-reviewer` (read-only) に変更。

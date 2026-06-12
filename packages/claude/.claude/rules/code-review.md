@@ -7,7 +7,7 @@ NO MAIN-CONTEXT REVIEW BODY
 
 **コードレビューを実施する際は、必ず以下2つの CLI をサブエージェントとして並列起動し、メインコンテキストでは結果の統合・対応方針の判断のみを行う。**
 
-1. **Codex CLI** サブエージェント（`codex-implementer` エージェント等、Codex CLI をバックエンドとする経路）
+1. **Codex CLI** サブエージェント（`codex-reviewer` エージェント、Codex CLI をバックエンドとする経路）
 2. **Claude Code CLI** サブエージェント（`pr-review-toolkit:code-reviewer` エージェント、または `claude -p` を介した別コンテキスト起動）
 
 メインの Claude Code は結果を受け取り、重複除去・優先度付け・ユーザーへの提示を行うオーケストレーターに徹する。
@@ -53,7 +53,7 @@ NO MAIN-CONTEXT REVIEW BODY
 ### ループ構造
 
 ```
-[1] 初回レビュー (Codex CLI + Claude Code CLI 並列)
+[1] 初回レビュー (codex-reviewer + pr-review-toolkit:code-reviewer 並列)
       ↓
 [2] 指摘の統合・重要度付け (Critical / Major / Minor)
       ↓
@@ -61,7 +61,7 @@ NO MAIN-CONTEXT REVIEW BODY
       ↓
 [4] codex-implementer に修正委託 (検証込み)
       ↓
-[5] 再レビュー (Codex CLI + Claude Code CLI 並列)
+[5] 再レビュー (codex-reviewer + pr-review-toolkit:code-reviewer 並列)
       ↓
 [6] 判定: Critical/Major が残っていれば [4] に戻る
       ↓
@@ -72,11 +72,11 @@ NO MAIN-CONTEXT REVIEW BODY
 
 | ステップ | 担当 | アウトプット |
 |---------|------|-------------|
-| [1] 初回レビュー | Codex CLI + Claude Code CLI（並列サブエージェント） | 各エージェントの指摘リスト |
+| [1] 初回レビュー | codex-reviewer + pr-review-toolkit:code-reviewer（並列サブエージェント） | 各エージェントの指摘リスト |
 | [2] 統合 | メイン Claude | Critical/Major/Minor 分類、重複除去 |
 | [3] 合意形成 | メイン Claude + ユーザー | 対応する指摘の確定 |
 | [4] 修正 | `codex-implementer` サブエージェント | コード修正 + typecheck / test / format pass |
-| [5] 再レビュー | Codex CLI + Claude Code CLI（並列） | 前回指摘の解消確認 + 新規指摘 |
+| [5] 再レビュー | codex-reviewer + pr-review-toolkit:code-reviewer（並列） | 前回指摘の解消確認 + 新規指摘 |
 | [6] 判定 | メイン Claude | `Critical/Major 残あり` / `Minor のみ` / `指摘なし` |
 
 ### 再レビュー時にエージェントへ必ず渡す情報

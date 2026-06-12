@@ -79,16 +79,16 @@ cat "$PLAN_FILE" | codex exec --profile implement -
 cat "$PLAN_FILE" | codex exec --profile fast -
 
 # 直接オプション指定
-codex exec --full-auto -m gpt-5.3-codex "$PROMPT"
+codex exec --full-auto -m gpt-5.5 "$PROMPT"
 ```
 
 ### プロファイル一覧
 
 | プロファイル | モデル | sandbox | 用途 |
 |-------------|--------|---------|------|
-| `implement` | gpt-5.3-codex | workspace-write | 標準実装 |
-| `fast` | gpt-5.1-codex-mini | workspace-write | 高速実装 |
-| `review` | gpt-5.3-codex | read-only | レビュー |
+| `implement` | gpt-5.5 | workspace-write | 標準実装 |
+| `fast` | gpt-5.4-mini | workspace-write | 高速実装 |
+| `review` | gpt-5.5 | read-only | レビュー |
 
 ## 3. 結果確認
 

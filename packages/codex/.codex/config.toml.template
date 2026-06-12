@@ -4,7 +4,10 @@
 [tui]
 status_line = ["model-with-reasoning", "context-remaining", "current-dir", "git-branch"]
 
-[profiles.readonly-audit]
-model_reasoning_effort = "medium"
-approval_policy = "never"
-sandbox_mode = "read-only"
+[features]
+hooks = true
+
+# Profiles are stored as separate files under ~/.codex/<profile-name>.config.toml
+# (Codex CLI >= 0.138 requires the new format; legacy [profiles.X] tables are rejected
+# when invoked with `--profile X`). See packages/codex/.codex/profiles/ for the
+# source files; install.sh symlinks them into ~/.codex/.

@@ -152,6 +152,21 @@ update_managed_block() {
         return 1
     }
 
+    # Always back up the existing file before any mutation.
+    # Codex (and the user) may store data inside the managed block (mcp_servers,
+    # projects trust, hooks.state). Rendering the template overwrites them, so
+    # keep a timestamped copy to allow manual restore. Skipped on DRY_RUN.
+    if [[ -f "$file" ]] && ! $DRY_RUN; then
+        local backup
+        backup="${file}.bak.$(date +%Y%m%d-%H%M%S)"
+        cp "$file" "$backup" || {
+            log_error "Failed to create backup: $backup"
+            rm -f "$tmp"
+            return 1
+        }
+        log_info "Backup saved: $backup"
+    fi
+
     if $DELETE; then
         if [[ -f "$file" ]]; then
             if $DRY_RUN; then
@@ -212,13 +227,20 @@ update_managed_block() {
 }
 
 install_codex() {
-    if ! $DELETE && ! command -v careflow >/dev/null 2>&1; then
-        log_error "careflow is not on PATH; install Codex Careflow before enabling hooks"
+    if ! $DELETE && ! command -v agent-careflow >/dev/null 2>&1; then
+        log_error "agent-careflow is not on PATH; install agent-careflow before enabling hooks"
         return 1
     fi
     install_symlink "$DOTFILES_DIR/packages/codex/.codex/AGENTS.md" "$TARGET_DIR/.codex/AGENTS.md" || return 1
     install_symlink "$DOTFILES_DIR/packages/codex/.codex/hooks.json" "$TARGET_DIR/.codex/hooks.json" || return 1
     install_symlink "$DOTFILES_DIR/packages/codex/.codex/rules/careflow.rules" "$TARGET_DIR/.codex/rules/careflow.rules" || return 1
+    # Per-profile config files (Codex CLI >= 0.138 new format). Each is linked as
+    # ~/.codex/<profile-name>.config.toml and invoked with `codex exec --profile <name>`.
+    local profile_file
+    for profile_file in "$DOTFILES_DIR/packages/codex/.codex/profiles/"*.config.toml; do
+        [[ -e "$profile_file" ]] || continue
+        install_symlink "$profile_file" "$TARGET_DIR/.codex/$(basename "$profile_file")" || return 1
+    done
     update_managed_block "$TARGET_DIR/.codex/config.toml" || return 1
     command -v sango >/dev/null 2>&1 || log_warn "sango is not on PATH; Sango evidence checks are unavailable"
 }
@@ -227,10 +249,12 @@ copy_managed_file() {
     local source="$1"
     local target="$2"
     local marker="$3"
+    shift 3
+    local markers=("$marker" "$@")
     ensure_dir "$(dirname "$target")" || return 1
 
     if $DELETE; then
-        if [[ -f "$target" ]] && grep -Fq "$marker" "$target"; then
+        if [[ -f "$target" ]] && has_any_marker "$target" "${markers[@]}"; then
             run_or_echo rm "$target" || return 1
             log_success "Removed managed file: $target"
         elif [[ -e "$target" ]]; then
@@ -239,7 +263,7 @@ copy_managed_file() {
         return 0
     fi
 
-    if [[ -e "$target" ]] && ! grep -Fq "$marker" "$target"; then
+    if [[ -e "$target" ]] && ! has_any_marker "$target" "${markers[@]}"; then
         log_error "Refusing to replace unmanaged existing file: $target"
         return 1
     fi
@@ -257,6 +281,18 @@ copy_managed_file() {
     log_success "Installed managed file: $target"
 }
 
+has_any_marker() {
+    local file="$1"
+    shift
+    local marker
+    for marker in "$@"; do
+        if grep -Fq "$marker" "$file"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 require_git_repo() {
     local repo="$1"
     if [[ ! -d "$repo" ]]; then
@@ -271,16 +307,18 @@ require_git_repo() {
 
 install_codex_project() {
     local repo="${1:-}"
+    local legacy_codex_hook_marker
     [[ -n "$repo" ]] || { log_error "codex-project requires a repository path"; return 1; }
     [[ -d "$repo" ]] || { log_error "Repository path does not exist: $repo"; return 1; }
     repo="$(cd "$repo" && pwd -P)"
     require_git_repo "$repo" || return 1
-    if ! $DELETE && ! command -v careflow >/dev/null 2>&1; then
-        log_error "careflow is not on PATH; install Codex Careflow before bootstrapping project hooks"
+    if ! $DELETE && ! command -v agent-careflow >/dev/null 2>&1; then
+        log_error "agent-careflow is not on PATH; install agent-careflow before bootstrapping project hooks"
         return 1
     fi
+    legacy_codex_hook_marker="$(printf 'careflow %s' 'codex-hook')"
     copy_managed_file "$DOTFILES_DIR/packages/codex/.codex/templates/project-AGENTS.md" "$repo/.codex/AGENTS.md" "dotfiles-managed: codex-careflow-project-v1" || return 1
-    copy_managed_file "$DOTFILES_DIR/packages/codex/.codex/hooks.json" "$repo/.codex/hooks.json" "careflow codex-hook" || return 1
+    copy_managed_file "$DOTFILES_DIR/packages/codex/.codex/hooks.json" "$repo/.codex/hooks.json" "agent-careflow hook codex" "$legacy_codex_hook_marker" || return 1
     copy_managed_file "$DOTFILES_DIR/packages/codex/.codex/rules/careflow.rules" "$repo/.codex/rules/careflow.rules" "Codex Careflow" || return 1
     copy_managed_file "$DOTFILES_DIR/packages/codex/.codex/templates/careflow/workspace.yaml" "$repo/.aidlc/workspace.yaml" "dotfiles-managed: codex-careflow-workspace-v1" || return 1
 }

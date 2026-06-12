@@ -101,7 +101,7 @@ pnpm type-check
 
 ## フォールバック条件
 
-以下の場合、impl-integrator への切り替えを検討:
+以下の場合、Claude メインコンテキストに戻して仕様を再確認するか、`--profile fast` (gpt-5.4-mini) で再試行:
 
 - Codex CLIがplanを理解できない
 - アーキテクチャ判断が必要
@@ -110,7 +110,11 @@ pnpm type-check
 
 フォールバック時:
 ```
-Task → impl-integrator に委託
+# 仕様再確認が必要な場合
+Claude メインコンテキストに戻して仕様を整理し、planを更新してから再委託
+
+# 軽量モデルで再試行する場合
+codex exec --profile fast "..." --sandbox network-off
 ```
 
 ---
