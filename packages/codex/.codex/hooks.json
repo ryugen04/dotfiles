@@ -6,7 +6,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "careflow codex-hook SessionStart",
+          "command": "agent-careflow hook codex session-start",
           "timeout": 10,
           "statusMessage": "Careflow session context"
         }
@@ -19,7 +19,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "careflow codex-hook UserPromptSubmit",
+          "command": "agent-careflow hook codex user-prompt-submit",
           "timeout": 10,
           "statusMessage": "Careflow prompt triage"
         }
@@ -32,7 +32,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "careflow codex-hook PreToolUse",
+          "command": "agent-careflow hook codex pre-tool-use --on-missing-context warn",
           "timeout": 10,
           "statusMessage": "Careflow pre-tool policy"
         }
@@ -45,7 +45,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "careflow codex-hook PermissionRequest",
+          "command": "agent-careflow hook codex permission-request --on-missing-context deny",
           "timeout": 10,
           "statusMessage": "Careflow permission policy"
         }
@@ -58,7 +58,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "careflow codex-hook PostToolUse",
+          "command": "agent-careflow hook codex post-tool-use --on-missing-context warn",
           "timeout": 10,
           "statusMessage": "Careflow evidence capture"
         }
@@ -71,7 +71,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "careflow codex-hook Stop",
+          "command": "agent-careflow hook codex stop",
           "timeout": 10,
           "statusMessage": "Careflow checkpoint review"
         }

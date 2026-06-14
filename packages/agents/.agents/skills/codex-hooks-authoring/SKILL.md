@@ -1,6 +1,6 @@
 ---
 name: codex-hooks-authoring
-description: Design, review, or repair Codex hooks. Use for hooks.json, inline [hooks], dispatcher scripts, hook output schemas, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, Stop, SessionStart, codex_hooks, and high-risk Codex hook behavior.
+description: Design, review, or repair Codex hooks. Use for hooks.json, inline [hooks], dispatcher scripts, hook output schemas, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, Stop, SessionStart, hooks feature flag, and high-risk Codex hook behavior.
 ---
 
 # codex-hooks-authoring

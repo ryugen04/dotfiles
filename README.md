@@ -13,7 +13,7 @@ macOS/Linux 環境の dotfiles 管理リポジトリ。
 
 通常 package は GNU Stow で `$HOME` に展開します。`codex` だけは安全のため `.codex` 全体を stow せず、portable files の symlink と local `config.toml` の managed block を生成します。
 
-前提として `careflow` CLI を先にインストールし、`command -v careflow` が成功する状態にしてください。`codex-careflow` package は dotfiles 側の補助 doctor と docs の配布であり、Careflow 本体のインストーラではありません。
+前提として `agent-careflow` CLI を先にインストールし、`command -v agent-careflow` が成功する状態にしてください。旧 `careflow` / `aidlc` / `ai-dlc` CLI は Codex hooks から参照しません。`codex-careflow` package は dotfiles 側の補助 doctor と docs の配布であり、Careflow 本体のインストーラではありません。
 
 ```bash
 ./install.sh codex codex-careflow agents

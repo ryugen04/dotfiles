@@ -7,7 +7,7 @@ Normal use expects the kagent binary to be installed:
 
 Override command with:
     KAGENT_QUICK_ACCESS_COMMAND='cargo run -p kagent-cli -- quick-access'
-    KAGENT_QUICK_ACCESS_CWD="$HOME/dev/projects/kagent"
+    KAGENT_QUICK_ACCESS_CWD="$HOME/dev"/projects/kagent
 
 Pin placement to a kitty output name:
     KAGENT_QUICK_ACCESS_MONITOR=DP-1
@@ -43,7 +43,7 @@ def resolve_command(args: List[str], target_cwd: Optional[str]) -> Tuple[List[st
     if cargo_kagent.exists():
         return [str(cargo_kagent), "quick-access"], target_cwd
 
-    dev_root = Path.home() / "dev/projects/kagent"
+    dev_root = Path.home() / "dev" / "projects" / "kagent"
     if (dev_root / "Cargo.toml").exists():
         return ["cargo", "run", "-p", "kagent-cli", "--", "quick-access"], str(dev_root)
 

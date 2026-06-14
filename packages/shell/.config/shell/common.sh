@@ -36,7 +36,9 @@ alias yolo='claude --dangerously-skip-permissions'
 alias yolor='claude --dangerously-skip-permissions --resume'
 
 alias cx='codex'
-alias ch='codex --profile codex-config-edit'
+
+alias saw='sango down && sango up --profile full --default-ports'
+alias sar='sango down && sango up --profile full'
 # 環境変数
 export LANG=en_US.UTF-8
 export EDITOR="nvim"
@@ -46,10 +48,10 @@ export SSH_AUTH_SOCK="${HOME}/.1password/agent.sock"
 
 # PATH 設定（重複追加を防ぐ）
 _add_to_path() {
-    case ":$PATH:" in
-        *":$1:"*) ;;
-        *) export PATH="$1:$PATH" ;;
-    esac
+  case ":$PATH:" in
+  *":$1:"*) ;;
+  *) export PATH="$1:$PATH" ;;
+  esac
 }
 
 _add_to_path "$HOME/.local/bin"
@@ -61,11 +63,23 @@ _add_to_path "$HOME/.pub-cache/bin"
 
 # yazi ディレクトリ変更統合
 function y() {
-    local tmp cwd
-    tmp="$(mktemp -t "yazi-cwd.XXXXXX")"
-    yazi "$@" --cwd-file="$tmp"
-    if cwd="$(command cat -- "$tmp")" && [[ -n "$cwd" ]] && [[ "$cwd" != "$PWD" ]]; then
-        builtin cd -- "$cwd"
-    fi
-    rm -f -- "$tmp"
+  local tmp cwd
+  tmp="$(mktemp -t "yazi-cwd.XXXXXX")"
+  yazi "$@" --cwd-file="$tmp"
+  if cwd="$(command cat -- "$tmp")" && [[ -n "$cwd" ]] && [[ "$cwd" != "$PWD" ]]; then
+    builtin cd -- "$cwd"
+  fi
+  rm -f -- "$tmp"
 }
+
+difit-current() {
+  local upstream base
+
+  upstream="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/main)"
+  base="$(git merge-base "$upstream" HEAD)" || return
+
+  echo "difit: . $base"
+  difit . "$base" --include-untracked "$@"
+}
+
+alias dip='difit-current'

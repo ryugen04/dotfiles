@@ -77,7 +77,12 @@ local function swapCmdCtrl(event)
   end
 
   -- Cmd+キー → Ctrl+キー に変換
+  -- ただしCmd+Vはペースト（VoiceInk等の音声入力）のためそのまま通す
   if flags["cmd"] and not flags["ctrl"] then
+    if key_char == "v" then
+      return false  -- Cmd+V はmacOSペーストとしてそのまま通す
+    end
+
     local modifier_keys = { "ctrl" }
 
     if flags["shift"] then

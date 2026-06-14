@@ -25,11 +25,11 @@ Establish dotfiles that can configure Codex Careflow on another machine and boot
 - Do not write forbidden local identifiers into the repository. They must come from local env or CI secret as `FORBIDDEN_WORDS`.
 - Existing user or project files are not overwritten unless they contain a dotfiles managed marker or `--force` is explicitly used for user-level symlinks.
 - Existing project files with a dotfiles managed marker are not overwritten when they diverged from the current template unless `--force` is explicitly used.
-- The `careflow` CLI is an explicit prerequisite for enabling Codex hooks. The `codex-careflow` dotfiles package distributes local helper files; it does not install the Careflow runtime.
+- The `agent-careflow` CLI is an explicit prerequisite for enabling Codex hooks. The `codex-careflow` dotfiles package distributes local helper files; it does not install the Careflow runtime.
 
 ## Workflow Enforcement Target
 
-- User-level and project-level Codex hooks delegate lifecycle events to `careflow codex-hook <event>`.
+- User-level and project-level Codex hooks delegate lifecycle events to `agent-careflow hook codex <event>`.
 - Careflow denies unsafe mutation when plan, assignment, active lease, managed worktree, or writable scope evidence is missing.
 - Controller work plans, assigns, verifies, and integrates. Worker assignments perform implementation inside explicit scope.
 - Sango checks are evidence, not authorization. Careflow remains the authorization gate.
@@ -44,7 +44,7 @@ Run all applicable checks before commit, push, or PR:
 4. `./install.sh -n codex-project <fixture-repo>`
 5. `./install.sh -n sango-project <fixture-repo>`
 6. `python3 packages/codex-careflow/.codex-careflow/bin/doctor.py --repo .`
-7. `careflow doctor`
+7. `agent-careflow doctor`
 8. Sango checks for repos that provide `sango.yaml`
 9. Codex CLI read-only critical review
 

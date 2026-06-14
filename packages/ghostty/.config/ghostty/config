@@ -73,7 +73,8 @@ palette = 7=#C7C7C7
 palette = 15=#FEFFFF
 
 # Background opacity
-background-opacity = 1
+background-opacity = 0.7
+background-blur-radius = 2
 
 # ----------------------------------------------------------------------------
 # Shell Integration
@@ -118,41 +119,46 @@ keybind = performable:ctrl+l=goto_split:right
 # ----------------------------------------------------------------------------
 # Split Management
 # ----------------------------------------------------------------------------
-keybind = ctrl+cmd+slash=new_split:right
-keybind = ctrl+cmd+minus=new_split:down
-keybind = ctrl+cmd+q=close_surface
-keybind = ctrl+cmd+e=equalize_splits
+keybind = ctrl+shift+slash=new_split:right
+keybind = ctrl+shift+minus=new_split:down
+keybind = ctrl+shift+q=close_surface
+keybind = ctrl+shift+e=equalize_splits
 
 # ----------------------------------------------------------------------------
 # Tab/Surface Management
 # ----------------------------------------------------------------------------
-keybind = ctrl+cmd+w=close_surface
+keybind = ctrl+shift+w=close_surface
 
 # ----------------------------------------------------------------------------
 # Clipboard
 # ----------------------------------------------------------------------------
 # copy-on-select = clipboard を下記で有効化
-keybind = ctrl+cmd+v=paste_from_clipboard
+keybind = ctrl+shift+v=paste_from_clipboard
 
 # ----------------------------------------------------------------------------
 # Scrolling & Navigation
 # ----------------------------------------------------------------------------
-keybind = ctrl+cmd+up=jump_to_prompt:-1
-keybind = ctrl+cmd+down=jump_to_prompt:1
+keybind = ctrl+shift+up=jump_to_prompt:-1
+keybind = ctrl+shift+down=jump_to_prompt:1
 
 # ----------------------------------------------------------------------------
 # Font Size
 # ----------------------------------------------------------------------------
-keybind = ctrl+cmd+equal=increase_font_size:1
-keybind = ctrl+cmd+semicolon=decrease_font_size:1
-keybind = ctrl+cmd+zero=reset_font_size
+keybind = ctrl+shift+equal=increase_font_size:1
+keybind = ctrl+shift+semicolon=decrease_font_size:1
+keybind = ctrl+shift+zero=reset_font_size
 
 # ----------------------------------------------------------------------------
 # Utility
 # ----------------------------------------------------------------------------
-keybind = ctrl+cmd+a=text:\x01
-keybind = ctrl+cmd+p=toggle_quick_terminal
+keybind = ctrl+shift+a=text:\x01
+keybind = ctrl+shift+p=toggle_quick_terminal
 keybind = shift+enter=text:\x0a
+
+# ----------------------------------------------------------------------------
+# Transparency Toggle
+# ----------------------------------------------------------------------------
+keybind = ctrl+shift+o=toggle_background_opacity
 
 # ----------------------------------------------------------------------------
 # Copy on Select (マウス選択で自動コピー)

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux-settings.schema.json",
+  "schemaVersion": 1,
+
+  // kitty風 Leader Key (ctrl+a) + chord 方式
+  // cmuxはchord（配列）形式でLeaderキーを再現可能
+
+  "app": {
+    "commandPaletteSearchesAllSurfaces": true
+  },
+
+  "automation": {
+    "claudeCodeIntegration": true,
+    "socketControlMode": "allowAll"
+  },
+
+  "customCommands": {
+    "trustedDirectories": [
+      "~/dev/projects"
+    ]
+  },
+
+  "browser": {
+    "hostsToOpenInEmbeddedBrowser": [
+      "notion.so",
+      "*.notion.so",
+      "linear.app",
+      "*.linear.app",
+      "github.com",
+      "*.github.com"
+    ],
+    "interceptTerminalOpenCommandInCmuxBrowser": true,
+    "openTerminalLinksInCmuxBrowser": true
+  },
+
+  "shortcuts": {
+    "bindings": {
+      // ============================================================
+      // Leader Key方式 (ctrl+a > key) - kitty互換
+      // ============================================================
+
+      // Surface（タブ相当）操作
+      "newSurface": ["ctrl+a", "t"],
+      "closeTab": ["ctrl+a", "x"],
+      "renameTab": ["ctrl+a", "r"],
+
+      // Surface番号で移動 (ctrl+a > 1-9)
+      "selectSurfaceByNumber": ["ctrl+a", "1"],
+
+      // Surface移動: kittyのctrl+,/. に揃える
+      "prevSurface": "ctrl+,",
+      "nextSurface": "ctrl+.",
+
+      // Workspace操作
+      "closeWorkspace": ["ctrl+a", "shift+x"],
+      "renameWorkspace": ["ctrl+a", "shift+r"],
+      "selectWorkspaceByNumber": ["ctrl+a", "cmd+1"],
+
+      // サイドバー: ctrl+a > b
+      "toggleSidebar": ["ctrl+a", "b"],
+
+      // ブラウザペイン
+      "openBrowser": ["ctrl+a", "shift+l"],
+      "splitBrowserRight": ["ctrl+a", "d"],
+
+      // ============================================================
+      // 直接キー（Leaderなし）
+      // ============================================================
+
+      // コマンドパレット
+      "commandPalette": "cmd+shift+p",
+
+      // Workspace移動
+      "goToWorkspace": "cmd+p",
+
+      // フルスクリーン
+      "toggleFullScreen": "cmd+ctrl+f",
+
+      // ペインズーム（フォーカス中のペインを最大化）
+      "toggleSplitZoom": ["ctrl+a", "z"],
+
+      // 設定
+      "openSettings": "cmd+,",
+      "reloadConfiguration": "cmd+shift+,"
+    },
+    "showModifierHoldHints": true
+  }
+}

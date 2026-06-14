@@ -29,6 +29,7 @@ PATH_MARKERS = tuple(
         ("dev", "/", "projects", "/"),
     )
 )
+LEGACY_HOOK_COMMAND = "careflow " + "codex-hook"
 
 
 def repository_files(repo: Path) -> list[Path]:
@@ -74,6 +75,50 @@ def check_config(repo: Path) -> list[str]:
     return errors
 
 
+def check_cli() -> list[str]:
+    errors: list[str] = []
+    found = shutil.which("agent-careflow")
+    if found is None:
+        errors.append("agent-careflow is not on PATH")
+    else:
+        checks = (
+            [found, "--help"],
+            [found, "hook", "codex", "session-start", "--help"],
+            [found, "hook", "codex", "pre-tool-use", "--help"],
+        )
+        for command in checks:
+            result = subprocess.run(
+                command,
+                check=False,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            if result.returncode != 0:
+                errors.append(f"{' '.join(command)} failed: {result.stderr.strip()}")
+
+    for command in ("careflow", "aidlc", "ai-dlc"):
+        legacy = shutil.which(command)
+        if legacy is not None:
+            errors.append(f"legacy Careflow CLI remains on PATH: {command} -> {legacy}")
+    return errors
+
+
+def check_legacy_hooks(repo: Path) -> list[str]:
+    errors: list[str] = []
+    for relative in (
+        "packages/codex/.codex/hooks.json",
+        "packages/codex/.codex/templates/project-AGENTS.md",
+        "packages/codex/.codex/rules/careflow.rules",
+    ):
+        path = repo / relative
+        if not path.is_file():
+            continue
+        if LEGACY_HOOK_COMMAND in read_text(path):
+            errors.append(f"legacy hook command found in {relative}")
+    return errors
+
+
 def check_path_markers(repo: Path) -> list[str]:
     errors: list[str] = []
     for path in repository_files(repo):
@@ -115,7 +160,7 @@ def check_project_repo(project: Path) -> tuple[list[str], list[str]]:
 
     required = (
         (".codex/AGENTS.md", "dotfiles-managed: codex-careflow-project-v1"),
-        (".codex/hooks.json", "careflow codex-hook"),
+        (".codex/hooks.json", "agent-careflow hook codex"),
         (".codex/rules/careflow.rules", "Codex Careflow"),
         (".aidlc/workspace.yaml", "dotfiles-managed: codex-careflow-workspace-v1"),
     )
@@ -148,6 +193,8 @@ def main() -> int:
     warnings: list[str] = []
     errors.extend(check_required_files(repo))
     errors.extend(check_config(repo))
+    errors.extend(check_cli())
+    errors.extend(check_legacy_hooks(repo))
     errors.extend(check_path_markers(repo))
 
     if args.project_repo:
