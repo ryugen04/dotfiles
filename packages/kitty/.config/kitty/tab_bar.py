@@ -74,9 +74,7 @@ MAX_LENGTH_PATH = 3
 FOLDER_ICON = " "
 BRANCH_ICON = " "
 PR_ICON = " "
-CHECK_ICON = "󰄬 "
-CHECK_FAIL_ICON = "󰅚 "
-SESSION_ICON = " "
+CLOCK_ICON = "󰥔 "
 CODEX_ICON = ""
 CLAUDE_ICON = "󰋦"
 SHELL_ICON = ""
@@ -110,6 +108,7 @@ result_queue: queue.Queue[tuple[str, RepoStatus]] = queue.Queue()
 tab_snapshots: list["TabSnapshot"] = []
 active_index = 0
 timer_id = None
+clock_minute = ""
 
 
 class TabSnapshot:
@@ -145,7 +144,6 @@ class RepoSnapshot:
         self.dirty = bool(cached.get("dirty"))
         self.pr_number = cached.get("pr_number")
         self.pr_state = str(cached.get("pr_state") or "open")
-        self.checks_state = str(cached.get("checks_state") or "")
         self.loading = bool(cached.get("loading"))
 
 
@@ -418,31 +416,21 @@ def _worker(repo: Path, git_dir: Path) -> None:
     dirty = _run(["git", "status", "--porcelain"], repo, timeout=1.5)
     status["dirty"] = bool(dirty)
 
-    pr_raw = _run(["gh", "pr", "view", "--json", "number,state,isDraft"], repo, timeout=2.5)
+    pr_raw = None
+    if branch:
+        pr_raw = _run(["gh", "pr", "view", branch, "--json", "number,state,isDraft"], repo, timeout=2.5)
+        if not pr_raw:
+            pr_raw = _run(["gh", "pr", "list", "--head", branch, "--json", "number,state,isDraft", "--limit", "1"], repo, timeout=2.5)
     if pr_raw:
         try:
-            pr = json.loads(pr_raw)
-            state = str(pr.get("state") or "open").lower()
-            if pr.get("isDraft"):
-                state = "draft"
-            status["pr_number"] = pr.get("number")
-            status["pr_state"] = state
-        except Exception:
-            status["error_at"] = time.time()
-
-    checks_raw = _run(["gh", "pr", "checks", "--json", "bucket,state"], repo, timeout=2.5)
-    if checks_raw:
-        try:
-            rows = json.loads(checks_raw)
-            buckets = [str(row.get("bucket") or row.get("state") or "").lower() for row in rows if isinstance(row, dict)]
-            if any(x == "fail" for x in buckets):
-                status["checks_state"] = "fail"
-            elif any(x == "pending" for x in buckets):
-                status["checks_state"] = "pending"
-            elif buckets and all(x in {"pass", "skipping"} for x in buckets):
-                status["checks_state"] = "pass"
-            elif any(x == "cancel" for x in buckets):
-                status["checks_state"] = "cancel"
+            parsed = json.loads(pr_raw)
+            pr = parsed[0] if isinstance(parsed, list) and parsed else parsed
+            if isinstance(pr, dict):
+                state = str(pr.get("state") or "open").lower()
+                if pr.get("isDraft"):
+                    state = "draft"
+                status["pr_number"] = pr.get("number")
+                status["pr_state"] = state
         except Exception:
             status["error_at"] = time.time()
 
@@ -499,14 +487,10 @@ def _right_cells(repo: RepoSnapshot | None, active: TabSnapshot | None) -> list[
         dirty = f" {DIRTY_ICON}" if repo.dirty else ""
         cells.append(Cell(BRANCH_ICON, f"{repo.branch}{dirty}", color=RIGHT_COLOR))
         if repo.pr_number:
-            cells.append(Cell(PR_ICON, f"#{repo.pr_number} {repo.pr_state}", color=RIGHT_COLOR))
+            cells.append(Cell(PR_ICON, f"#{repo.pr_number}", color=RIGHT_COLOR))
         elif repo.loading:
             cells.append(Cell(PR_ICON, LOADING_ICON, color=RIGHT_COLOR))
-        if repo.checks_state:
-            ok = repo.checks_state in {"pass", "success", "passing"}
-            cells.append(Cell(CHECK_ICON if ok else CHECK_FAIL_ICON, repo.checks_state, color=OK_COLOR if ok else ERR_COLOR))
-    if active is not None and active.session_name:
-        cells.append(Cell(SESSION_ICON, active.session_name, color=DIM_COLOR))
+    cells.append(Cell(CLOCK_ICON, time.strftime("%H:%M"), color=DIM_COLOR))
     return cells
 
 
@@ -616,7 +600,12 @@ def _drain_results() -> bool:
 
 
 def redraw_tab_bar(_: float) -> None:
+    global clock_minute
     changed = _drain_results()
+    minute = time.strftime("%H:%M")
+    if minute != clock_minute:
+        clock_minute = minute
+        changed = True
     boss = get_boss()
     tm = boss.active_tab_manager if boss is not None else None
     if changed and tm is not None:
