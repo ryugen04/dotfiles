@@ -28,41 +28,40 @@ Rules:
 - Record `slug`, `branch`, and `pr` in `CASE.yaml` or `PLAN.md` once they exist.
 - If one case needs multiple PRs, keep the case slug stable and suffix the branch slug with the delivery slice, such as `codex/<slug>-docs`.
 
-## Lane A: Claude Available
+## Kitty Lane
 
-Use this when Claude can act as external planner or replanner.
+Use this as the default fast lane. It is kitty-only and does not use cmux.
 
-1. Controller creates or selects a case.
-2. Claude drafts or repairs `PLAN_FILE`.
-3. Controller validates and locks the plan.
-4. Controller issues one or more orders.
-5. Claude sends agmsg to Codex with:
-   - fixed handoff header
-   - one-line objective
-   - paths for PLAN, ORDER, RESULT, Evidence, and optional patch artifact
-   - escalation trigger
-6. Codex executes from ORDER.
-7. Codex writes RESULT and Evidence.
-8. Controller validates and closes, or escalates.
+1. Controller creates or selects a case and order.
+2. Controller starts a kitty careflow tab:
+   - `careflow-kitty-start --case <case_id> --order <order_id> --controller claude --worker codex`
+   - Use `--controller codex` for a Codex-led plan lane.
+3. Left pane controller writes or repairs `PLAN_FILE`, validates it, and issues `ORDER_FILE`.
+4. When the user says go, controller sends the fixed handoff to the right pane:
+   - `careflow-kitty-go --case <case_id> --order <order_id>`
+5. Right pane worker executes from ORDER and writes RESULT.
+6. Worker escalates blockers left through agmsg:
+   - `careflow-escalate-left --case <case_id> --order <order_id> --blocker "<one sentence>" --decision-needed "<one sentence>"`
+7. Controller reads the agmsg, decides, updates PLAN/ORDER, and re-runs `careflow-kitty-go` when work can continue.
+8. Controller validates RESULT/Evidence and closes, or escalates.
 
-## Lane B: Claude Unavailable
+## Kitty Command Contract
 
-Use this when Claude is absent or should not be used.
+The kitty lane relies on saved window ids, not pane-title guessing:
 
-1. Split kitty into left and right panes.
-2. Left pane is controller/planner:
-   - owns case intake
-   - writes or revises PLAN
-   - issues ORDER
-   - validates RESULT and Evidence
-   - sends escalation decisions
-3. Right pane is worker:
-   - receives the fixed handoff header
-   - reads PLAN and ORDER
-   - edits directly only when the normal edit path is available
-   - otherwise proposes a patch
-   - writes RESULT
-4. Left pane applies patches, verifies, and closes.
+```text
+.careflow/cases/<case_id>/kitty/session.env
+```
+
+Required commands:
+
+- `agmsg`: file-backed message store.
+- `careflow-handoff`: prints the fixed handoff header.
+- `careflow-kitty-start`: opens controller/worker kitty panes and records ids.
+- `careflow-kitty-go`: sends the handoff to the worker pane and records an agmsg.
+- `careflow-escalate-left`: records an escalation agmsg and sends a notification to the controller pane.
+
+If kitty remote control is unavailable, use `careflow-handoff` and `agmsg` manually, then record the blocker in RESULT or Incident.
 
 ## Patch-Proposer Mode
 

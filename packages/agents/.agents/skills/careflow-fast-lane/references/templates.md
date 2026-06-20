@@ -18,6 +18,39 @@ branch: codex/local-careflow-fast-lane
 pr: https://github.com/<owner>/<repo>/pull/<number>
 ```
 
+## Kitty Start
+
+```bash
+careflow-kitty-start \
+  --case ACF-<slug> \
+  --order ORD-001 \
+  --controller claude \
+  --worker codex
+```
+
+Use `--controller codex` when Codex should own planning.
+
+## Kitty Go
+
+```bash
+careflow-kitty-go \
+  --case ACF-<slug> \
+  --order ORD-001 \
+  --objective "Implement the approved ORDER and write RESULT."
+```
+
+## Worker Escalation
+
+```bash
+careflow-escalate-left \
+  --case ACF-<slug> \
+  --order ORD-001 \
+  --blocker "<one sentence>" \
+  --decision-needed "<one sentence>" \
+  --files "<paths>" \
+  --evidence "<paths>"
+```
+
 ## Agmsg Handoff Message
 
 ```text

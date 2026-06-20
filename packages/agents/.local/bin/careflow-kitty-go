@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  careflow-kitty-go --case CASE --order ORDER [--objective TEXT] [--target codex]
+
+Sends the generated careflow handoff to the saved right-side worker kitty window.
+cmux is not used.
+USAGE
+}
+
+die() {
+  printf 'careflow-kitty-go: %s\n' "$*" >&2
+  exit 1
+}
+
+repo_root() {
+  git rev-parse --show-toplevel 2>/dev/null || pwd
+}
+
+case_id=""
+order_id=""
+objective="Follow PLAN and ORDER, implement the assigned work, and write RESULT."
+target="codex"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --case) case_id="${2:-}"; shift 2 ;;
+    --order) order_id="${2:-}"; shift 2 ;;
+    --objective) objective="${2:-}"; shift 2 ;;
+    --target) target="${2:-}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "unknown argument: $1" ;;
+  esac
+done
+
+[[ -n "$case_id" ]] || die '--case is required'
+[[ -n "$order_id" ]] || die '--order is required'
+
+root="$(repo_root)"
+session="$root/.careflow/cases/$case_id/kitty/session.env"
+[[ -f "$session" ]] || die "kitty session not found: $session"
+# shellcheck disable=SC1090
+. "$session"
+[[ -n "${WORKER_WINDOW_ID:-}" ]] || die 'WORKER_WINDOW_ID missing from session'
+
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+careflow-handoff --case "$case_id" --order "$order_id" --target "$target" --objective "$objective" > "$tmp"
+
+kitty @ send-text --match "id:$WORKER_WINDOW_ID" --stdin --bracketed-paste=enable < "$tmp"
+kitty @ send-text --match "id:$WORKER_WINDOW_ID" '\r'
+
+agmsg send --case "$case_id" --order "$order_id" --to worker --from controller --subject "go: $order_id" --body-file "$tmp" >/dev/null
+printf 'sent_to_worker_window=%s\n' "$WORKER_WINDOW_ID"

@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  careflow-handoff --case CASE --order ORDER [--role implementer] [--target codex] [--objective TEXT]
+
+Prints the fixed careflow handoff header plus the worker instruction block.
+USAGE
+}
+
+die() {
+  printf 'careflow-handoff: %s\n' "$*" >&2
+  exit 1
+}
+
+case_id=""
+order_id=""
+role="implementer"
+target="codex"
+objective="Follow PLAN and ORDER, implement the assigned work, and write RESULT."
+patch_path="none"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --case) case_id="${2:-}"; shift 2 ;;
+    --order) order_id="${2:-}"; shift 2 ;;
+    --role) role="${2:-}"; shift 2 ;;
+    --target) target="${2:-}"; shift 2 ;;
+    --objective) objective="${2:-}"; shift 2 ;;
+    --patch-path) patch_path="${2:-}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "unknown argument: $1" ;;
+  esac
+done
+
+[[ -n "$case_id" ]] || die '--case is required'
+[[ -n "$order_id" ]] || die '--order is required'
+
+plan_file=".careflow/cases/$case_id/PLAN.md"
+order_file=".careflow/cases/$case_id/orders/$order_id.order.md"
+result_file=".careflow/cases/$case_id/results/$order_id.result.md"
+evidence_dir=".careflow/cases/$case_id/evidence/"
+
+cat <<MSG
+PLAN_FILE: $plan_file
+ORDER_FILE: $order_file
+SUBPLAN_FILE: $order_file
+EXPECTED_RESULT_PATH: $result_file
+CASE_ID: $case_id
+ORDER_ID: $order_id
+ASSIGNED_ROLE: $role
+TARGET_TOOL: $target
+
+OBJECTIVE: $objective
+PATCH_PATH: $patch_path
+EVIDENCE_DIR: $evidence_dir
+ESCALATE_IF: plan/order mismatch, forbidden path, repeated verification failure, missing decision
+
+You are the worker/executor in the right kitty pane.
+
+Required behavior:
+- Read PLAN_FILE and ORDER_FILE before changing anything.
+- Treat ORDER_FILE as your subplan and do not redefine scope.
+- Keep edits inside the allowed scope.
+- If direct edits are unavailable, propose a unified diff and wait for controller apply.
+- Write EXPECTED_RESULT_PATH before claiming completion.
+- If blocked, run:
+  careflow-escalate-left --case $case_id --order $order_id --blocker "<one sentence>" --decision-needed "<one sentence>" --files "<paths>" --evidence "<paths>"
+MSG

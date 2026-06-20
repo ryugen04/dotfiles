@@ -20,8 +20,8 @@ Use this when a task should move quickly but still preserve session-external rec
    - `TARGET_TOOL`
 2. Read the assigned PLAN and ORDER. Treat the ORDER as the worker subplan.
 3. Choose the lane:
-   - Claude available: use Claude as planner/replanner and agmsg for path-based handoff.
-   - Claude unavailable: run two Codex sessions in kitty, left as controller and right as worker.
+   - Kitty lane: run Claude or Codex on the left as controller/planner, and Codex or Claude on the right as worker/executor.
+   - Fallback lane: if kitty remote control is unavailable, use the same handoff text and agmsg files manually.
 4. Preserve durable records:
    - PLAN stores objective, scope, acceptance criteria, escalation triggers, verification, and rollback.
    - ORDER stores the assigned role, scope, and expected result path.
@@ -51,19 +51,28 @@ ASSIGNED_ROLE: <researcher|implementer|verifier|reviewer|incident-commander>
 TARGET_TOOL: <codex|claude|cursor>
 ```
 
-## Claude And Agmsg Lane
+## Kitty Controller/Worker Lane
 
-1. Claude drafts or repairs `PLAN_FILE`.
-2. Controller locks the plan and issues `ORDER_FILE`.
-3. Claude sends an agmsg message containing the fixed handoff header and file paths only.
-4. Codex reads the files, executes, and writes `EXPECTED_RESULT_PATH`.
-5. If blocked, Codex writes an incident or blocker note and sends agmsg back to Claude with the exact decision needed.
+This is the preferred lane. It does not use cmux.
 
-## Dual Codex Kitty Lane
+1. Start a kitty-only case tab:
+   - `careflow-kitty-start --case <case_id> --order <order_id> --controller claude --worker codex`
+   - Use `--controller codex` when Codex should own planning instead of Claude.
+2. Left pane controller writes or revises `PLAN_FILE`, validates it, and issues `ORDER_FILE`.
+3. When the user says go, the controller sends the path-only handoff to the worker:
+   - `careflow-kitty-go --case <case_id> --order <order_id>`
+4. Right pane worker reads PLAN and ORDER, executes only the assigned scope, and writes `EXPECTED_RESULT_PATH`.
+5. If blocked, the worker escalates left through agmsg and kitty:
+   - `careflow-escalate-left --case <case_id> --order <order_id> --blocker "<one sentence>" --decision-needed "<one sentence>"`
+6. Left pane controller reads the agmsg file, decides, updates PLAN/ORDER if needed, and sends a revised handoff.
+7. Left pane verifies RESULT/Evidence and either closes the case or revises PLAN/ORDER.
 
-1. Left pane: controller/planner. Owns PLAN, ORDER, scope, evidence policy, escalation, and close validation.
-2. Right pane: worker. Reads the handoff header and ORDER, performs implementation or patch proposal, writes RESULT.
-3. Left pane verifies RESULT/Evidence and either closes the case or revises PLAN/ORDER.
+## File-Backed Agmsg
+
+- `agmsg send` records messages under `.careflow/cases/<case_id>/messages/` when the case exists.
+- `agmsg list --case <case_id> --to controller` shows worker escalations.
+- `agmsg read --case <case_id>` reads the latest message.
+- agmsg stores paths and decisions; it does not replace PLAN, ORDER, RESULT, Evidence, or Incident artifacts.
 
 ## References
 
