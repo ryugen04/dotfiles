@@ -1,13 +1,27 @@
 # dotfiles-managed: codex-careflow-workspace-v1
 version: 1
 workspace_key: portable-project
-kind: monorepo
+kind: auto
 repos:
   root:
     path: "."
 worktrees:
   strategy: aidlc-managed
   monorepo_pattern: ".worktrees/{branch_slug}"
+  polyrepo_pattern: ".worktrees/{branch_slug}/{repo_name}"
+careflow:
+  # Store case/order/result/evidence once per workspace. Repo and worktree roots
+  # should point their .careflow path at this store instead of copying it.
+  store: ".careflow"
+  link_strategy: workspace-shared
+  case_store: "cases"
+  active_state:
+    # The case store is shared, but active_case/active_order must be scoped so
+    # concurrent worktrees do not overwrite each other's current pointer.
+    scope: worktree
+    worktrees_dir: "active/worktrees"
+    sessions_dir: "active/sessions"
+    legacy_state_file: "state.json"
 local:
   output_dir: ".aidlc/local"
 policy:

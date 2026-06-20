@@ -21,9 +21,10 @@ Codex CLIを使って実装タスクを実行する専門エージェント。
 ## 実行フロー
 
 1. **環境確認**: AGENTS.md と config.toml の存在確認
-2. **Plan取得**: 指定されたplanファイルまたは最新のplanを読み込む
-3. **Codex CLI実行**: planを入力としてCodex CLIを起動
-4. **結果報告**: 実行結果をサマリとして報告
+2. **Careflow確認**: `.careflow` の PLAN/ORDER/EXPECTED_RESULT を確認
+3. **Plan取得**: ORDER_FILE を subplan とし、PLAN_FILE も読み込む
+4. **Codex CLI実行**: careflow handoff header と ORDER を入力としてCodex CLIを起動
+5. **結果報告**: EXPECTED_RESULT_PATH と evidence を確認して報告
 
 ## 0. 環境確認
 
@@ -46,17 +47,30 @@ ls -la .codex/config.toml 2>/dev/null
 cat .codex/config.toml 2>/dev/null | grep -A5 "\[profiles"
 ```
 
-## 1. Plan取得
-
-### 最新のPlanを使用
+### Careflow確認
 
 ```bash
-# 最新のplanファイルを特定
-PLAN_FILE=$(ls -t ~/.claude/plans/*.md | head -1)
+agent-careflow workspace
+agent-careflow order status --case "$CASE_ID" --order "$ORDER_ID"
+```
+
+careflow context がない場合は、実装に入らず Claude メインへ戻して Case/PLAN/ORDER 作成を依頼する。
+
+## 1. Plan取得
+
+### Careflow ORDER を使用
+
+```bash
+# ORDER_FILE が委託先の subplan
+test -f "$PLAN_FILE"
+test -f "$ORDER_FILE"
+test -n "$EXPECTED_RESULT_PATH"
 
 # 内容を表示（確認用）
 echo "=== Plan: $PLAN_FILE ==="
 head -50 "$PLAN_FILE"
+echo "=== Order: $ORDER_FILE ==="
+head -80 "$ORDER_FILE"
 ```
 
 ### Planの品質確認
@@ -73,22 +87,36 @@ head -50 "$PLAN_FILE"
 
 ```bash
 # 標準実装（推奨）
-cat "$PLAN_FILE" | codex exec --profile implement -
+codex exec --profile implement "$(cat <<PROMPT
+PLAN_FILE: $PLAN_FILE
+ORDER_FILE: $ORDER_FILE
+SUBPLAN_FILE: $ORDER_FILE
+EXPECTED_RESULT_PATH: $EXPECTED_RESULT_PATH
+CASE_ID: $CASE_ID
+ORDER_ID: $ORDER_ID
+ASSIGNED_ROLE: implementer
+TARGET_TOOL: codex
+
+ORDER_FILE を subplan として読み、作業後は EXPECTED_RESULT_PATH に結果を書いてください。
+PROMPT
+)"
 
 # 高速実装（軽量タスク向け）
-cat "$PLAN_FILE" | codex exec --profile fast -
+codex exec --profile fast "ORDER_FILE=$ORDER_FILE
+EXPECTED_RESULT_PATH=$EXPECTED_RESULT_PATH
+ORDER_FILE を subplan として読み、作業後は EXPECTED_RESULT_PATH に結果を書いてください。"
 
-# 直接オプション指定
-codex exec --full-auto -m gpt-5.3-codex "$PROMPT"
+# 直接オプション指定（ORDER/RESULT を含める場合のみ）
+codex exec --full-auto -m gpt-5.5 "$PROMPT"
 ```
 
 ### プロファイル一覧
 
 | プロファイル | モデル | sandbox | 用途 |
 |-------------|--------|---------|------|
-| `implement` | gpt-5.3-codex | workspace-write | 標準実装 |
-| `fast` | gpt-5.1-codex-mini | workspace-write | 高速実装 |
-| `review` | gpt-5.3-codex | read-only | レビュー |
+| `implement` | gpt-5.5 | workspace-write | 標準実装 |
+| `fast` | gpt-5.4-mini | workspace-write | 高速実装 |
+| `review` | gpt-5.5 | read-only | レビュー |
 
 ## 3. 結果確認
 
@@ -115,6 +143,11 @@ git diff
 ### 実行したPlan
 `{planファイル名}`
 
+### Careflow
+- Case: `{case_id}`
+- Order: `{order_id}`
+- Result: `{expected_result_path}`
+
 ### 変更ファイル
 - {ファイル1}: {変更概要}
 - {ファイル2}: {変更概要}
@@ -130,5 +163,6 @@ git diff
 - Codex CLIは数分かかることがある
 - AGENTS.md があると実装精度が大幅に向上
 - `--profile implement` でサンドボックス内安全実行
+- `.careflow` の ORDER/RESULT がない実装委託はしない
 - 複雑なロジックはClaudeで直接実装を推奨
 - 実装後は必ず変更内容を確認すること

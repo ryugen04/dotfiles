@@ -2,15 +2,17 @@
 
 NO IMPLEMENTATION WITHOUT APPROVED PLAN
 NO PLAN WITHOUT WORKFLOW DEFINITION
+NO NON-TRIVIAL PLAN WITHOUT CAREFLOW CASE/ORDER
 
 ## ワークフロー
 
 1. **ドキュメント確認**: プロジェクトのドキュメントディレクトリ（例: `.claude/docs/reference/domain/`）で関連設計書を検索
-2. **Plan策定**: プランファイルを作成（`.claude/plans/YYYYMMDD-{genre}-{name}.md`。テンプレートは `~/.claude/templates/plans/{genre}.md`）
-3. **Workflow定義**: genre に応じたワークフローテンプレート（プロジェクトの `.claude/workflows/` または `~/.claude/templates/plans/` 等）を参照し、## Workflow セクションに記述
-4. **完了基準作成**: 機能要件・技術要件・検証方法・除外事項
-5. **ユーザーレビュー**: ExitPlanMode で承認を得る
-6. **実装開始**: Workflowに沿って実行
+2. **Careflow確認**: 非自明な作業は `.careflow` の Case / PLAN / ORDER / expected RESULT を作成または確認（詳細は `~/.claude/rules/careflow-workspace.md`）
+3. **Plan策定**: 実行正本は `.careflow/cases/<case_id>/PLAN.md`。Claudeローカル草案として `.claude/plans/YYYYMMDD-{genre}-{name}.md` を使ってもよいが、実装前に careflow PLAN/ORDER へ反映する
+4. **Workflow定義**: genre に応じたワークフローテンプレート（プロジェクトの `.claude/workflows/` または `~/.claude/templates/plans/` 等）を参照し、## Workflow セクションに記述
+5. **完了基準作成**: 機能要件・技術要件・検証方法・除外事項・evidence要件
+6. **ユーザーレビュー**: ExitPlanMode で承認を得る
+7. **実装開始**: WorkflowとORDERに沿って実行し、RESULT/Evidenceを `.careflow` に残す
 
 > AI-DLC `docs-then-impl` / `autonomous-impl` モードでは、ExitPlanMode 承認 = impl 承認とみなす。
 > 承認後は commit/push 直前まで中間確認なし。scope を超えた変更が必要になった時のみ自発停止する。
@@ -20,6 +22,7 @@ NO PLAN WITHOUT WORKFLOW DEFINITION
 | 項目 | 内容 |
 |------|------|
 | フロントマター | status, genre, branch, created, updated, learnings |
+| Careflow | case_id, PLAN path, ORDER path, expected RESULT path, required evidence |
 | 機能要件 | 実装すべき振る舞い（Gherkin推奨） |
 | 技術要件 | 変更対象ファイル、影響範囲 |
 | 検証方法 | ビルド確認、テスト実行、UI検証の手順 |
@@ -38,6 +41,11 @@ NO PLAN WITHOUT WORKFLOW DEFINITION
 
 タスク着手前にプロジェクトのドキュメントディレクトリ（例: `.claude/docs/reference/domain/`）を検索。
 サブエージェント委託時は関連ドキュメントのパスを明示的に指定。
+
+## Careflow Handoff（必須）
+
+Codex / Claude subagent / Cursor へ渡す時は、必ず `~/.claude/rules/careflow-workspace.md` の固定ヘッダを使う。
+`ORDER_FILE` が委託先の subplan、`EXPECTED_RESULT_PATH` が完了条件。
 
 ## DoR（着手前チェック）
 
@@ -59,8 +67,9 @@ NO PLAN WITHOUT WORKFLOW DEFINITION
 以下の状態になったら作業を中断し、プランを見直す:
 - 想定外のファイルを3つ以上変更している
 - プランに書いていないスコープに手を出している
+- `.careflow` の expected RESULT path がないまま委託している
 - ビルドエラーをコード削除で回避しようとしている
 
 ---
 
-**最終更新**: 2026-03-20
+**最終更新**: 2026-06-17

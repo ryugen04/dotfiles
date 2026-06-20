@@ -35,7 +35,7 @@ Enable hooks with:
 
 ```toml
 [features]
-codex_hooks = true
+hooks = true
 ```
 
 Hook sources can be:

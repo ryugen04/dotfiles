@@ -10,8 +10,13 @@ ports:
   range: [3000, 9999]
 
 worktree:
+  base_dir: .worktrees
   default_branch: main
   auto_setup: true
+  # Do not include or copy .careflow into worktrees. Careflow case data is a
+  # shared workspace store; each repo/worktree root should symlink .careflow to
+  # that store via `install.sh codex-project <path>` or agent-careflow workspace
+  # setup.
   include:
     root: []
 

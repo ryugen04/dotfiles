@@ -1,6 +1,7 @@
 # 知見キャプチャルール（絶対遵守）
 
 NO PROCEEDING TO NEXT TASK WITHOUT DOCUMENTING ERRORS AND LEARNINGS
+NO CROSS-AGENT LEARNING WITHOUT CAREFLOW EVIDENCE
 
 ## 目的
 
@@ -39,13 +40,15 @@ run_in_background: true
 | 知見の種類 | 記録先 | 例 |
 |-----------|--------|-----|
 | **再発防止ルール** | `.claude/rules/{topic}.md` | 破壊的操作禁止、ビルドエラー対処 |
+| **作業証跡・検証ログ** | `.careflow/cases/<case_id>/evidence/` | コマンド結果、調査ソース、失敗ログ |
+| **委託結果** | `.careflow/cases/<case_id>/results/<order_id>.result.md` | Codex/Claude subagent結果 |
 | **ワークフロー手順** | `.claude/docs/guides/workflows/` | Git操作、DB調査手順 |
 | **プロジェクト固有知見** | `MEMORY.md` | エージェント使い分け、命名規則 |
 | **ドメイン知識** | `.claude/docs/reference/domain/` | ビジネスロジック仕様・業務フロー |
 | **サービス障害の対処手順** | `sango.yaml` の該当サービス `runbook:` | 起動エラー、通信エラー、認証エラー |
 | **環境チェック項目** | `sango.yaml` の `doctor.checks` | 新しい依存ツール、Docker設定 |
-| **セッション内知見** | `.claude/work/learnings/` | 調査中間成果物、試行錯誤ログ |
-| **一時的メモ** | `.claude/work/` | 調査中間成果物 |
+| **セッション内知見** | `.careflow/cases/<case_id>/learnings/` または `.claude/work/learnings/` | `.careflow` を正本、`.claude/work` は一時 |
+| **一時的メモ** | `.claude/work/` | 調査中間成果物。最終証跡は `.careflow` に転記 |
 
 ### 3. 記録フォーマット
 
@@ -79,6 +82,8 @@ run_in_background: true
 | タスク完了前に詰まった | **並行して**記録エージェント起動 |
 | タスク完了時に振り返り | 未記録の知見がないか確認 |
 | セッション終了時 | MEMORY.md に要点を追記 |
+
+非自明な作業では、完了前に `EXPECTED_RESULT_PATH` と `.careflow/cases/<case_id>/evidence/` を確認する。
 
 ## 既存ルールへのマージ
 
@@ -122,8 +127,9 @@ run_in_background: true
 
 - エラーが発生したのに記録エージェントを起動していない
 - 2回以上リトライしたのに知見を記録していない
+- `.careflow` の evidence に検証ログが残っていない
 - セッション終了間際で知見が未永続化
 
 ---
 
-**最終更新**: 2026-05-01
+**最終更新**: 2026-06-17

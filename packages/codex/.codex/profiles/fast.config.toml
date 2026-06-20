@@ -1,0 +1,7 @@
+# Codex profile: fast
+# 軽量タスク (CRUD、テスト追加、リネーム) 向け。gpt-5.4-mini を使用。
+# 注: gpt-5.1-codex-mini は ChatGPT sign-in で deprecated のため不使用。
+# 詳細: ~/.claude/rules/delegation.md「モデル選択ガイド」
+model = "gpt-5.4-mini"
+approval_policy = "never"
+sandbox_mode = "workspace-write"

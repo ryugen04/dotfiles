@@ -3,6 +3,7 @@
 
 NO PLAN PRESENTATION WITHOUT CODEX CLI REVIEW
 NO CHECKPOINT COMPLETION WITHOUT DUAL REVIEW
+NO REVIEW RESULT OUTSIDE CAREFLOW FOR NON-TRIVIAL WORK
 
 ## Plan 提示前のレビュー
 
@@ -10,10 +11,12 @@ NO CHECKPOINT COMPLETION WITHOUT DUAL REVIEW
 
 ```
 手順:
-1. プランファイルを `.claude/plans/` に書き出す
-2. codex-implementer エージェントにプランのレビューを依頼
-3. レビュー指摘を反映
-4. ExitPlanMode を呼ぶ
+1. `.careflow` の Case / PLAN / ORDER / expected RESULT を確認
+2. プラン草案が `.claude/plans/` にある場合は `.careflow/cases/<case_id>/PLAN.md` に反映
+3. codex-reviewer エージェントにプランのレビューを依頼
+4. レビュー結果を `.careflow/cases/<case_id>/results/` または `reviews/` に保存
+5. レビュー指摘を反映
+6. ExitPlanMode を呼ぶ
 ```
 
 ### レビュー観点（Plan）
@@ -55,8 +58,9 @@ Task → general-purpose agent
   観点: 品質・網羅性
 
 # Step 2: Codex CLI レビュー
-Task → codex-implementer agent（/codex:review相当）
+Task → codex-reviewer agent（/codex:review相当）
   入力: レポートMDファイルのパス + 参照先コードファイル群
+  出力: .careflow/cases/<case_id>/results/ または reviews/
   観点: 技術的正確性
 ```
 
@@ -74,9 +78,10 @@ Task → codex-implementer agent（/codex:review相当）
 レビューなしで提示した場合:
 1. 作業を中断
 2. レビューを実施
-3. 指摘を反映してから再提示
+3. レビュー結果を `.careflow` に保存
+4. 指摘を反映してから再提示
 
 ---
 
-**最終更新**: 2026-03-24
-**背景**: 調査レポートの品質・正確性を担保するため、デュアルレビューを必須化
+**最終更新**: 2026-06-17
+**背景**: 調査レポートの品質・正確性を担保するため、デュアルレビューを必須化。Cursor 解約に伴い Plan レビュー委託先を `codex-reviewer` (read-only) に変更し、レビュー証跡を `.careflow` に集約。

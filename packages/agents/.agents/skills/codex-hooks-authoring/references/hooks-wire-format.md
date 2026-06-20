@@ -44,7 +44,7 @@ Inline TOML shape:
 
 ```toml
 [features]
-codex_hooks = true
+hooks = true
 
 [[hooks.PreToolUse]]
 matcher = "^Bash$"

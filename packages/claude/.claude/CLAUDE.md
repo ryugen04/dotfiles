@@ -11,16 +11,25 @@
 - mcp.json トークン直接記載禁止（1Password CLI使用）
 - ログに絵文字禁止
 - 過度なエラーハンドリング・フォールバック禁止
+- 非自明な実装・レビュー・調査・agent委託は `.careflow` の Case/Plan/Order/Result/Evidence を正本にする → ~/.claude/rules/careflow-workspace.md
 - コードレビューは Codex CLI と Claude Code CLI を**必ずサブエージェント並列**で起動（メインは統合のみ） → ~/.claude/rules/code-review.md
+- **パッケージインストール禁止**（pip/npm/brew/cargo 等、ユーザー明示承認必須） → ~/.claude/rules/no-install-without-approval.md
+- 月 $40 固定費・fastMode 常時 ON 禁止 → ~/.claude/rules/budget-management.md
 
 ## 責務分担
 Claude Code = オーケストレーター（対話/判断/Plan/軽微修正1-2ファイル）。
 大規模操作はサブエージェントに委託。メインコンテキストを汚染しない。
+実装委託の第一選択は **Codex CLI (`codex-implementer`)**。並列クロスチェックには `codex-reviewer` を併用。
 → 詳細: ~/.claude/rules/delegation.md
 → コードレビュー: ~/.claude/rules/code-review.md
 
 ## グローバルルール一覧
 以下は `~/.claude/rules/` 配下の全プロジェクトで自動適用されるルール:
 - code-review.md, delegation.md (既存)
-- build-error-handling.md, plan-driven-workflow.md, document-review.md, investigation-report-format.md, knowledge-capture.md (Phase 2 で追加)
+- build-error-handling.md, plan-driven-workflow.md, investigation-report-format.md, knowledge-capture.md (Phase 2 で追加)
+- document-review.md (Phase 2 で追加、2026-06-12 更新: Plan レビュー委託先を codex-reviewer に変更)
 - proposal-and-blog-writing.md (2026-04-25 追加: プロポーザル/ブログ執筆の一次情報・採択ノウハウ準拠ルール)
+- no-install-without-approval.md (2026-06-09 追加: サプライチェーン攻撃対策、パッケージインストール禁止)
+- budget-management.md (2026-06-12 追加: 月固定費 $40、/fast 手動運用)
+- codex-config-pitfalls.md (2026-06-12 追加: install.sh codex / Codex CLI profile / ChatGPT モデル制限の3つの落とし穴)
+- careflow-workspace.md (2026-06-17 追加: `.careflow` を cross-agent 実行の配置・連携・証跡正本にする)

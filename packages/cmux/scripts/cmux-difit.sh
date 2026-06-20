@@ -103,11 +103,57 @@ cleanup() {
 trap cleanup EXIT
 
 # cmuxブラウザで開く
+# - 既にフォーカス外のペインがあり、そこにブラウザサーフェスがあれば navigate（増殖しない）
+# - フォーカス外ペインがあるがブラウザ無しなら、そのペインに新規ブラウザタブを追加
+# - フォーカス外ペインが無ければ右に新規分割
+DIFIT_URL="http://localhost:${BRIDGE_PORT}/"
 if [[ -x "$CMUX" ]]; then
-  "$CMUX" browser open-split "http://localhost:${BRIDGE_PORT}/" 2>/dev/null || \
-    echo "Open in browser: http://localhost:${BRIDGE_PORT}"
+  TARGET_PANE="$(
+    "$CMUX" list-panes 2>/dev/null | awk '
+      /\[focused\]/ { next }
+      {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^pane:[0-9]+$/) { print $i; exit }
+        }
+      }
+    '
+  )"
+
+  opened=""
+  if [[ -n "$TARGET_PANE" ]]; then
+    # ターゲットペインの中にブラウザサーフェスがあるか探す
+    BROWSER_SURFACE="$(
+      "$CMUX" list-pane-surfaces --pane "$TARGET_PANE" 2>/dev/null \
+        | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^surface:[0-9]+$/) print $i }' \
+        | while read -r s; do
+            if "$CMUX" browser identify --surface "$s" > /dev/null 2>&1; then
+              echo "$s"
+              break
+            fi
+          done
+    )"
+
+    if [[ -n "$BROWSER_SURFACE" ]]; then
+      if "$CMUX" browser navigate "$DIFIT_URL" --surface "$BROWSER_SURFACE" > /dev/null 2>&1; then
+        echo "OK url=$DIFIT_URL surface=$BROWSER_SURFACE placement=navigate"
+        opened=1
+      fi
+    fi
+
+    if [[ -z "$opened" ]]; then
+      if "$CMUX" new-surface --type browser --pane "$TARGET_PANE" --url "$DIFIT_URL" > /dev/null 2>&1; then
+        echo "OK url=$DIFIT_URL pane=$TARGET_PANE placement=tab"
+        opened=1
+      fi
+    fi
+  fi
+
+  if [[ -z "$opened" ]]; then
+    "$CMUX" browser open-split "$DIFIT_URL" 2>/dev/null || \
+      echo "Open in browser: $DIFIT_URL"
+  fi
 else
-  echo "Open in browser: http://localhost:${BRIDGE_PORT}"
+  echo "Open in browser: $DIFIT_URL"
 fi
 
 # サーバーを維持

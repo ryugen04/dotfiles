@@ -1,0 +1,7 @@
+# Codex profile: implement
+# 中〜大タスク (ロジック実装、設計変更) 向け。gpt-5.5 を使用。
+# 注: gpt-5.3-codex は ChatGPT sign-in で deprecated のため不使用。
+# 詳細: ~/.claude/rules/delegation.md「モデル選択ガイド」
+model = "gpt-5.5"
+approval_policy = "never"
+sandbox_mode = "workspace-write"

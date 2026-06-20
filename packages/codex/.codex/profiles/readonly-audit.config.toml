@@ -1,0 +1,5 @@
+# Codex profile: readonly-audit
+# 監査用 (read-only)。reasoning effort = medium。
+model_reasoning_effort = "medium"
+approval_policy = "never"
+sandbox_mode = "read-only"
