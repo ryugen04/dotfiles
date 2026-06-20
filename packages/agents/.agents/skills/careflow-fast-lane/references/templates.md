@@ -1,5 +1,23 @@
 # Fast Lane Templates
 
+## Case And Branch Naming
+
+```yaml
+slug: <short-kebab-case-objective>
+case_id: ACF-<slug>
+branch: codex/<slug>
+pr: <url or pending>
+```
+
+Example:
+
+```yaml
+slug: local-careflow-fast-lane
+case_id: ACF-local-careflow-fast-lane
+branch: codex/local-careflow-fast-lane
+pr: https://github.com/<owner>/<repo>/pull/<number>
+```
+
 ## Agmsg Handoff Message
 
 ```text

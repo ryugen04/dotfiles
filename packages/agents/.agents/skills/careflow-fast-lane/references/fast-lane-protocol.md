@@ -8,6 +8,26 @@
 - The controller does not close from memory.
 - A skeleton result is not completion evidence.
 
+## Naming And Traceability
+
+Use one canonical slug across the case, branch, and PR, then derive each surface from it.
+
+```text
+slug: <short-kebab-case-objective>
+CASE_ID: ACF-<slug>
+branch: codex/<slug>
+PR title: [codex] <human-readable title>
+```
+
+Rules:
+
+- Keep the slug short enough to scan in paths, branch lists, and PR heads.
+- Prefer the work objective over process words: use `local-careflow-fast-lane`, not `configure-local-codex-environment-and-pr`.
+- Keep `ACF-` on `CASE_ID` for careflow artifact namespacing and current CLI compatibility.
+- Do not put `ACF-` in git branch names or PR titles; those surfaces already have their own namespace.
+- Record `slug`, `branch`, and `pr` in `CASE.yaml` or `PLAN.md` once they exist.
+- If one case needs multiple PRs, keep the case slug stable and suffix the branch slug with the delivery slice, such as `codex/<slug>-docs`.
+
 ## Lane A: Claude Available
 
 Use this when Claude can act as external planner or replanner.
