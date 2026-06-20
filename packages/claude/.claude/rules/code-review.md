@@ -2,6 +2,7 @@
 
 NO SINGLE-AGENT CODE REVIEW
 NO MAIN-CONTEXT REVIEW BODY
+NO REVIEW CYCLE WITHOUT CAREFLOW RESULT/EVIDENCE
 
 ## 原則
 
@@ -15,17 +16,20 @@ NO MAIN-CONTEXT REVIEW BODY
 ## 起動手順
 
 1. 対象差分を確定する（`git status --short` / `git diff --stat` でスコープ把握のみ）
-2. Agent tool で 2 エージェントを **同一メッセージ内で並列起動**する
+2. `.careflow` の Case / ORDER / expected RESULT を確認する
+3. Agent tool で 2 エージェントを **同一メッセージ内で並列起動**する
    - 片方だけ先に起動してはならない（メインコンテキスト圧迫と直列化の原因）
-3. 両エージェントに渡す情報:
+4. 両エージェントに渡す情報:
+   - `~/.claude/rules/careflow-workspace.md` の固定handoff header
    - 対象リポジトリの絶対パス
    - 変更ファイル一覧（追加/修正両方）
    - 差分取得手順（`git -C <path> diff <paths>`）
    - タスク背景（Linear 番号、FF 構成、関連ドキュメント等）
    - レビュー観点（バグ / 型 / 設計 / テスト網羅 / 命名 / 既存パターン整合）
    - 出力形式（重要度ラベル + ファイル:行番号。実装提案は任意、指摘が主）
-4. 両方の結果を待ち、統合レポートをメインで作成してユーザーに提示
-5. 対応方針（修正する / 無視する / 保留）はユーザーと合意してから Edit を開始する
+   - 出力先（`.careflow/cases/<case_id>/results/` または `reviews/`、証跡は `evidence/`）
+5. 両方の結果を待ち、統合レポートをメインで作成してユーザーに提示
+6. 対応方針（修正する / 無視する / 保留）はユーザーと合意してから Edit を開始する
 
 ## 禁止事項
 
@@ -101,6 +105,7 @@ NO MAIN-CONTEXT REVIEW BODY
 - 残存 Critical/Major 件数
 - 新規検出指摘
 - 次アクション（修正対象 or 終了）
+- `.careflow` の result/review/evidence path
 
 最終報告には必ず「前回指摘の解消状況」と「現在の総合判定」を含める。
 
@@ -133,8 +138,9 @@ NO MAIN-CONTEXT REVIEW BODY
 - Agent tool を 1 回しか呼んでいない（片肺）
 - レビュー結果を確認せずに Edit を始めている
 - 並列ではなく直列で 2 回呼び出している
+- `.careflow` にレビュー結果・証跡を残していない
 
 ---
 
-**最終更新**: 2026-04-16
-**背景**: コードレビューの一貫した 2 視点化（Codex CLI + Claude Code CLI）をユーザー指示により定常化
+**最終更新**: 2026-06-17
+**背景**: コードレビューの一貫した 2 視点化（Codex CLI + Claude Code CLI）をユーザー指示により定常化し、結果と証跡を `.careflow` に集約。

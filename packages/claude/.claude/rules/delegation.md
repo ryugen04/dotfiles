@@ -83,7 +83,18 @@
 - 省略禁止: 「他にも...」「など」で逃げない
 - 私見禁止: 推測・提案は書かない、事実のみ
 - 具体性: 必ず引用元（ファイル:行番号 or URL）を付ける
-- 出力先: `.claude/work/` 配下に書き出させる
+- 出力先: 非自明な作業・cross-agent作業は `.careflow/cases/<case_id>/results/` と `evidence/` を正本にする。`.claude/work/` は一時メモのみ
+- 委託ヘッダ: `~/.claude/rules/careflow-workspace.md` の `PLAN_FILE` / `ORDER_FILE` / `EXPECTED_RESULT_PATH` 固定ヘッダを説明文より前に置く
+
+### Careflow 委託ルール
+
+| 委託先 | 必須入力 | 必須出力 |
+|---|---|---|
+| Codex CLI | PLAN_FILE, ORDER_FILE, EXPECTED_RESULT_PATH | RESULT file, evidence |
+| Claude subagent | ORDER_FILE as subplan | RESULT file or review/evidence |
+| Reviewer | PLAN/ORDER plus target diff | review result under `.careflow` |
+
+chat要約だけで委託しない。ORDERがない場合は委託前に作成する。
 
 ## Git 操作
 
@@ -103,4 +114,4 @@
 
 ---
 
-**最終更新**: 2026-06-12
+**最終更新**: 2026-06-17

@@ -7,6 +7,7 @@ allowed-tools: Bash, Read, Write, Glob, Grep
 # /codex:implement - Codex CLI 実装委託
 
 planファイルを読み込み、Codex CLIに実装を委託します。
+非自明な実装では `.careflow` の ORDER を正本にし、Codexには固定handoff headerを渡します。
 
 ## 引数
 
@@ -28,16 +29,17 @@ planファイルを読み込み、Codex CLIに実装を委託します。
 ```bash
 # 計画ファイルの存在確認
 ls -la $PLAN
+agent-careflow workspace
 ```
 
-planファイルを読み込み、実装タスクを把握。
+planファイルを読み込み、実装タスクを把握。`.careflow` context がある場合は `PLAN_FILE` / `ORDER_FILE` / `EXPECTED_RESULT_PATH` を確認。
 
 ### 2. 作業フォルダの準備
 
 ```bash
-# planファイル名からフォルダ名を生成
-PLAN_NAME=$(basename $PLAN .md)
-mkdir -p .claude/work/plans/$PLAN_NAME
+# careflow result/evidence が正本。必要なら一時メモだけ .claude/work に置く
+PLAN_NAME=$(basename "$PLAN" .md)
+mkdir -p .claude/work/plans/"$PLAN_NAME"
 ```
 
 ### 3. Codex CLI で実装実行
@@ -45,6 +47,8 @@ mkdir -p .claude/work/plans/$PLAN_NAME
 ```bash
 codex exec "以下のplanに従って実装してください。
 既存のコードパターンを参照し、一貫性を保ってください。
+careflow context がある場合は ORDER_FILE を subplan として読み、
+EXPECTED_RESULT_PATH に結果を書いてください。
 
 plan: @$PLAN" --full-auto --sandbox network-off
 ```
@@ -62,7 +66,9 @@ pnpm type-check
 ### 5. 結果の保存
 
 実装結果を保存:
-- `.claude/work/plans/{plan-name}/implementation-result.md`
+- 正本: `.careflow/cases/<case_id>/results/<order_id>.result.md`
+- 証跡: `.careflow/cases/<case_id>/evidence/`
+- 一時メモのみ: `.claude/work/plans/{plan-name}/implementation-result.md`
 
 ### 6. 結果の報告
 
@@ -122,6 +128,7 @@ codex exec --profile fast "..." --sandbox network-off
 ## 注意事項
 
 - planファイルが存在しない場合はエラー報告
+- `.careflow` context がある場合は ORDER/RESULT を渡さずに実行しない
 - 必ず `--sandbox network-off` を使用
 - コンパイル確認を必ず実行
 - 失敗時はフォールバックを検討

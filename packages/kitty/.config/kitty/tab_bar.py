@@ -9,7 +9,6 @@ import queue
 import subprocess
 import threading
 import time
-from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -70,6 +69,11 @@ REFRESH_TIME = 1.0
 REPO_TTL = 45.0
 ERROR_TTL = 15.0
 MAX_LENGTH_PATH = 3
+# 中央タブを省略表示する際、タブ名は先頭 NAME_ABBREV 桁までに切り詰める。
+# AI エージェントのマーカー (index + claude/codex アイコン) は icon 側に置くため常に残る。
+NAME_ABBREV = 10
+# cell.draw / cell.length に「クリップ不要」を伝えるための十分大きな値
+FULL_SIZE = 10_000
 
 FOLDER_ICON = " "
 BRANCH_ICON = " "
@@ -106,6 +110,11 @@ in_flight: set[str] = set()
 result_queue: queue.Queue[tuple[str, RepoStatus]] = queue.Queue()
 
 tab_snapshots: list["TabSnapshot"] = []
+# for_layout パスで収集した全タブ。real パスの先頭で tab_snapshots に流し込む。
+layout_snapshots: list["TabSnapshot"] = []
+# 中央タブごとの描画セル範囲 (1-based index -> (start_col, end_col))。
+# kitty のクリック判定 (tab_id_at) 用に draw_tab がこの範囲を返す。
+center_tab_ranges: dict[int, tuple[int, int] | None] = {}
 active_index = 0
 timer_id = None
 clock_minute = ""
@@ -472,8 +481,9 @@ def _repo_snapshot(active: TabSnapshot | None) -> RepoSnapshot | None:
 
 def _tab_cell(snapshot: TabSnapshot) -> Cell:
     color = ACTIVE_TAB if snapshot.is_active else INACTIVE_TAB
-    text = f"{snapshot.marker} {snapshot.name}"
-    return Cell(str(snapshot.index), text, color=color)
+    # index と AI マーカーは icon (常時描画される chip) に入れ、省略対象の name のみ text にする。
+    icon = f"{snapshot.index} {snapshot.marker}"
+    return Cell(icon, snapshot.name, color=color)
 
 
 def _left_cell(active: TabSnapshot) -> Cell:
@@ -494,63 +504,74 @@ def _right_cells(repo: RepoSnapshot | None, active: TabSnapshot | None) -> list[
     return cells
 
 
-class CenterStrategy(Enum):
-    EXPAND_ALL = 0
-    EXPAND_ACTIVE = 1
-    NO_EXPAND = 2
-    SHOW_ACTIVE = 3
-    SHOW_ACTIVE_NO_EXPAND = 4
+def _layout_width(cells: list[Cell], sizes: list[int]) -> int:
+    """sizes に従って中央タブ群を描画したときの総幅 (セパレータ込み) を返す。
+
+    sizes[i] は cell.draw に渡す max_size。負値はそのセルを非表示にする。
+    """
+    total = 0
+    first = True
+    for cell, size in zip(cells, sizes):
+        if size < 0:
+            continue
+        width = cell.length(size)
+        if width <= 0:
+            continue
+        total += width + (0 if first else 1)
+        first = False
+    return total
 
 
-def center_strategy(cells: list[Cell], max_width: int) -> tuple[CenterStrategy, int]:
-    n_cells = len(cells)
-    if n_cells == 0:
-        return CenterStrategy.NO_EXPAND, 0
+def _center_layout(cells: list[Cell], max_width: int) -> tuple[list[int], int]:
+    """中央タブ群の各セルに割り当てる max_size のリストと総幅を返す。
 
-    length = n_cells - 1 + sum(cell.length(max_width) for cell in cells)
-    if length <= max_width:
-        return CenterStrategy.EXPAND_ALL, length
+    優先順位 (= 中央をできる限り表示する戦略):
+      1. 全タブをフル名で表示できるならそうする
+      2. 入らないなら、全タブ一律に name を k 桁 (NAME_ABBREV..1) まで詰めて最大 k で表示
+      3. それでも入らないなら icon のみ (index + AI マーカーは残る)
+      4. 限界ならアクティブタブのみ表示
+    """
+    n = len(cells)
+    if n == 0:
+        return [], 0
 
-    length = n_cells - 1
-    for idx, cell in enumerate(cells):
-        length += cell.length(max_width if idx == active_index else 0)
-    if length <= max_width:
-        return CenterStrategy.EXPAND_ACTIVE, length
+    sizes = [FULL_SIZE] * n
+    total = _layout_width(cells, sizes)
+    if total <= max_width:
+        return sizes, total
 
-    length = n_cells - 1 + sum(cell.length(0) for cell in cells)
-    if length <= max_width:
-        return CenterStrategy.NO_EXPAND, length
+    for k in range(NAME_ABBREV, 0, -1):
+        sizes = [cell.text_length_overhead + k for cell in cells]
+        total = _layout_width(cells, sizes)
+        if total <= max_width:
+            return sizes, total
 
-    length = cells[active_index].length(max_width)
-    if length <= max_width:
-        return CenterStrategy.SHOW_ACTIVE, length
+    sizes = [0] * n
+    total = _layout_width(cells, sizes)
+    if total <= max_width:
+        return sizes, total
 
-    return CenterStrategy.SHOW_ACTIVE_NO_EXPAND, cells[active_index].length(0)
+    sizes = [-1] * n
+    if cells[active_index].length(FULL_SIZE) <= max_width:
+        sizes[active_index] = FULL_SIZE
+        return sizes, cells[active_index].length(FULL_SIZE)
+    sizes[active_index] = 0
+    return sizes, cells[active_index].length(0)
 
 
-def draw_center(screen: Screen, cells: list[Cell], strategy: CenterStrategy, max_width: int) -> None:
-    if not cells:
-        return
-    match strategy:
-        case CenterStrategy.EXPAND_ALL:
-            for idx, cell in enumerate(cells):
-                if idx:
-                    screen.draw(" ")
-                cell.draw(screen, max_width)
-        case CenterStrategy.EXPAND_ACTIVE:
-            for idx, cell in enumerate(cells):
-                if idx:
-                    screen.draw(" ")
-                cell.draw(screen, max_width if idx == active_index else 0)
-        case CenterStrategy.NO_EXPAND:
-            for idx, cell in enumerate(cells):
-                if idx:
-                    screen.draw(" ")
-                cell.draw(screen, 0)
-        case CenterStrategy.SHOW_ACTIVE:
-            cells[active_index].draw(screen, max_width)
-        case CenterStrategy.SHOW_ACTIVE_NO_EXPAND:
-            cells[active_index].draw(screen, 0)
+def _draw_center(screen: Screen, cells: list[Cell], sizes: list[int]) -> None:
+    """中央タブ群を描画しつつ、各タブのセル範囲を center_tab_ranges に記録する。"""
+    first = True
+    for cell, snapshot, size in zip(cells, tab_snapshots, sizes):
+        if size < 0:
+            center_tab_ranges[snapshot.index] = None
+            continue
+        if not first:
+            screen.draw(" ")
+        start = screen.cursor.x
+        cell.draw(screen, size)
+        center_tab_ranges[snapshot.index] = (start, screen.cursor.x)
+        first = False
 
 
 def _cells_width(cells: list[Cell], max_width: int) -> int:
@@ -613,7 +634,6 @@ def redraw_tab_bar(_: float) -> None:
 
 
 def _draw_all(screen: Screen) -> None:
-    global tab_snapshots, active_index
     if not tab_snapshots:
         return
 
@@ -632,7 +652,7 @@ def _draw_all(screen: Screen) -> None:
     right_budget = max(0, screen.columns - max(left_width + 2, screen.columns // 2))
     right_width = min(_cells_width(right_cells, right_budget), right_budget)
     center_max = max(0, screen.columns - left_width - right_width - 4)
-    strategy, center_width = center_strategy(center_cells, center_max)
+    sizes, center_width = _center_layout(center_cells, center_max)
 
     center_start = max(left_width + 1, (screen.columns - center_width) // 2)
     right_start = screen.columns - right_width if right_width else screen.columns
@@ -642,13 +662,11 @@ def _draw_all(screen: Screen) -> None:
     left.draw(screen, left_max)
     if screen.cursor.x < center_start:
         screen.draw(" " * (center_start - screen.cursor.x))
-    draw_center(screen, center_cells, strategy, center_max)
+    _draw_center(screen, center_cells, sizes)
     draw_right(screen, right_cells, max(0, screen.columns - screen.cursor.x - 1))
 
     if screen.cursor.x < screen.columns:
         screen.draw(" " * (screen.columns - screen.cursor.x))
-    tab_snapshots = []
-    active_index = 0
 
 
 def draw_tab(
@@ -661,20 +679,39 @@ def draw_tab(
     is_last: bool,
     extra_data: ExtraData,
 ) -> int:
-    global active_index, tab_snapshots, timer_id
+    global active_index, tab_snapshots, layout_snapshots, center_tab_ranges, timer_id
 
     if timer_id is None:
         timer_id = add_timer(redraw_tab_bar, REFRESH_TIME, True)
+
+    # kitty は update() で「レイアウト計測パス (for_layout=True)」→「実描画パス」の順に
+    # 全タブを 2 周する。レイアウトパスで全 TabSnapshot を集めておき、実描画パスの先頭
+    # (index==1) で全体を 1 度に描画する。これにより各 draw_tab が「そのタブの正しい
+    # セル終端 x」を返せるようになり、kitty のクリック判定 (tab_id_at) が正しく機能する。
+    if getattr(extra_data, "for_layout", False):
+        if index == 1:
+            layout_snapshots = []
+        cwd, exe, oldest_exe = _tab_accessor_snapshot(tab)
+        layout_snapshots.append(TabSnapshot(index, tab, cwd, exe, oldest_exe))
+        return screen.cursor.x
+
     if index == 1:
-        tab_snapshots = []
-        active_index = 0
-
-    cwd, exe, oldest_exe = _tab_accessor_snapshot(tab)
-    snapshot = TabSnapshot(index, tab, cwd, exe, oldest_exe)
-    tab_snapshots.append(snapshot)
-    if tab.is_active:
-        active_index = index - 1
-
-    if is_last:
+        tab_snapshots = list(layout_snapshots)
+        active_index = next((i for i, s in enumerate(tab_snapshots) if s.is_active), 0)
+        center_tab_ranges = {}
         _draw_all(screen)
-    return screen.cursor.x
+
+    # 実描画は index==1 で完了済み。各タブは記録済みのセル範囲の終端 x を返し、
+    # cursor.x をそこへ移すことで kitty に連続したクリック領域を構築させる。
+    rng = center_tab_ranges.get(index)
+    if is_last:
+        # 最終タブは行末まで占有させる。これで kitty の erase_in_line(0) が右側
+        # (git/PR/clock) を消さない。
+        end = screen.columns
+    elif rng is not None:
+        end = rng[1]
+    else:
+        end = screen.cursor.x
+    end = max(screen.cursor.x, min(end, screen.columns))
+    screen.cursor.x = end
+    return end

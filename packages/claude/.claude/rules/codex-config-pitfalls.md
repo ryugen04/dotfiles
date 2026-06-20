@@ -64,9 +64,9 @@ cat ~/.codex/config.toml.bak.<latest-timestamp>
 `codex exec --profile implement` 実行時にエラー:
 ```
 Error loading config.toml: --profile `implement` cannot be used while
-/Users/tatsunori/.codex/config.toml contains legacy `profile = "implement"`
+<home>/.codex/config.toml contains legacy `profile = "implement"`
 or `[profiles.implement]` config; move those settings into
-/Users/tatsunori/.codex/implement.config.toml and remove the legacy
+<home>/.codex/implement.config.toml and remove the legacy
 profile selector/table.
 ```
 

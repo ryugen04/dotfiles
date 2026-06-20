@@ -13,6 +13,7 @@ NO INVESTIGATION REPORT WITHOUT QIITA-STYLE STRUCTURE
 | ファイル種別 | 対象 |
 |-------------|------|
 | 調査レポート | `.claude/work/**/investigation*.md`, `.claude/work/**/article*.md` |
+| Careflow調査証跡 | `.careflow/cases/<case_id>/evidence/`, `.careflow/cases/<case_id>/results/` |
 | コードベース分析 | 大規模な影響範囲調査の成果物 |
 | 設計事前調査 | Design doc の前段資料 |
 | 実装前の影響範囲レポート | PR 前の技術調査ドキュメント |
@@ -22,6 +23,8 @@ NO INVESTIGATION REPORT WITHOUT QIITA-STYLE STRUCTURE
 - Plan ファイル（`.claude/plans/` 配下）
 - 作業途中の中間メモ
 - 特定の1ファイルについての軽い調査
+
+非自明な調査では、最終レポートまたは要約を `.careflow` の result/evidence に保存する。
 
 ## 必須構造
 
@@ -72,5 +75,5 @@ NO INVESTIGATION REPORT WITHOUT QIITA-STYLE STRUCTURE
 
 ---
 
-**最終更新**: 2026-04-14
-**背景**: 調査レポートが「事実の箇条書き」に留まり、後続の設計・実装フェーズで再調査が必要になる問題を防ぐため。
+**最終更新**: 2026-06-17
+**背景**: 調査レポートが「事実の箇条書き」に留まり、後続の設計・実装フェーズで再調査が必要になる問題を防ぐため。非自明な調査証跡は `.careflow` に集約する。
