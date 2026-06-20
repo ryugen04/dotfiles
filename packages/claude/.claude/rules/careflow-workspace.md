@@ -72,6 +72,28 @@ TARGET_TOOL: <codex|claude|cursor>
 
 ORDER が委託先の subplan。chat要約だけで委託しない。
 
+## Fast Lane / agmsg
+
+高速化しても `.careflow` の正本は省略しない。Claude が使える環境では、Claude は Plan 作成・修正・再判断を担当し、Codex には agmsg で path と ID を渡す。
+
+agmsg には長い計画本文を貼らない。最低限以下を送る:
+
+- 固定 Handoff Header
+- 1行 objective
+- PLAN / ORDER / RESULT / Evidence / optional Patch の path
+- Codex から戻すべき escalation trigger
+
+Codex が PLAN/ORDER の欠陥、scope不足、検証の反復失敗、設計判断不足を見つけたら、RESULT または Incident に記録してから agmsg で Claude に戻す。
+
+## Patch-Gated Apply
+
+通常の編集経路が使えない場合、OS の user namespace / AppArmor / bwrap 修復を通常作業の前提にしない。Codex は直接編集者ではなく patch proposer に切り替える。
+
+1. Codex は unified diff を `.careflow/cases/<case_id>/patches/` または RESULT に置く。
+2. controller が `git apply --check` を実行する。
+3. check が通った場合だけ controller が `git apply` する。
+4. check/apply/verification 出力を Evidence に残す。
+
 ## Result / Evidence
 
 - 委託先は `EXPECTED_RESULT_PATH` を書くまで完了扱いしない。
@@ -80,6 +102,7 @@ ORDER が委託先の subplan。chat要約だけで委託しない。
 
 ## Red Flags -- STOP
 
+- 普通の編集のために kernel / AppArmor / bwrap の深い権限修復を要求している
 - `.claude/plans` だけで実装に入ろうとしている
 - Codexにplan本文だけ渡し、ORDER/RESULTを渡していない
 - subagentに「調べて」だけ渡し、expected result pathを渡していない

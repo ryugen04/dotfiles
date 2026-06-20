@@ -1,0 +1,10 @@
+# Codex profile: local-careflow
+# Use on PCs where the OS cannot provide Codex's bubblewrap/user-namespace
+# sandbox. This avoids requiring deep host privilege changes for normal work.
+#
+# Keep this profile interactive and careflow-gated. Workers should prefer the
+# patch-proposer path from the careflow-fast-lane skill when direct edits are
+# unavailable or unsafe.
+model_reasoning_effort = "high"
+approval_policy = "on-request"
+sandbox_mode = "danger-full-access"

@@ -239,6 +239,32 @@ update_managed_block() {
     log_success "Codex config managed block ready: $file"
 }
 
+normalize_codex_local_config() {
+    local file="$1"
+    [[ -f "$file" ]] || return 0
+
+    # Keep machine-local config outside the managed block, but normalize values
+    # rejected by current Codex. Older local configs used guardian_subagent;
+    # Codex 0.139 accepts user or auto_review.
+    if grep -q '^approvals_reviewer = "guardian_subagent"$' "$file"; then
+        if $DRY_RUN; then
+            echo "[DRY-RUN] normalize unsupported approvals_reviewer in $file"
+        else
+            awk '{
+                if ($0 == "approvals_reviewer = \"guardian_subagent\"") {
+                    print "approvals_reviewer = \"auto_review\""
+                } else {
+                    print
+                }
+            }' "$file" > "$file.tmp" && mv "$file.tmp" "$file" || {
+                rm -f "$file.tmp"
+                return 1
+            }
+        fi
+        log_success "Codex local config reviewer normalized: $file"
+    fi
+}
+
 render_careflow_workspace_block() {
     cat <<EOF
 $CAREFLOW_BLOCK_BEGIN
@@ -345,6 +371,7 @@ install_codex() {
         install_symlink "$profile_file" "$TARGET_DIR/.codex/$(basename "$profile_file")" || return 1
     done
     update_managed_block "$TARGET_DIR/.codex/config.toml" || return 1
+    normalize_codex_local_config "$TARGET_DIR/.codex/config.toml" || return 1
     command -v sango >/dev/null 2>&1 || log_warn "sango is not on PATH; Sango evidence checks are unavailable"
 }
 
