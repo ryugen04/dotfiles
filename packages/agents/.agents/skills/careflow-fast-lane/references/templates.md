@@ -20,17 +20,24 @@ pr: https://github.com/<owner>/<repo>/pull/<number>
 
 ## Kitty Start
 
+Run this from the existing controller pane. It records the current pane and does
+not create a worker yet.
+
 ```bash
 careflow-kitty-start \
   --case ACF-<slug> \
   --order ORD-001 \
-  --controller claude \
   --worker codex
 ```
 
-Use `--controller codex` when Codex should own planning.
+Use `--controller codex` or `--controller claude` only when auto-detection would
+be ambiguous.
 
 ## Kitty Go
+
+Run this after PLAN/ORDER approval and explicit go. It reuses a marked right
+worker, starts the worker in an idle right shell, or opens a right split when no
+right pane exists.
 
 ```bash
 careflow-kitty-go \
@@ -86,10 +93,11 @@ PATCH_PATH: .careflow/cases/<case_id>/patches/<order_id>-<slug>.patch or none
 ## Dual Codex Kitty Setup
 
 ```text
-left pane: controller/planner
-right pane: worker/executor
+current pane: controller/planner
+right pane: worker/executor after explicit go
+```
 
-left responsibilities:
+controller responsibilities:
 - create or select case
 - maintain PLAN
 - issue ORDER
@@ -97,13 +105,12 @@ left responsibilities:
 - verify RESULT and Evidence
 - close case
 
-right responsibilities:
+worker responsibilities:
 - read handoff header
 - follow ORDER as subplan
 - implement or propose patch
 - write RESULT
 - stop on scope mismatch
-```
 
 ## Patch Gate Commands
 

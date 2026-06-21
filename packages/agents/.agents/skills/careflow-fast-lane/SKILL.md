@@ -20,7 +20,7 @@ Use this when a task should move quickly but still preserve session-external rec
    - `TARGET_TOOL`
 2. Read the assigned PLAN and ORDER. Treat the ORDER as the worker subplan.
 3. Choose the lane:
-   - Kitty lane: run Claude or Codex on the left as controller/planner, and Codex or Claude on the right as worker/executor.
+   - Kitty lane: the current pane is controller/planner; the right pane is worker/executor after explicit go.
    - Fallback lane: if kitty remote control is unavailable, use the same handoff text and agmsg files manually.
 4. Preserve durable records:
    - PLAN stores objective, scope, acceptance criteria, escalation triggers, verification, and rollback.
@@ -33,7 +33,7 @@ Use this when a task should move quickly but still preserve session-external rec
    - Produce a unified diff as a careflow patch artifact or in RESULT.
    - Require controller `git apply --check` before `git apply`.
    - Do not require OS namespace, setuid, AppArmor, or bubblewrap repair for normal work.
-7. Escalate back to Claude when the worker finds a plan defect, missing scope, repeated verification failure, or unclear product decision.
+7. Escalate back to the controller when the worker finds a plan defect, missing scope, repeated verification failure, or unclear product decision.
 8. Do not mark an order complete from file existence alone. Inspect RESULT content and required Evidence.
 
 ## Required Handoff Header
@@ -55,18 +55,22 @@ TARGET_TOOL: <codex|claude|cursor>
 
 This is the preferred lane. It does not use cmux.
 
-1. Start a kitty-only case tab:
-   - Agent panes are launched through the user's interactive shell, so `.bashrc`/`.zshrc`-style environment setup is loaded.
-   - `careflow-kitty-start --case <case_id> --order <order_id> --controller claude --worker codex`
-   - Use `--controller codex` when Codex should own planning instead of Claude.
-2. Left pane controller writes or revises `PLAN_FILE`, validates it, and issues `ORDER_FILE`.
-3. When the user says go, the controller sends the path-only handoff to the worker:
+1. From the current controller pane, bind the case/order:
+   - `careflow-kitty-start --case <case_id> --order <order_id> --worker codex`
+   - This records the current pane as controller and does not open a replacement controller tab.
+2. Current-pane controller writes or revises `PLAN_FILE`, validates it, and issues `ORDER_FILE`.
+3. When the user says go, the controller resolves and dispatches to the worker:
    - `careflow-kitty-go --case <case_id> --order <order_id>`
-4. Right pane worker reads PLAN and ORDER, executes only the assigned scope, and writes `EXPECTED_RESULT_PATH`.
-5. If blocked, the worker escalates left through agmsg and kitty:
+   - If a marked right worker pane exists for the same case/order, it is reused.
+   - If the right pane is an idle shell, the worker agent starts there.
+   - If no right pane exists, a right split is opened and the worker agent starts there.
+   - Unsafe existing panes are refused instead of receiving the handoff.
+4. New worker agents run through the user's interactive shell so `.bashrc`/`.zshrc`-style setup is loaded.
+5. Right pane worker reads PLAN and ORDER, executes only the assigned scope, and writes `EXPECTED_RESULT_PATH`.
+6. If blocked, the worker escalates left through agmsg and kitty:
    - `careflow-escalate-left --case <case_id> --order <order_id> --blocker "<one sentence>" --decision-needed "<one sentence>"`
-6. Left pane controller reads the agmsg file, decides, updates PLAN/ORDER if needed, and sends a revised handoff.
-7. Left pane verifies RESULT/Evidence and either closes the case or revises PLAN/ORDER.
+7. Current-pane controller reads the agmsg file, decides, updates PLAN/ORDER if needed, and sends a revised handoff.
+8. Current-pane controller verifies RESULT/Evidence and either closes the case or revises PLAN/ORDER.
 
 ## File-Backed Agmsg
 

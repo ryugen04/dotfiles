@@ -32,14 +32,17 @@ Rules:
 
 Use this as the default fast lane. It is kitty-only and does not use cmux.
 
-1. Controller creates or selects a case and order.
-2. Controller starts a kitty careflow tab:
-   - `careflow-kitty-start --case <case_id> --order <order_id> --controller claude --worker codex`
-   - Agent panes run through the user's interactive shell so `.bashrc`/`.zshrc`-style setup is loaded.
-   - Use `--controller codex` for a Codex-led plan lane.
-3. Left pane controller writes or repairs `PLAN_FILE`, validates it, and issues `ORDER_FILE`.
-4. When the user says go, controller sends the fixed handoff to the right pane:
+1. Controller creates or selects a case and order in the current kitty pane.
+2. Controller binds the lane from the current pane:
+   - `careflow-kitty-start --case <case_id> --order <order_id> --worker codex`
+   - The current pane is recorded as controller; no replacement controller tab is opened.
+3. Current-pane controller writes or repairs `PLAN_FILE`, validates it, and issues `ORDER_FILE`.
+4. When the user says go, controller resolves the worker and sends the fixed handoff:
    - `careflow-kitty-go --case <case_id> --order <order_id>`
+   - A marked right worker for the same case/order is reused.
+   - An idle right shell is reused by starting the worker agent there.
+   - If no right pane exists, a right split is opened and the worker agent starts there.
+   - Unknown, unmarked, or different-case panes are refused.
 5. Right pane worker executes from ORDER and writes RESULT.
 6. Worker escalates blockers left through agmsg:
    - `careflow-escalate-left --case <case_id> --order <order_id> --blocker "<one sentence>" --decision-needed "<one sentence>"`
@@ -48,7 +51,7 @@ Use this as the default fast lane. It is kitty-only and does not use cmux.
 
 ## Kitty Command Contract
 
-The kitty lane relies on saved window ids, not pane-title guessing:
+The kitty lane relies on saved window ids and careflow user variables:
 
 ```text
 .careflow/cases/<case_id>/kitty/session.env
@@ -58,9 +61,11 @@ Required commands:
 
 - `agmsg`: file-backed message store.
 - `careflow-handoff`: prints the fixed handoff header.
-- `careflow-kitty-start`: opens controller/worker kitty panes and records ids.
-- `careflow-kitty-go`: sends the handoff to the worker pane and records an agmsg.
-- `careflow-escalate-left`: records an escalation agmsg and sends a notification to the controller pane.
+- `careflow-kitty-start`: records the current controller pane and case/order markers.
+- `careflow-kitty-go`: resolves or creates the right worker pane, validates markers, sends the handoff, and records an agmsg.
+- `careflow-escalate-left`: records an escalation agmsg and sends a notification to the controller pane when it is an agent.
+
+New worker agents run through the user's interactive shell so `.bashrc`/`.zshrc`-style setup is loaded. Existing panes are reused only when they are idle shells or marked workers for the same case/order.
 
 If kitty remote control is unavailable, use `careflow-handoff` and `agmsg` manually, then record the blocker in RESULT or Incident.
 
@@ -90,7 +95,7 @@ Patch summary location:
 
 ## Escalation Triggers
 
-Escalate to Claude or the left-pane controller when any of these occurs:
+Escalate to the left/current controller when any of these occurs:
 
 - PLAN and ORDER disagree.
 - Required scope is missing from the ORDER.
