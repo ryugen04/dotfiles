@@ -78,6 +78,7 @@ shell_exec_command() {
       printf '%s\0' "$shell_path" -i -c 'exec "$@"' "$shell_name" "$@"
       ;;
     fish)
+      # shellcheck disable=SC2016 # Fish expands $argv inside the command string.
       printf '%s\0' "$shell_path" -i -c 'exec $argv' "$@"
       ;;
     *)
@@ -182,11 +183,11 @@ start_worker_in_shell() {
 }
 
 wait_for_worker_agent() {
-  local window_id="$1" agent="$2" i seen
+  local window_id="$1" agent="$2" seen
   if [[ "$agent" == "shell" ]]; then
     return 0
   fi
-  for i in $(seq 1 40); do
+  for _ in $(seq 1 40); do
     seen="$(window_agent "$window_id")"
     [[ "$seen" == "$agent" ]] && return 0
     sleep 0.25
@@ -202,7 +203,7 @@ safe_marked_worker() {
 }
 
 resolve_worker() {
-  local worker_id="${WORKER_WINDOW_ID:-}" agent source right agent_seen
+  local worker_id="${WORKER_WINDOW_ID:-}" agent right agent_seen
 
   if [[ -n "$worker_id" && "$(window_count "$worker_id")" != "0" ]] && safe_marked_worker "$worker_id"; then
     agent="$(window_var "$worker_id" careflow_agent)"
