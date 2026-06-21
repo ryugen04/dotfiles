@@ -28,6 +28,14 @@ macOS/Linux 環境の dotfiles 管理リポジトリ。
 既存 `~/.codex/config.toml` は保持され、managed block だけが追加・更新されます。trusted project path などの PC 固有設定は managed block の外に置いてください。
 user-level install の dry-run は実 HOME に依存させず、fixture HOME を渡して検証します。
 
+`install.sh codex` は古い local config に残った `approvals_reviewer = "guardian_subagent"` を `auto_review` に正規化します。これは Codex CLI 0.139 の許可値に合わせるための local cleanup です。
+
+OS 側の user namespace / bubblewrap sandbox が使えないPCでは、kernel や AppArmor を通常作業のために変更しません。必要時は以下のprofileを明示して起動し、careflowのPlan/Order/Result/Evidenceとpatch-gated applyを使ってください。
+
+```bash
+codex --profile local-careflow
+```
+
 ```bash
 DOTFILES_TARGET_HOME=/tmp/dotfiles-home ./install.sh -n codex
 ```

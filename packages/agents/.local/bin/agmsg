@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  agmsg send --case CASE [--order ORDER] --to NAME --from NAME [--subject TEXT] [--body-file FILE | -- TEXT]
+  agmsg list --case CASE [--to NAME]
+  agmsg read --case CASE [--id ID]
+  agmsg watch --case CASE [--to NAME]
+
+File-backed agent messages. When CASE is provided inside a repository, messages
+are stored under .careflow/cases/CASE/messages/. Otherwise AGMSG_DB is used.
+USAGE
+}
+
+die() {
+  printf 'agmsg: %s\n' "$*" >&2
+  exit 1
+}
+
+repo_root() {
+  git rev-parse --show-toplevel 2>/dev/null || pwd
+}
+
+message_dir() {
+  local case_id="$1"
+  local root
+  root="$(repo_root)"
+  if [[ -n "$case_id" && -d "$root/.careflow/cases/$case_id" ]]; then
+    printf '%s\n' "$root/.careflow/cases/$case_id/messages"
+  else
+    printf '%s\n' "${AGMSG_DB:-$HOME/.agents/skills/agmsg/db}/messages"
+  fi
+}
+
+sanitize() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//' | cut -c1-48
+}
+
+latest_message() {
+  local dir="$1"
+  find "$dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort | tail -n 1
+}
+
+cmd_send() {
+  local case_id="" order_id="" to="" from="" subject="message" body_file="" body=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --case) case_id="${2:-}"; shift 2 ;;
+      --order) order_id="${2:-}"; shift 2 ;;
+      --to) to="${2:-}"; shift 2 ;;
+      --from) from="${2:-}"; shift 2 ;;
+      --subject) subject="${2:-}"; shift 2 ;;
+      --body-file) body_file="${2:-}"; shift 2 ;;
+      --) shift; body="$*"; break ;;
+      -) body="$(cat)"; shift ;;
+      *) body="$*"; break ;;
+    esac
+  done
+
+  [[ -n "$case_id" ]] || die '--case is required'
+  [[ -n "$to" ]] || die '--to is required'
+  [[ -n "$from" ]] || die '--from is required'
+  if [[ -n "$body_file" ]]; then
+    [[ -f "$body_file" ]] || die "body file not found: $body_file"
+    body="$(cat "$body_file")"
+  elif [[ -z "$body" && ! -t 0 ]]; then
+    body="$(cat)"
+  fi
+  [[ -n "$body" ]] || die 'message body is empty'
+
+  local dir ts slug id path
+  dir="$(message_dir "$case_id")"
+  mkdir -p "$dir"
+  ts="$(date -u +%Y%m%dT%H%M%SZ)"
+  slug="$(sanitize "$subject")"
+  [[ -n "$slug" ]] || slug="message"
+  id="$ts-$$-$slug"
+  path="$dir/$id.md"
+
+  {
+    printf '# AGMSG: %s\n\n' "$id"
+    printf 'id: %s\n' "$id"
+    printf 'case_id: %s\n' "$case_id"
+    [[ -n "$order_id" ]] && printf 'order_id: %s\n' "$order_id"
+    printf 'to: %s\n' "$to"
+    printf 'from: %s\n' "$from"
+    printf 'subject: %s\n' "$subject"
+    printf 'created_at: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '\n## Body\n\n%s\n' "$body"
+  } > "$path"
+
+  printf '%s\n' "$path"
+}
+
+cmd_list() {
+  local case_id="" to=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --case) case_id="${2:-}"; shift 2 ;;
+      --to) to="${2:-}"; shift 2 ;;
+      *) die "unknown list argument: $1" ;;
+    esac
+  done
+  [[ -n "$case_id" ]] || die '--case is required'
+  local dir path target subject from created
+  dir="$(message_dir "$case_id")"
+  [[ -d "$dir" ]] || return 0
+  while IFS= read -r path; do
+    target="$(sed -n 's/^to: //p' "$path" | head -n 1)"
+    [[ -z "$to" || "$target" == "$to" ]] || continue
+    subject="$(sed -n 's/^subject: //p' "$path" | head -n 1)"
+    from="$(sed -n 's/^from: //p' "$path" | head -n 1)"
+    created="$(sed -n 's/^created_at: //p' "$path" | head -n 1)"
+    printf '%s\t%s\tfrom=%s\tto=%s\t%s\n' "$(basename "$path" .md)" "$created" "$from" "$target" "$subject"
+  done < <(find "$dir" -maxdepth 1 -type f -name '*.md' | sort)
+}
+
+cmd_read() {
+  local case_id="" id=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --case) case_id="${2:-}"; shift 2 ;;
+      --id) id="${2:-}"; shift 2 ;;
+      *) die "unknown read argument: $1" ;;
+    esac
+  done
+  [[ -n "$case_id" ]] || die '--case is required'
+  local dir path
+  dir="$(message_dir "$case_id")"
+  if [[ -n "$id" ]]; then
+    path="$dir/${id%.md}.md"
+  else
+    path="$(latest_message "$dir")"
+  fi
+  [[ -n "${path:-}" && -f "$path" ]] || die 'message not found'
+  cat "$path"
+}
+
+cmd_watch() {
+  local case_id="" to="" seen=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --case) case_id="${2:-}"; shift 2 ;;
+      --to) to="${2:-}"; shift 2 ;;
+      *) die "unknown watch argument: $1" ;;
+    esac
+  done
+  [[ -n "$case_id" ]] || die '--case is required'
+  while true; do
+    line="$(cmd_list --case "$case_id" ${to:+--to "$to"} | tail -n 1 || true)"
+    id="${line%%$'\t'*}"
+    if [[ -n "$id" && "$id" != "$seen" ]]; then
+      seen="$id"
+      cmd_read --case "$case_id" --id "$id"
+      printf '\n---\n'
+    fi
+    sleep 2
+  done
+}
+
+cmd="${1:-}"
+[[ -n "$cmd" ]] || { usage; exit 1; }
+shift
+case "$cmd" in
+  send) cmd_send "$@" ;;
+  list) cmd_list "$@" ;;
+  read) cmd_read "$@" ;;
+  watch) cmd_watch "$@" ;;
+  -h|--help|help) usage ;;
+  *) die "unknown command: $cmd" ;;
+esac

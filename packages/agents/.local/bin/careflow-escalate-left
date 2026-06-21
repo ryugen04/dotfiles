@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  careflow-escalate-left --case CASE --order ORDER --blocker TEXT --decision-needed TEXT [--files PATHS] [--evidence PATHS]
+  echo BODY | careflow-escalate-left --case CASE --order ORDER --blocker TEXT --decision-needed TEXT
+
+Records an agmsg escalation and sends a short notification to the saved kitty
+controller window for the case. cmux is not used.
+USAGE
+}
+
+die() {
+  printf 'careflow-escalate-left: %s\n' "$*" >&2
+  exit 1
+}
+
+repo_root() {
+  git rev-parse --show-toplevel 2>/dev/null || pwd
+}
+
+load_session() {
+  local case_id="$1"
+  local root session
+  root="$(repo_root)"
+  session="$root/.careflow/cases/$case_id/kitty/session.env"
+  [[ -f "$session" ]] || return 1
+  # shellcheck disable=SC1090
+  . "$session"
+}
+
+send_to_kitty() {
+  local window_id="$1" text_file="$2"
+  [[ -n "$window_id" ]] || return 1
+  kitty @ send-text --match "id:$window_id" --stdin --bracketed-paste=enable < "$text_file"
+  kitty @ send-text --match "id:$window_id" '\r'
+}
+
+case_id=""
+order_id=""
+blocker=""
+decision=""
+files=""
+evidence=""
+body=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --case) case_id="${2:-}"; shift 2 ;;
+    --order) order_id="${2:-}"; shift 2 ;;
+    --blocker) blocker="${2:-}"; shift 2 ;;
+    --decision-needed) decision="${2:-}"; shift 2 ;;
+    --files) files="${2:-}"; shift 2 ;;
+    --evidence) evidence="${2:-}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "unknown argument: $1" ;;
+  esac
+done
+
+[[ -n "$case_id" ]] || die '--case is required'
+[[ -n "$order_id" ]] || die '--order is required'
+[[ -n "$blocker" ]] || die '--blocker is required'
+[[ -n "$decision" ]] || die '--decision-needed is required'
+
+if [[ ! -t 0 ]]; then
+  body="$(cat)"
+fi
+
+plan_file=".careflow/cases/$case_id/PLAN.md"
+order_file=".careflow/cases/$case_id/orders/$order_id.order.md"
+result_file=".careflow/cases/$case_id/results/$order_id.result.md"
+
+message_body="$(cat <<MSG
+CASE_ID: $case_id
+ORDER_ID: $order_id
+BLOCKER: $blocker
+DECISION_NEEDED: $decision
+PLAN_FILE: $plan_file
+ORDER_FILE: $order_file
+RESULT_FILE: $result_file
+FILES: ${files:-none}
+EVIDENCE: ${evidence:-none}
+
+${body:-No additional body.}
+MSG
+)"
+
+msg_path="$(printf '%s\n' "$message_body" | agmsg send --case "$case_id" --order "$order_id" --to controller --from worker --subject "escalation: $blocker" -)"
+
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+cat > "$tmp" <<MSG
+AGMSG ESCALATION
+MESSAGE_FILE: $msg_path
+CASE_ID: $case_id
+ORDER_ID: $order_id
+BLOCKER: $blocker
+DECISION_NEEDED: $decision
+FILES: ${files:-none}
+EVIDENCE: ${evidence:-none}
+
+Read the message file, decide the next action, then update PLAN/ORDER or send a reply path back to the worker.
+MSG
+
+if load_session "$case_id" && [[ -n "${CONTROLLER_WINDOW_ID:-}" ]]; then
+  if [[ "${CONTROLLER_AGENT:-}" == "shell" ]]; then
+    printf 'recorded=%s\n' "$msg_path"
+    printf 'warning=controller agent is shell; escalation was recorded but not sent to kitty\n' >&2
+    exit 0
+  fi
+  send_to_kitty "$CONTROLLER_WINDOW_ID" "$tmp" || {
+    printf 'recorded=%s\n' "$msg_path"
+    die 'failed to send escalation to kitty controller window'
+  }
+  printf 'recorded=%s\nsent_to_controller_window=%s\n' "$msg_path" "$CONTROLLER_WINDOW_ID"
+else
+  printf 'recorded=%s\n' "$msg_path"
+  printf 'warning=no saved kitty controller window for case %s\n' "$case_id" >&2
+fi

@@ -29,3 +29,32 @@ ORDER_ID: <order_id>
 ASSIGNED_ROLE: <researcher|implementer|verifier|reviewer|incident-commander>
 TARGET_TOOL: <codex|claude|cursor>
 ```
+
+## Kitty / agmsg Lane
+
+When Claude is the left/current controller pane:
+
+```bash
+careflow-kitty-start --case <case_id> --order <order_id> --controller claude --worker codex
+```
+
+This binds the current Claude pane as controller. It must not open a replacement
+controller tab and it must not start the worker before PLAN/ORDER approval.
+
+After explicit go:
+
+```bash
+careflow-kitty-go --case <case_id> --order <order_id>
+```
+
+`careflow-kitty-go` resolves the right worker pane: reuse a marked worker, start
+Codex in an idle right shell, or open a right split when missing. Unsafe existing
+panes are refused. cmux is not a Careflow handoff path.
+
+Workers escalate with:
+
+```bash
+careflow-escalate-left --case <case_id> --order <order_id> --blocker "<one sentence>" --decision-needed "<one sentence>"
+```
+
+Escalations are recorded under `.careflow/cases/<case_id>/messages/` by agmsg.

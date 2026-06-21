@@ -115,6 +115,14 @@ pnpm type-check
 - 3回以上リトライしても失敗
 
 フォールバック時:
+
+- Codex が直接編集できない場合、OS の namespace / bwrap 修復を要求せず patch proposer に切り替える
+- patch は `.careflow/cases/<case_id>/patches/<order_id>-<slug>.patch` または RESULT に保存
+- controller が `git apply --check` を通してから `git apply`
+- PLAN/ORDER 欠陥や判断不足は RESULT/Incident に記録し、agmsg で Claude に戻す
+
+agmsg escalation には CASE_ID / ORDER_ID / BLOCKER / DECISION_NEEDED / PLAN_FILE / ORDER_FILE / RESULT_FILE / EVIDENCE / PATCH_PATH を含める。
+
 ```
 # 仕様再確認が必要な場合
 Claude メインコンテキストに戻して仕様を整理し、planを更新してから再委託

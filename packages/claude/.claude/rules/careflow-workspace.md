@@ -72,6 +72,74 @@ TARGET_TOOL: <codex|claude|cursor>
 
 ORDER が委託先の subplan。chat要約だけで委託しない。
 
+## Kitty / agmsg Fast Lane
+
+高速化しても `.careflow` の正本は省略しない。Claude が controller の場合も Codex が controller の場合も、current pane controller / right pane worker の kitty lane を使う。
+
+### Controller の開始
+
+Claude が左/current pane で計画を担当する場合:
+
+```bash
+careflow-kitty-start --case <case_id> --order <order_id> --controller claude --worker codex
+```
+
+- このコマンドは current pane を controller として記録する。
+- replacement controller tab/window/pane を開かない。
+- worker はこの時点では起動しない。
+- PLAN と ORDER を確定するまでは current pane だけで進める。
+
+### Explicit go
+
+PLAN/ORDER 承認後、ユーザーの明示的な go が出たら current controller pane から送る。
+
+```bash
+careflow-kitty-go --case <case_id> --order <order_id>
+```
+
+`careflow-kitty-go` の責務:
+
+- 既に同一 case/order の marked right worker があれば再利用する。
+- 右 pane が idle shell なら、そこで worker agent を起動する。
+- 右 pane がなければ右 split を作成して worker agent を起動する。
+- 不明、busy、別 case/order の pane には handoff を送らない。
+- 新規 worker agent は interactive shell 経由で起動し、`.bashrc` / `.zshrc` 由来の PATH/env を読む。
+- cmux は careflow agent handoff には使わない。
+
+### Escalation
+
+Worker が PLAN/ORDER 欠陥、scope不足、検証の反復失敗、設計判断不足を見つけたら、RESULT または Evidence に記録してから controller に戻す。
+
+```bash
+careflow-escalate-left \
+  --case <case_id> \
+  --order <order_id> \
+  --blocker "<one sentence>" \
+  --decision-needed "<one sentence>" \
+  --files "<paths>" \
+  --evidence "<paths>"
+```
+
+`careflow-escalate-left` は agmsg に記録し、controller pane が Claude/Codex agent なら短い通知を送る。controller が shell の場合は agmsg 記録のみで止める。
+
+### agmsg 記録
+
+agmsg には長い計画本文を貼らない。最低限以下を送る:
+
+- 固定 Handoff Header
+- 1行 objective
+- PLAN / ORDER / RESULT / Evidence / optional Patch の path
+- escalation trigger
+
+## Patch-Gated Apply
+
+通常の編集経路が使えない場合、OS の user namespace / AppArmor / bwrap 修復を通常作業の前提にしない。Codex は直接編集者ではなく patch proposer に切り替える。
+
+1. Codex は unified diff を `.careflow/cases/<case_id>/patches/` または RESULT に置く。
+2. controller が `git apply --check` を実行する。
+3. check が通った場合だけ controller が `git apply` する。
+4. check/apply/verification 出力を Evidence に残す。
+
 ## Result / Evidence
 
 - 委託先は `EXPECTED_RESULT_PATH` を書くまで完了扱いしない。
@@ -80,12 +148,16 @@ ORDER が委託先の subplan。chat要約だけで委託しない。
 
 ## Red Flags -- STOP
 
+- 普通の編集のために kernel / AppArmor / bwrap の深い権限修復を要求している
 - `.claude/plans` だけで実装に入ろうとしている
 - Codexにplan本文だけ渡し、ORDER/RESULTを渡していない
 - subagentに「調べて」だけ渡し、expected result pathを渡していない
+- `careflow-kitty-start` で replacement controller tab を開こうとしている
+- `go` 前に worker pane へ作業を投げようとしている
+- cmux を careflow handoff 経路として使おうとしている
 - worktree内に独立した `.careflow` directory を作ろうとしている
 - `.careflow/state.json` の global active だけを信じて、worktree scope を確認していない
 
 ---
 
-**最終更新**: 2026-06-17
+**最終更新**: 2026-06-21

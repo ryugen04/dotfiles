@@ -35,3 +35,19 @@ directories archived under the shared store's `migrated/` directory and replaced
 with symlinks.
 
 The script does not modify files.
+
+## Fast-Lane Execution Rule
+
+Fast careflow execution should reduce repeated ceremony, not remove durable records.
+
+Minimum durable chain:
+
+- Case
+- Plan
+- Order
+- Result
+- Evidence
+- Incident or Review when escalation is needed
+- Close validation
+
+When the normal edit path is unavailable, do not require host-level namespace or sandbox repair for ordinary work. Use a patch-gated path instead: Codex proposes a unified diff, the controller verifies it with `git apply --check`, then applies it with `git apply` and records Evidence.

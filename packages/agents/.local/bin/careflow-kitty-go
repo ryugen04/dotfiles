@@ -1,0 +1,289 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  careflow-kitty-go --case CASE --order ORDER [--objective TEXT] [--target codex|claude|shell]
+
+After PLAN/ORDER approval, resolves the right-side worker pane and sends the
+careflow handoff. The current pane must be the recorded controller. If no right
+pane exists, a right split is opened. If the right pane is an idle shell, the
+worker agent is started there. Unsafe existing panes are refused. cmux is not used.
+USAGE
+}
+
+die() {
+  printf 'careflow-kitty-go: %s\n' "$*" >&2
+  exit 1
+}
+
+repo_root() {
+  git rev-parse --show-toplevel 2>/dev/null || pwd
+}
+
+case_id=""
+order_id=""
+objective="Follow PLAN and ORDER, implement the assigned work, and write RESULT."
+target=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --case) case_id="${2:-}"; shift 2 ;;
+    --order) order_id="${2:-}"; shift 2 ;;
+    --objective) objective="${2:-}"; shift 2 ;;
+    --target) target="${2:-}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "unknown argument: $1" ;;
+  esac
+done
+
+[[ -n "$case_id" ]] || die '--case is required'
+[[ -n "$order_id" ]] || die '--order is required'
+command -v kitty >/dev/null 2>&1 || die 'kitty is not on PATH'
+command -v jq >/dev/null 2>&1 || die 'jq is not on PATH'
+command -v agmsg >/dev/null 2>&1 || die 'agmsg is not on PATH; run ./install.sh agents'
+command -v careflow-handoff >/dev/null 2>&1 || die 'careflow-handoff is not on PATH; run ./install.sh agents'
+
+root="$(repo_root)"
+case_dir="$root/.careflow/cases/$case_id"
+session="$case_dir/kitty/session.env"
+plan_file="$case_dir/PLAN.md"
+order_file="$case_dir/orders/$order_id.order.md"
+[[ -d "$case_dir" ]] || die "case directory not found: $case_dir"
+[[ -f "$plan_file" ]] || die "PLAN not found: $plan_file"
+[[ -f "$order_file" ]] || die "ORDER not found: $order_file"
+[[ -f "$session" ]] || die "kitty session not found: $session; run careflow-kitty-start from the controller pane first"
+# shellcheck disable=SC1090
+. "$session"
+[[ "${CASE_ID:-}" == "$case_id" ]] || die "session CASE_ID mismatch: ${CASE_ID:-missing}"
+[[ "${ORDER_ID:-}" == "$order_id" ]] || die "session ORDER_ID mismatch: ${ORDER_ID:-missing}"
+[[ -n "${CONTROLLER_WINDOW_ID:-}" ]] || die 'CONTROLLER_WINDOW_ID missing from session'
+
+if [[ -z "$target" ]]; then
+  target="${WORKER_AGENT_REQUESTED:-codex}"
+fi
+case "$target" in claude|codex|shell) ;; *) die "unsupported target: $target" ;; esac
+
+agent_shell() {
+  printf '%s\n' "${SHELL:-/bin/bash}"
+}
+
+shell_exec_command() {
+  local shell_path shell_name
+  shell_path="$(agent_shell)"
+  shell_name="$(basename "$shell_path")"
+  case "$shell_name" in
+    bash|zsh)
+      printf '%s\0' "$shell_path" -i -c 'exec "$@"' "$shell_name" "$@"
+      ;;
+    fish)
+      # shellcheck disable=SC2016 # Fish expands $argv inside the command string.
+      printf '%s\0' "$shell_path" -i -c 'exec $argv' "$@"
+      ;;
+    *)
+      printf '%s\0' "$shell_path" -l -c 'exec "$@"' "$shell_name" "$@"
+      ;;
+  esac
+}
+
+agent_command() {
+  local agent="$1"
+  case "$agent" in
+    claude) shell_exec_command claude ;;
+    codex) shell_exec_command codex --profile local-careflow ;;
+    shell) shell_exec_command "${SHELL:-/bin/bash}" ;;
+    *) return 1 ;;
+  esac
+}
+
+agent_start_line() {
+  local agent="$1"
+  case "$agent" in
+    claude) printf 'cd %q && exec claude\n' "$root" ;;
+    codex) printf 'cd %q && exec codex --profile local-careflow\n' "$root" ;;
+    shell) printf 'cd %q\n' "$root" ;;
+    *) return 1 ;;
+  esac
+}
+
+current_window_id() {
+  if [[ -n "${KITTY_WINDOW_ID:-}" ]]; then
+    printf '%s\n' "$KITTY_WINDOW_ID"
+    return 0
+  fi
+  kitty @ ls --self | jq -r '.[].tabs[].windows[]? | select(.is_self == true) | .id' | head -n 1
+}
+
+window_json() {
+  local window_id="$1"
+  kitty @ ls --match "id:$window_id" 2>/dev/null || true
+}
+
+window_count() {
+  local window_id="$1"
+  window_json "$window_id" | jq '[.[].tabs[].windows[]?] | length'
+}
+
+window_var() {
+  local window_id="$1" key="$2"
+  window_json "$window_id" | jq -r --arg key "$key" '[.[].tabs[].windows[]?.user_vars[$key]] | first // ""'
+}
+
+window_agent() {
+  local window_id="$1" json haystack
+  json="$(window_json "$window_id")"
+  [[ -n "$json" ]] || { printf 'unknown\n'; return 0; }
+  haystack="$(printf '%s' "$json" | jq -r '[.[].tabs[].windows[]? | (.title // ""), (.cmdline // [] | join(" ")), (.last_reported_cmdline // ""), ((.foreground_processes // [])[]?.cmdline // [] | join(" "))] | join(" ")' | tr '[:upper:]' '[:lower:]')"
+  case "$haystack" in
+    *codex*) printf 'codex\n' ;;
+    *claude*) printf 'claude\n' ;;
+    *bash*|*zsh*|*fish*|*'/sh'*|*' sh'*) printf 'shell\n' ;;
+    *) printf 'unknown\n' ;;
+  esac
+}
+
+window_at_prompt() {
+  local window_id="$1"
+  window_json "$window_id" | jq -r '[.[].tabs[].windows[]?.at_prompt] | first // false'
+}
+
+right_neighbor_id() {
+  kitty @ ls --match neighbor:right 2>/dev/null | jq -r '.[].tabs[].windows[]?.id' | head -n 1 || true
+}
+
+tag_worker() {
+  local window_id="$1" agent="$2"
+  kitty @ set-user-vars --match "id:$window_id" \
+    "careflow_case=$case_id" \
+    "careflow_order=$order_id" \
+    'careflow_role=worker' \
+    "careflow_agent=$agent" >/dev/null
+}
+
+launch_worker() {
+  local agent="$1" controller_id="$2"
+  local -a cmd base
+  local rc
+  mapfile -d '' -t cmd < <(agent_command "$agent") || die "unsupported worker agent: $agent"
+  base=(kitty @ launch --type=window --cwd "$root" --copy-env --allow-remote-control --title "careflow-worker:$case_id" --var "careflow_case=$case_id" --var "careflow_order=$order_id" --var 'careflow_role=worker' --var "careflow_agent=$agent" --location vsplit --next-to "id:$controller_id")
+  rc="$("${base[@]}" "${cmd[@]}")"
+  [[ -n "$rc" ]] || die 'kitty did not return a window id for worker'
+  printf '%s\n' "$rc"
+}
+
+start_worker_in_shell() {
+  local window_id="$1" agent="$2" tmp
+  tag_worker "$window_id" "$agent"
+  tmp="$(mktemp)"
+  agent_start_line "$agent" > "$tmp"
+  kitty @ send-text --match "id:$window_id" --stdin --bracketed-paste=disable < "$tmp"
+  kitty @ send-text --match "id:$window_id" '\r'
+  rm -f "$tmp"
+}
+
+wait_for_worker_agent() {
+  local window_id="$1" agent="$2" seen
+  if [[ "$agent" == "shell" ]]; then
+    return 0
+  fi
+  for _ in $(seq 1 40); do
+    seen="$(window_agent "$window_id")"
+    [[ "$seen" == "$agent" ]] && return 0
+    sleep 0.25
+  done
+  return 1
+}
+
+safe_marked_worker() {
+  local window_id="$1"
+  [[ "$(window_var "$window_id" careflow_case)" == "$case_id" ]] || return 1
+  [[ "$(window_var "$window_id" careflow_order)" == "$order_id" ]] || return 1
+  [[ "$(window_var "$window_id" careflow_role)" == "worker" ]] || return 1
+}
+
+resolve_worker() {
+  local worker_id="${WORKER_WINDOW_ID:-}" agent right agent_seen
+
+  if [[ -n "$worker_id" && "$(window_count "$worker_id")" != "0" ]] && safe_marked_worker "$worker_id"; then
+    agent="$(window_var "$worker_id" careflow_agent)"
+    [[ -n "$agent" ]] || agent="$(window_agent "$worker_id")"
+    printf '%s\t%s\t%s\n' "$worker_id" "$agent" "${WORKER_SOURCE:-session}"
+    return 0
+  fi
+
+  right="$(right_neighbor_id)"
+  if [[ -z "$right" ]]; then
+    worker_id="$(launch_worker "$target" "$CONTROLLER_WINDOW_ID")"
+    if ! wait_for_worker_agent "$worker_id" "$target"; then
+      die "worker pane $worker_id was created but $target did not become visible; rerun go after the agent starts"
+    fi
+    printf '%s\t%s\t%s\n' "$worker_id" "$target" created-right-pane
+    return 0
+  fi
+
+  if safe_marked_worker "$right"; then
+    agent="$(window_var "$right" careflow_agent)"
+    [[ -n "$agent" ]] || agent="$(window_agent "$right")"
+    printf '%s\t%s\t%s\n' "$right" "$agent" existing-right-worker
+    return 0
+  fi
+
+  agent_seen="$(window_agent "$right")"
+  if [[ "$agent_seen" == "shell" && "$(window_at_prompt "$right")" == "true" ]]; then
+    start_worker_in_shell "$right" "$target"
+    if ! wait_for_worker_agent "$right" "$target"; then
+      die "right pane $right was marked and started, but $target did not become visible; rerun go after the agent starts"
+    fi
+    printf '%s\t%s\t%s\n' "$right" "$target" existing-right-idle-shell
+    return 0
+  fi
+
+  die "right pane $right is not a marked worker and does not look like an idle shell; refusing to send handoff"
+}
+
+controller_current="$(current_window_id)"
+[[ -n "$controller_current" ]] || die 'could not identify current kitty window; run from the recorded controller pane'
+[[ "$controller_current" == "$CONTROLLER_WINDOW_ID" ]] || die "run go from controller window $CONTROLLER_WINDOW_ID, not $controller_current"
+[[ "$(window_count "$CONTROLLER_WINDOW_ID")" != "0" ]] || die "controller window not found: $CONTROLLER_WINDOW_ID"
+kitty @ focus-window --match "id:$CONTROLLER_WINDOW_ID" >/dev/null
+
+kitty @ set-user-vars --match "id:$CONTROLLER_WINDOW_ID" \
+  "careflow_case=$case_id" \
+  "careflow_order=$order_id" \
+  'careflow_role=controller' \
+  "careflow_agent=${CONTROLLER_AGENT:-unknown}" >/dev/null
+
+IFS=$'\t' read -r worker_id worker_agent worker_source < <(resolve_worker)
+[[ -n "$worker_id" ]] || die 'worker resolution failed'
+if [[ "$worker_agent" == "shell" ]]; then
+  die 'refusing to send handoff to a shell worker window; use --target codex or --target claude'
+fi
+if [[ "$worker_agent" != "codex" && "$worker_agent" != "claude" ]]; then
+  die "refusing to send handoff to unsupported worker agent: $worker_agent"
+fi
+
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+careflow-handoff --case "$case_id" --order "$order_id" --target "$worker_agent" --objective "$objective" > "$tmp"
+
+kitty @ send-text --match "id:$worker_id" --stdin --bracketed-paste=enable < "$tmp"
+kitty @ send-text --match "id:$worker_id" '\r'
+
+agmsg send --case "$case_id" --order "$order_id" --to worker --from controller --subject "go: $order_id" --body-file "$tmp" >/dev/null
+
+{
+  printf 'CASE_ID=%q\n' "$case_id"
+  printf 'ORDER_ID=%q\n' "$order_id"
+  printf 'REPO_ROOT=%q\n' "$root"
+  printf 'CONTROLLER_AGENT=%q\n' "${CONTROLLER_AGENT:-unknown}"
+  printf 'CONTROLLER_WINDOW_ID=%q\n' "$CONTROLLER_WINDOW_ID"
+  printf 'WORKER_AGENT_REQUESTED=%q\n' "$target"
+  printf 'WORKER_AGENT=%q\n' "$worker_agent"
+  printf 'WORKER_WINDOW_ID=%q\n' "$worker_id"
+  printf 'WORKER_SOURCE=%q\n' "$worker_source"
+  printf 'CREATED_AT=%q\n' "${CREATED_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+  printf 'UPDATED_AT=%q\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > "$session"
+
+printf 'sent_to_worker_window=%s\nworker_agent=%s\nworker_source=%s\n' "$worker_id" "$worker_agent" "$worker_source"

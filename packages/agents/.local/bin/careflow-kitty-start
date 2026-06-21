@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  careflow-kitty-start --case CASE --order ORDER [--controller auto|claude|codex|shell] [--worker codex|claude|shell] [--repo PATH]
+
+Binds the current kitty window as the careflow controller. It does not create a
+controller tab and it does not create or start the worker. The right worker pane
+is resolved by careflow-kitty-go after PLAN/ORDER approval and explicit go.
+
+The script records the controller window in .careflow/cases/CASE/kitty/session.env
+and tags the current kitty window with careflow case/order user variables.
+cmux is not used.
+USAGE
+}
+
+die() {
+  printf 'careflow-kitty-start: %s\n' "$*" >&2
+  exit 1
+}
+
+repo_root() {
+  git -C "$1" rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "$1"
+}
+
+case_id=""
+order_id=""
+controller="auto"
+worker="codex"
+repo="."
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --case) case_id="${2:-}"; shift 2 ;;
+    --order) order_id="${2:-}"; shift 2 ;;
+    --controller) controller="${2:-}"; shift 2 ;;
+    --worker) worker="${2:-}"; shift 2 ;;
+    --repo) repo="${2:-}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "unknown argument: $1" ;;
+  esac
+done
+
+[[ -n "$case_id" ]] || die '--case is required'
+[[ -n "$order_id" ]] || die '--order is required'
+case "$controller" in auto|claude|codex|shell) ;; *) die "unsupported controller: $controller" ;; esac
+case "$worker" in claude|codex|shell) ;; *) die "unsupported worker: $worker" ;; esac
+command -v kitty >/dev/null 2>&1 || die 'kitty is not on PATH'
+command -v jq >/dev/null 2>&1 || die 'jq is not on PATH'
+command -v agmsg >/dev/null 2>&1 || die 'agmsg is not on PATH; run ./install.sh agents'
+command -v careflow-handoff >/dev/null 2>&1 || die 'careflow-handoff is not on PATH; run ./install.sh agents'
+
+repo="$(cd "$repo" && pwd)"
+root="$(repo_root "$repo")"
+case_dir="$root/.careflow/cases/$case_id"
+[[ -d "$case_dir" ]] || die "case directory not found: $case_dir"
+
+session_dir="$case_dir/kitty"
+mkdir -p "$session_dir"
+session_file="$session_dir/session.env"
+
+current_window_id() {
+  if [[ -n "${KITTY_WINDOW_ID:-}" ]]; then
+    printf '%s\n' "$KITTY_WINDOW_ID"
+    return 0
+  fi
+  kitty @ ls --self | jq -r '.[].tabs[].windows[]? | select(.is_self == true) | .id' | head -n 1
+}
+
+window_json() {
+  local window_id="$1"
+  kitty @ ls --match "id:$window_id" 2>/dev/null || true
+}
+
+window_agent() {
+  local window_id="$1" json haystack
+  json="$(window_json "$window_id")"
+  [[ -n "$json" ]] || { printf 'unknown\n'; return 0; }
+  haystack="$(printf '%s' "$json" | jq -r '[.[].tabs[].windows[]? | (.title // ""), (.cmdline // [] | join(" ")), (.last_reported_cmdline // ""), ((.foreground_processes // [])[]?.cmdline // [] | join(" "))] | join(" ")' | tr '[:upper:]' '[:lower:]')"
+  case "$haystack" in
+    *codex*) printf 'codex\n' ;;
+    *claude*) printf 'claude\n' ;;
+    *bash*|*zsh*|*fish*|*'/sh'*|*' sh'*) printf 'shell\n' ;;
+    *) printf 'unknown\n' ;;
+  esac
+}
+
+controller_id="$(current_window_id)"
+[[ -n "$controller_id" ]] || die 'could not identify current kitty window; run inside kitty or set KITTY_WINDOW_ID'
+
+if [[ "$controller" == "auto" ]]; then
+  controller_agent="$(window_agent "$controller_id")"
+else
+  controller_agent="$controller"
+fi
+
+kitty @ set-user-vars --match "id:$controller_id" \
+  "careflow_case=$case_id" \
+  "careflow_order=$order_id" \
+  'careflow_role=controller' \
+  "careflow_agent=$controller_agent" >/dev/null
+
+{
+  printf 'CASE_ID=%q\n' "$case_id"
+  printf 'ORDER_ID=%q\n' "$order_id"
+  printf 'REPO_ROOT=%q\n' "$root"
+  printf 'CONTROLLER_AGENT=%q\n' "$controller_agent"
+  printf 'CONTROLLER_WINDOW_ID=%q\n' "$controller_id"
+  printf 'WORKER_AGENT_REQUESTED=%q\n' "$worker"
+  printf 'WORKER_AGENT=%q\n' ''
+  printf 'WORKER_WINDOW_ID=%q\n' ''
+  printf 'WORKER_SOURCE=%q\n' unresolved
+  printf 'CREATED_AT=%q\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > "$session_file"
+
+cat <<MSG
+case=$case_id
+order=$order_id
+controller_window=$controller_id
+controller_agent=$controller_agent
+worker_requested=$worker
+worker_source=unresolved
+session=$session_file
+
+After PLAN/ORDER approval and explicit go, run from this controller pane:
+  careflow-kitty-go --case $case_id --order $order_id
+
+Worker escalation command:
+  careflow-escalate-left --case $case_id --order $order_id --blocker "<one sentence>" --decision-needed "<one sentence>"
+MSG

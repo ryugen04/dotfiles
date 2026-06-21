@@ -11,6 +11,11 @@
 - Subagents must receive an explicit role, assignment id, writable scope, forbidden scope, expected report, and verification criteria.
 - Do not revert unrelated user or agent edits.
 - Record blockers, near misses, and incidents as Careflow artifacts.
+- For dual-agent work in kitty, run `careflow-kitty-start` from the existing controller pane to bind the case/order. It must not create a replacement controller tab.
+- Use `careflow-kitty-go` only after PLAN/ORDER approval and explicit go. It resolves the right worker pane, starts the worker in an idle right shell or new right split when needed, and refuses unsafe existing panes.
+- Workers must send blockers with `careflow-escalate-left`; this records an agmsg under `.careflow/cases/<case_id>/messages/` and notifies the controller pane when available.
+- Keep the ORDER as the worker subplan. Do not replace the fixed handoff with an informal chat summary.
+- Do not use cmux for Careflow agent handoff; this repository expects the kitty/agmsg lane.
 
 ## Sango Evidence
 
