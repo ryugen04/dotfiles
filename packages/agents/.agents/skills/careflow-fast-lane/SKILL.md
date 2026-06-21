@@ -56,6 +56,7 @@ TARGET_TOOL: <codex|claude|cursor>
 This is the preferred lane. It does not use cmux.
 
 1. Start a kitty-only case tab:
+   - Agent panes are launched through the user's interactive shell, so `.bashrc`/`.zshrc`-style environment setup is loaded.
    - `careflow-kitty-start --case <case_id> --order <order_id> --controller claude --worker codex`
    - Use `--controller codex` when Codex should own planning instead of Claude.
 2. Left pane controller writes or revises `PLAN_FILE`, validates it, and issues `ORDER_FILE`.

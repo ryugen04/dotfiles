@@ -14,6 +14,8 @@ The script records window IDs in .careflow/cases/CASE/kitty/session.env. The
 shell agent is for smoke tests only; go/escalation sends are guarded.
 Use careflow-kitty-go after the controller has written/approved PLAN and ORDER.
 cmux is not used.
+
+Agent commands run through the user's interactive shell so .bashrc/.zshrc-style setup is loaded.
 USAGE
 }
 
@@ -59,12 +61,43 @@ session_dir="$case_dir/kitty"
 mkdir -p "$session_dir"
 session_file="$session_dir/session.env"
 
+agent_shell() {
+  printf '%s\n' "${SHELL:-/bin/bash}"
+}
+
+shell_agent_command() {
+  local shell_path shell_name
+  shell_path="$(agent_shell)"
+  shell_name="$(basename "$shell_path")"
+  case "$shell_name" in
+    bash|zsh|fish) printf '%s\0' "$shell_path" -i ;;
+    *) printf '%s\0' "$shell_path" -l ;;
+  esac
+}
+
+shell_exec_command() {
+  local shell_path shell_name
+  shell_path="$(agent_shell)"
+  shell_name="$(basename "$shell_path")"
+  case "$shell_name" in
+    bash|zsh)
+      printf '%s\0' "$shell_path" -i -c 'exec "$@"' "$shell_name" "$@"
+      ;;
+    fish)
+      printf '%s\0' "$shell_path" -i -c 'exec $argv' "$@"
+      ;;
+    *)
+      printf '%s\0' "$shell_path" -l -c 'exec "$@"' "$shell_name" "$@"
+      ;;
+  esac
+}
+
 agent_command() {
   local agent="$1"
   case "$agent" in
-    claude) printf '%s\0' claude ;;
-    codex) printf '%s\0' codex --profile local-careflow ;;
-    shell) printf '%s\0' "${SHELL:-bash}" -l ;;
+    claude) shell_exec_command claude ;;
+    codex) shell_exec_command codex --profile local-careflow ;;
+    shell) shell_agent_command ;;
     *) return 1 ;;
   esac
 }

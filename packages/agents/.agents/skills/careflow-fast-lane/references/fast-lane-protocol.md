@@ -35,6 +35,7 @@ Use this as the default fast lane. It is kitty-only and does not use cmux.
 1. Controller creates or selects a case and order.
 2. Controller starts a kitty careflow tab:
    - `careflow-kitty-start --case <case_id> --order <order_id> --controller claude --worker codex`
+   - Agent panes run through the user's interactive shell so `.bashrc`/`.zshrc`-style setup is loaded.
    - Use `--controller codex` for a Codex-led plan lane.
 3. Left pane controller writes or repairs `PLAN_FILE`, validates it, and issues `ORDER_FILE`.
 4. When the user says go, controller sends the fixed handoff to the right pane:
