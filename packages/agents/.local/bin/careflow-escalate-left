@@ -105,6 +105,11 @@ Read the message file, decide the next action, then update PLAN/ORDER or send a 
 MSG
 
 if load_session "$case_id" && [[ -n "${CONTROLLER_WINDOW_ID:-}" ]]; then
+  if [[ "${CONTROLLER_AGENT:-}" == "shell" ]]; then
+    printf 'recorded=%s\n' "$msg_path"
+    printf 'warning=controller agent is shell; escalation was recorded but not sent to kitty\n' >&2
+    exit 0
+  fi
   send_to_kitty "$CONTROLLER_WINDOW_ID" "$tmp" || {
     printf 'recorded=%s\n' "$msg_path"
     die 'failed to send escalation to kitty controller window'

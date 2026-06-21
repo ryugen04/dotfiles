@@ -10,7 +10,8 @@ Creates a kitty-only careflow tab:
   left  = controller/planner
   right = worker/executor
 
-The script records window IDs in .careflow/cases/CASE/kitty/session.env.
+The script records window IDs in .careflow/cases/CASE/kitty/session.env. The
+shell agent is for smoke tests only; go/escalation sends are guarded.
 Use careflow-kitty-go after the controller has written/approved PLAN and ORDER.
 cmux is not used.
 USAGE

@@ -10,3 +10,7 @@ This is the portable user-level Codex baseline installed by the dotfiles `codex`
 - For high-risk or specification-sensitive implementation work, use the `decision-complete-planning` skill before mutating files.
 - When multiple agents are active, keep edits inside the assigned ownership boundary and do not revert changes made by others.
 - Prefer read-only inspection before mutation, then run the narrowest relevant verification after changes.
+- For dual-agent careflow work in kitty, use the `careflow-fast-lane` skill and the kitty-only lane: left pane is controller/planner, right pane is worker/executor.
+- After PLAN/ORDER approval and an explicit go, send work with `careflow-kitty-go --case <case_id> --order <order_id>` rather than pasting ad hoc instructions.
+- Workers must escalate blockers with `careflow-escalate-left --case <case_id> --order <order_id> --blocker "..." --decision-needed "..."` so the message is recorded under `.careflow/cases/<case_id>/messages/`.
+- Do not use cmux for careflow agent handoff; cmux integrations are separate UI helpers only.

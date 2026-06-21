@@ -45,6 +45,9 @@ session="$root/.careflow/cases/$case_id/kitty/session.env"
 # shellcheck disable=SC1090
 . "$session"
 [[ -n "${WORKER_WINDOW_ID:-}" ]] || die 'WORKER_WINDOW_ID missing from session'
+if [[ "${WORKER_AGENT:-}" == "shell" ]]; then
+  die 'refusing to send handoff to a shell worker window; restart with --worker codex or --worker claude'
+fi
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
